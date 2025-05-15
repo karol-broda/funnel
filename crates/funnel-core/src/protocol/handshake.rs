@@ -75,6 +75,8 @@ pub struct ServerLimits {
     pub max_request_body: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dgram_mtu: Option<u16>,
+    #[serde(default)]
+    pub allowed_tunnel_types: Vec<TunnelType>,
 }
 
 impl Default for ServerLimits {
@@ -83,12 +85,21 @@ impl Default for ServerLimits {
             max_streams: 128,
             max_request_body: 64 * 1024 * 1024,
             dgram_mtu: None,
+            allowed_tunnel_types: vec![TunnelType::Http],
         }
     }
 }
 
+impl ServerLimits {
+    #[must_use]
+    pub fn with_tunnel_types(mut self, types: Vec<TunnelType>) -> Self {
+        self.allowed_tunnel_types = types;
+        self
+    }
+}
+
 impl TunnelResult {
-    pub fn ok(id: TunnelId) -> Self {
+    pub const fn ok(id: TunnelId) -> Self {
         Self {
             id,
             status: TunnelStatus::Ok,
@@ -106,11 +117,14 @@ impl TunnelResult {
         }
     }
 
-    pub fn error(
-        id: TunnelId,
-        code: AppCode,
-        message: impl Into<String>,
-    ) -> Self {
+    pub fn ok_with_port(id: TunnelId, port: u16) -> Self {
+        Self {
+            remote_port: Some(port),
+            ..Self::ok(id)
+        }
+    }
+
+    pub fn error(id: TunnelId, code: AppCode, message: impl Into<String>) -> Self {
         Self {
             id,
             status: TunnelStatus::Error,
@@ -211,5 +225,4 @@ mod tests {
         assert_eq!(json["routing"], "sni");
         Ok(())
     }
-
 }

@@ -161,6 +161,9 @@ pub struct TunnelStatsSnapshot {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct TunnelInfo {
     pub id: String,
+    pub tunnel_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_port: Option<u16>,
     pub uptime_secs: f64,
     pub stats: TunnelStatsSnapshot,
     pub owner_id: Uuid,
@@ -180,6 +183,18 @@ pub struct HealthResponse {
 pub struct ServerInfo {
     pub version: u32,
     pub quic_port: u16,
+    pub capabilities: ServerCapabilities,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ServerCapabilities {
+    /// tunnel types the server accepts (e.g. "http", "tcp")
+    pub tunnel_types: Vec<String>,
+    /// whether the server terminates TLS on public-facing connections
+    pub tls: bool,
+    /// configured OAuth providers available for `funnel login`
+    pub oauth_providers: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Enveloped)]
@@ -233,6 +248,7 @@ pub struct SetMemberRoleRequest {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -357,10 +373,7 @@ mod tests {
             serde_json::to_value(ApiScope::Management).unwrap(),
             "management"
         );
-        assert_eq!(
-            serde_json::to_value(ApiScope::Tunnels).unwrap(),
-            "tunnels"
-        );
+        assert_eq!(serde_json::to_value(ApiScope::Tunnels).unwrap(), "tunnels");
     }
 
     #[test]
@@ -441,7 +454,10 @@ mod tests {
     fn create_key_request_with_valid_scopes() {
         let json = r#"{"name":"test","scopes":["management","tunnels"]}"#;
         let req: CreateKeyRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(req.scopes, Some(vec![ApiScope::Management, ApiScope::Tunnels]));
+        assert_eq!(
+            req.scopes,
+            Some(vec![ApiScope::Management, ApiScope::Tunnels])
+        );
     }
 
     #[test]
