@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use super::{format_dt, map_err, parse_dt, parse_uuid};
 use crate::db::accounts::{Account, NewAccount};
-use crate::store::account_store::AccountStore;
 use crate::store::StoreError;
+use crate::store::account_store::AccountStore;
 
 pub struct TursoAccountStore {
     db: Arc<Database>,

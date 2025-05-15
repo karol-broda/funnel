@@ -62,7 +62,6 @@ mod tests {
     #[test]
     fn generate_key_has_sufficient_length() -> Result<(), getrandom::Error> {
         let key = generate_api_key()?;
-        // prefix (3) + base64 of 32 bytes (43) = 46 chars
         assert!(key.len() >= 40);
         Ok(())
     }
@@ -89,7 +88,6 @@ mod tests {
     #[test]
     fn hash_is_hex_encoded_sha256() {
         let hash = hash_token("test");
-        // 32 bytes = 64 hex chars
         assert_eq!(hash.len(), 64);
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
     }

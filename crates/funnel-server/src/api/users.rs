@@ -10,6 +10,21 @@ use funnel_core::api::{Role, SetUserRoleRequest, User};
 use crate::app::AppState;
 use crate::auth::RequireAdmin;
 use crate::error::AppError;
+use crate::openapi::TagSeo;
+
+pub const TAG_SEO: TagSeo = TagSeo {
+    tag: "Users",
+    title: "Users API: list, promote, and deactivate user accounts",
+    description: "Admin REST API for managing funnel users. List all users, \
+                  change roles between member and admin, and deactivate or reactivate accounts.",
+    keywords: &[
+        "user management API",
+        "admin API",
+        "user roles",
+        "deactivate user",
+        "tunnel server admin",
+    ],
+};
 use crate::response::{Many, One};
 use funnel_core::api::envelope::ErrorData;
 

@@ -81,6 +81,7 @@ impl Envelope<ErrorData> {
 }
 
 impl<T> Envelope<T> {
+    #[must_use]
     pub fn with_meta(mut self, meta: EnvelopeMeta) -> Self {
         self.meta = Some(meta);
         self
@@ -92,6 +93,7 @@ impl Enveloped for serde_json::Value {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -116,10 +118,7 @@ mod tests {
 
     #[test]
     fn list_infers_kind_and_total() {
-        let items = vec![
-            TestItem { id: "a".into() },
-            TestItem { id: "b".into() },
-        ];
+        let items = vec![TestItem { id: "a".into() }, TestItem { id: "b".into() }];
         let envelope = Envelope::list(items);
         let json = serde_json::to_value(&envelope).unwrap();
         assert_eq!(json["kind"], "test_item_list");
@@ -195,7 +194,6 @@ mod tests {
         let json = serde_json::to_value(&envelope).unwrap();
         assert_eq!(json["meta"]["request_id"], "req-123");
         assert_eq!(json["meta"]["timestamp"], "2025-01-01T00:00:00Z");
-        // optional fields with None should not appear
         assert!(json["meta"].get("total").is_none());
         assert!(json["meta"].get("cursor").is_none());
     }

@@ -141,6 +141,7 @@ pub async fn reactivate(server: &str, token: &str, id: &str, json: bool) -> anyh
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -178,6 +179,9 @@ mod tests {
         let err = parse_role("bogus").unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("bogus"), "error should include input: {msg}");
-        assert!(msg.contains("admin"), "error should hint valid values: {msg}");
+        assert!(
+            msg.contains("admin"),
+            "error should hint valid values: {msg}"
+        );
     }
 }

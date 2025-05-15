@@ -166,7 +166,6 @@ pub fn create_context(name: &str, server: &str) -> anyhow::Result<()> {
             ..Default::default()
         },
     );
-    // first context becomes the current one automatically
     if config.contexts.len() == 1 {
         config.current_context = name.to_string();
     }

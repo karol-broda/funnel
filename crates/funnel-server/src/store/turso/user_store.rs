@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use super::{format_dt, map_err, parse_dt, parse_optional_dt, parse_uuid};
 use crate::db::users::{NewUser, User};
-use crate::store::user_store::UserStore;
 use crate::store::StoreError;
+use crate::store::user_store::UserStore;
 use funnel_core::api::Role;
 
 pub struct TursoUserStore {

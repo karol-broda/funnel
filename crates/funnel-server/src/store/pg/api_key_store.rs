@@ -4,8 +4,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::api_keys::{self, ApiKey, ApiKeyView};
-use crate::store::api_key_store::ApiKeyStore;
 use crate::store::StoreError;
+use crate::store::api_key_store::ApiKeyStore;
 
 pub struct PgApiKeyStore {
     pool: PgPool,

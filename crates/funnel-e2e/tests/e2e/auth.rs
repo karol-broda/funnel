@@ -148,7 +148,6 @@ async fn create_and_list_keys() -> TestResult {
     assert!(body["data"]["key"].as_str().is_some());
     assert_eq!(body["data"]["info"]["name"], "my-key");
 
-    // seed key + new key
     let resp = env
         .client
         .get(env.url("/api/v1/keys"))
@@ -176,7 +175,9 @@ async fn revoke_key() -> TestResult {
         .await?;
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await?;
-    let key_id = body["data"]["info"]["id"].as_str().ok_or("missing key id")?;
+    let key_id = body["data"]["info"]["id"]
+        .as_str()
+        .ok_or("missing key id")?;
 
     let resp = env
         .client
@@ -188,7 +189,6 @@ async fn revoke_key() -> TestResult {
     let body: serde_json::Value = resp.json().await?;
     assert_eq!(body["data"]["revoked"], true);
 
-    // only seed key remains
     let resp = env
         .client
         .get(env.url("/api/v1/keys"))
@@ -206,7 +206,6 @@ async fn revoke_key() -> TestResult {
 async fn revoked_key_cannot_authenticate() -> TestResult {
     let env = AuthTestEnv::start().await?;
 
-    // create a second key
     let resp = env
         .client
         .post(env.url("/api/v1/keys"))
@@ -215,10 +214,14 @@ async fn revoked_key_cannot_authenticate() -> TestResult {
         .send()
         .await?;
     let body: serde_json::Value = resp.json().await?;
-    let new_key = body["data"]["key"].as_str().ok_or("missing key")?.to_string();
-    let new_key_id = body["data"]["info"]["id"].as_str().ok_or("missing key id")?;
+    let new_key = body["data"]["key"]
+        .as_str()
+        .ok_or("missing key")?
+        .to_string();
+    let new_key_id = body["data"]["info"]["id"]
+        .as_str()
+        .ok_or("missing key id")?;
 
-    // verify it works
     let resp = env
         .client
         .get(env.url("/api/v1/keys"))
@@ -227,14 +230,12 @@ async fn revoked_key_cannot_authenticate() -> TestResult {
         .await?;
     assert_eq!(resp.status(), 200);
 
-    // revoke it
     env.client
         .delete(env.url(&format!("/api/v1/keys/{new_key_id}")))
         .header("authorization", env.auth_header())
         .send()
         .await?;
 
-    // revoked key should be rejected
     let resp = env
         .client
         .get(env.url("/api/v1/keys"))
@@ -260,7 +261,6 @@ async fn me_requires_auth() -> TestResult {
 async fn me_returns_seed_user() -> TestResult {
     let env = AuthTestEnv::start().await?;
 
-    // seed key creates a proper system user
     let resp = env
         .client
         .get(env.url("/api/v1/me"))

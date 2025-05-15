@@ -1,6 +1,23 @@
 use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
+pub struct TagSeo {
+    pub tag: &'static str,
+    pub title: &'static str,
+    pub description: &'static str,
+    pub keywords: &'static [&'static str],
+}
+
+impl TagSeo {
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "title": self.title,
+            "description": self.description,
+            "keywords": self.keywords,
+        })
+    }
+}
+
 #[derive(OpenApi)]
 #[openapi(
     info(
@@ -71,6 +88,15 @@ struct ApiDoc;
 
 struct SecurityAddon;
 
+const TAG_SEO_ENTRIES: &[&TagSeo] = &[
+    &crate::api::health::TAG_SEO,
+    &crate::api::tunnels::TAG_SEO,
+    &crate::api::keys::TAG_SEO,
+    &crate::api::me::TAG_SEO,
+    &crate::api::users::TAG_SEO,
+    &crate::api::teams::TAG_SEO,
+];
+
 impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         let components = openapi.components.get_or_insert_with(Default::default);
@@ -79,12 +105,16 @@ impl Modify for SecurityAddon {
             SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
         );
 
-        // fumadocs-openapi uses x-displayName on tags for human-readable titles,
-        // falling back to idToTitle() which mangles acronyms like "API" -> "A P I"
         if let Some(tags) = &mut openapi.tags {
             for tag in tags {
                 let extensions = tag.extensions.get_or_insert_with(Default::default);
+
+                // without this, fumadocs idToTitle() mangles "API Keys" into "A P I Keys"
                 extensions.insert("x-displayName".to_string(), serde_json::json!(tag.name));
+
+                if let Some(seo) = TAG_SEO_ENTRIES.iter().find(|s| s.tag == tag.name) {
+                    extensions.insert("x-seo".to_string(), seo.to_json());
+                }
             }
         }
     }

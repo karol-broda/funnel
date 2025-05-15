@@ -240,6 +240,7 @@ pub async fn set_role(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -275,6 +276,9 @@ mod tests {
         let err = parse_team_role("admin").unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("admin"), "error should include input: {msg}");
-        assert!(msg.contains("owner"), "error should hint valid values: {msg}");
+        assert!(
+            msg.contains("owner"),
+            "error should hint valid values: {msg}"
+        );
     }
 }

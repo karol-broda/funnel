@@ -10,6 +10,21 @@ use funnel_core::api::{
 
 use crate::app::AppState;
 use crate::auth::{Management, RequireAdmin, Scoped};
+use crate::openapi::TagSeo;
+
+pub const TAG_SEO: TagSeo = TagSeo {
+    tag: "Teams",
+    title: "Teams API: create teams and manage team membership",
+    description: "REST API for creating teams, adding and removing members, \
+                  setting team roles, and organizing tunnel access by team on the funnel server.",
+    keywords: &[
+        "team management API",
+        "team membership",
+        "team roles",
+        "team-scoped tunnels",
+        "multi-tenant tunnels",
+    ],
+};
 use crate::error::AppError;
 use crate::response::{Many, One};
 use funnel_core::api::envelope::ErrorData;

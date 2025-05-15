@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 use super::{format_dt, map_err, parse_dt, parse_optional_dt, parse_uuid};
 use crate::db::tunnel_sessions::TunnelSession;
-use crate::store::session_recorder::SessionRecorder;
 use crate::store::StoreError;
+use crate::store::session_recorder::SessionRecorder;
 
 pub struct TursoSessionRecorder {
     db: Arc<Database>,

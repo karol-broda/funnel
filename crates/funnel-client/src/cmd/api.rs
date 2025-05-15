@@ -3,8 +3,6 @@ use funnel_core::protocol::PROTOCOL_VERSION;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-/// call an endpoint using its defined path and method. response type
-/// is inferred from the endpoint constant's `Resp` parameter.
 pub async fn call<Req, Resp: DeserializeOwned>(
     server: &str,
     token: &str,
@@ -14,7 +12,6 @@ pub async fn call<Req, Resp: DeserializeOwned>(
     request(server, token, &endpoint.method, endpoint.path, json).await
 }
 
-/// like [`call`], but with a custom path for endpoints with path parameters.
 pub async fn call_at<Req, Resp: DeserializeOwned>(
     server: &str,
     token: &str,
@@ -25,8 +22,6 @@ pub async fn call_at<Req, Resp: DeserializeOwned>(
     request(server, token, &endpoint.method, path, json).await
 }
 
-/// call an endpoint that takes a request body, using the endpoint's
-/// defined path and method.
 pub async fn send<Req: Serialize, Resp: DeserializeOwned>(
     server: &str,
     token: &str,
@@ -37,7 +32,6 @@ pub async fn send<Req: Serialize, Resp: DeserializeOwned>(
     request_body(server, token, &endpoint.method, endpoint.path, body, json).await
 }
 
-/// like [`send`], but with a custom path for endpoints with path parameters.
 pub async fn send_at<Req: Serialize, Resp: DeserializeOwned>(
     server: &str,
     token: &str,
@@ -112,8 +106,5 @@ fn extract_data<T: DeserializeOwned>(envelope: serde_json::Value) -> anyhow::Res
 }
 
 fn print_json(envelope: &serde_json::Value) {
-    println!(
-        "{}",
-        serde_json::to_string(envelope).unwrap_or_default()
-    );
+    println!("{}", serde_json::to_string(envelope).unwrap_or_default());
 }

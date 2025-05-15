@@ -37,16 +37,26 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_code, title) = match &self {
-            Self::Unauthorized => (StatusCode::UNAUTHORIZED, AppCode::AuthRequired, "unauthorized"),
-            Self::Forbidden => (StatusCode::FORBIDDEN, AppCode::ScopeInsufficient, "forbidden"),
-            Self::TunnelNotFound(_) => (StatusCode::NOT_FOUND, AppCode::NotFound, "tunnel not found"),
+            Self::Unauthorized => (
+                StatusCode::UNAUTHORIZED,
+                AppCode::AuthRequired,
+                "unauthorized",
+            ),
+            Self::Forbidden => (
+                StatusCode::FORBIDDEN,
+                AppCode::ScopeInsufficient,
+                "forbidden",
+            ),
+            Self::TunnelNotFound(_) => {
+                (StatusCode::NOT_FOUND, AppCode::NotFound, "tunnel not found")
+            }
             Self::NotFound(_) => (StatusCode::NOT_FOUND, AppCode::NotFound, "not found"),
-            Self::InvalidTunnelId(_) => {
-                (StatusCode::BAD_REQUEST, AppCode::TunnelIdInvalid, "invalid tunnel id")
-            }
-            Self::BadRequest(_) => {
-                (StatusCode::BAD_REQUEST, AppCode::BadRequest, "bad request")
-            }
+            Self::InvalidTunnelId(_) => (
+                StatusCode::BAD_REQUEST,
+                AppCode::TunnelIdInvalid,
+                "invalid tunnel id",
+            ),
+            Self::BadRequest(_) => (StatusCode::BAD_REQUEST, AppCode::BadRequest, "bad request"),
             Self::Store(e) => match e {
                 StoreError::NotFound => (StatusCode::NOT_FOUND, AppCode::NotFound, "not found"),
                 StoreError::Conflict(_) => {
@@ -54,25 +64,37 @@ impl IntoResponse for AppError {
                 }
                 StoreError::Database(db_err) => {
                     tracing::error!(error = %db_err, "database error");
-                    (StatusCode::INTERNAL_SERVER_ERROR, AppCode::InternalError, "internal error")
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        AppCode::InternalError,
+                        "internal error",
+                    )
                 }
                 StoreError::Other(msg) => {
                     tracing::error!(error = %msg, "store error");
-                    (StatusCode::INTERNAL_SERVER_ERROR, AppCode::InternalError, "internal error")
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        AppCode::InternalError,
+                        "internal error",
+                    )
                 }
             },
             Self::Internal(e) => {
                 tracing::error!(error = %e, "internal error");
-                (StatusCode::INTERNAL_SERVER_ERROR, AppCode::InternalError, "internal error")
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    AppCode::InternalError,
+                    "internal error",
+                )
             }
         };
 
         let detail = match &self {
             Self::TunnelNotFound(id) => Some(format!("tunnel not found: {id}")),
-            Self::NotFound(msg) => Some(msg.clone()),
+            Self::NotFound(msg)
+            | Self::BadRequest(msg)
+            | Self::Store(StoreError::Conflict(msg)) => Some(msg.clone()),
             Self::InvalidTunnelId(e) => Some(e.to_string()),
-            Self::BadRequest(msg) => Some(msg.clone()),
-            Self::Store(StoreError::Conflict(msg)) => Some(msg.clone()),
             _ => None,
         };
 
@@ -83,6 +105,7 @@ impl IntoResponse for AppError {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use axum::body::Body;

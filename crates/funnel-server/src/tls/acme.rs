@@ -135,7 +135,6 @@ pub async fn order_certificate(
         .await
         .context("failed to get certificate")?;
 
-    // clean up DNS records (best effort)
     for cleanup in &cleanups {
         if let Err(e) = provider
             .cleanup(&cleanup.record_name, &cleanup.dns_value)

@@ -94,10 +94,12 @@ impl Route53Provider {
 #[async_trait::async_trait]
 impl DnsChallenger for Route53Provider {
     async fn present(&self, record_name: &str, value: &str) -> Result<()> {
-        self.change_record(ChangeAction::Upsert, record_name, value).await
+        self.change_record(ChangeAction::Upsert, record_name, value)
+            .await
     }
 
     async fn cleanup(&self, record_name: &str, value: &str) -> Result<()> {
-        self.change_record(ChangeAction::Delete, record_name, value).await
+        self.change_record(ChangeAction::Delete, record_name, value)
+            .await
     }
 }

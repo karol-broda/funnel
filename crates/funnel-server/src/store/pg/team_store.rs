@@ -2,8 +2,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::teams::{self, Team, TeamMembership, TeamRole};
-use crate::store::team_store::TeamStore;
 use crate::store::StoreError;
+use crate::store::team_store::TeamStore;
 
 pub struct PgTeamStore {
     pool: PgPool,
