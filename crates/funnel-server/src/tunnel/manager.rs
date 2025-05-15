@@ -46,6 +46,8 @@ impl TunnelManager {
                 let tunnel = entry.value();
                 TunnelInfo {
                     id: entry.key().to_string(),
+                    tunnel_type: tunnel.tunnel_type().to_string(),
+                    remote_port: tunnel.remote_port(),
                     uptime_secs: tunnel.connected_at().elapsed().as_secs_f64(),
                     stats: tunnel.stats(),
                     owner_id: tunnel.owner_id(),

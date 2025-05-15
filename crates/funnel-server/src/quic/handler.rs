@@ -2,14 +2,22 @@ use std::sync::Arc;
 
 use crate::app::AppState;
 use crate::tunnel::connection::ActiveTunnel;
-use funnel_core::protocol::frame;
-use funnel_core::protocol::error_codes::AppCode;
-use funnel_core::protocol::handshake::{
-    Handshake, HandshakeResult, ServerLimits, TunnelResult, TunnelSpec, TunnelType,
-};
-use funnel_core::protocol::PROTOCOL_VERSION;
-use funnel_core::tunnel::id::TunnelId;
 use funnel_core::api::ApiScope;
+use funnel_core::protocol::PROTOCOL_VERSION;
+use funnel_core::protocol::error_codes::AppCode;
+use funnel_core::protocol::frame;
+use funnel_core::protocol::handshake::{
+    Handshake, HandshakeResult, RoutingMode, ServerLimits, TunnelResult, TunnelSpec, TunnelType,
+};
+use funnel_core::tunnel::id::TunnelId;
+
+fn server_limits(state: &AppState) -> ServerLimits {
+    let mut types = vec![TunnelType::Http];
+    if state.tcp_tunnels_enabled {
+        types.push(TunnelType::Stream);
+    }
+    ServerLimits::default().with_tunnel_types(types)
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConnectionError {
@@ -39,7 +47,7 @@ pub async fn handle_connection(
             version: PROTOCOL_VERSION,
             server_id: state.server_id.clone(),
             tunnels: vec![],
-            limits: ServerLimits::default(),
+            limits: server_limits(&state),
         };
         let _ = frame::write_meta(&mut send, &result).await;
         return Err(ConnectionError::Auth(format!(
@@ -48,7 +56,6 @@ pub async fn handle_connection(
         )));
     }
 
-    // validate auth token
     let token = handshake
         .token
         .as_deref()
@@ -65,10 +72,18 @@ pub async fn handle_connection(
         let result = HandshakeResult {
             version: PROTOCOL_VERSION,
             server_id: state.server_id.clone(),
-            tunnels: handshake.tunnels.iter().map(|t| {
-                TunnelResult::error(t.id.clone(), AppCode::ScopeInsufficient, "token missing tunnels scope")
-            }).collect(),
-            limits: ServerLimits::default(),
+            tunnels: handshake
+                .tunnels
+                .iter()
+                .map(|t| {
+                    TunnelResult::error(
+                        t.id.clone(),
+                        AppCode::ScopeInsufficient,
+                        "token missing tunnels scope",
+                    )
+                })
+                .collect(),
+            limits: server_limits(&state),
         };
         let _ = frame::write_meta(&mut send, &result).await;
         return Err(ConnectionError::Auth("missing tunnels scope".into()));
@@ -76,7 +91,6 @@ pub async fn handle_connection(
 
     let user_id = api_key.user_id;
 
-    // check user is active
     let user = state
         .users
         .find_by_id(user_id)
@@ -88,16 +102,23 @@ pub async fn handle_connection(
         let result = HandshakeResult {
             version: PROTOCOL_VERSION,
             server_id: state.server_id.clone(),
-            tunnels: handshake.tunnels.iter().map(|t| {
-                TunnelResult::error(t.id.clone(), AppCode::UserDeactivated, "user account is deactivated")
-            }).collect(),
-            limits: ServerLimits::default(),
+            tunnels: handshake
+                .tunnels
+                .iter()
+                .map(|t| {
+                    TunnelResult::error(
+                        t.id.clone(),
+                        AppCode::UserDeactivated,
+                        "user account is deactivated",
+                    )
+                })
+                .collect(),
+            limits: server_limits(&state),
         };
         let _ = frame::write_meta(&mut send, &result).await;
         return Err(ConnectionError::Auth("deactivated user".into()));
     }
 
-    // register each tunnel
     let mut tunnel_results = Vec::new();
     let mut registered_ids: Vec<TunnelId> = Vec::new();
 
@@ -125,7 +146,7 @@ pub async fn handle_connection(
     }
 
     tracing::info!(
-        tunnels = ?registered_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>(),
+        tunnels = ?registered_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
         user_id = %user_id,
         "tunnels connected via quic"
     );
@@ -146,20 +167,19 @@ pub async fn handle_connection(
         sessions.push((tunnel_id.clone(), session));
     }
 
-    // wait until the connection closes
     let mut buf = [0u8; 1];
     tokio::select! {
         _ = recv.read(&mut buf) => {},
         _ = conn.closed() => {},
     }
 
-    // cleanup all registered tunnels
     for (tunnel_id, session) in &sessions {
         let stats = state
             .tunnels
             .get(tunnel_id)
             .map(|t| (t.stats(), t.connected_at().elapsed()));
 
+        state.stream_listeners.stop(tunnel_id);
         state.tunnels.remove(tunnel_id);
 
         if let (Some((stats, duration)), Some(session)) = (stats, session) {
@@ -181,7 +201,7 @@ pub async fn handle_connection(
     metrics::gauge!("funnel_tunnels_active").decrement(accepted_count as f64);
 
     tracing::info!(
-        tunnels = ?registered_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>(),
+        tunnels = ?registered_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
         user_id = %user_id,
         remaining_tunnels = state.tunnels.count(),
         "tunnels disconnected"
@@ -196,11 +216,31 @@ async fn register_tunnel(
     conn: &quinn::Connection,
     state: &AppState,
 ) -> TunnelResult {
-    if spec.tunnel_type != TunnelType::Http {
+    match spec.tunnel_type {
+        TunnelType::Http => {}
+        TunnelType::Stream => {
+            if !state.tcp_tunnels_enabled {
+                return TunnelResult::error(
+                    spec.id.clone(),
+                    AppCode::UnsupportedTunnelType,
+                    "tcp tunnels are not enabled on this server",
+                );
+            }
+        }
+        TunnelType::Dgram => {
+            return TunnelResult::error(
+                spec.id.clone(),
+                AppCode::UnsupportedTunnelType,
+                format!("unsupported tunnel type: {}", spec.tunnel_type),
+            );
+        }
+    }
+
+    if spec.tunnel_type == TunnelType::Stream && spec.routing == Some(RoutingMode::Sni) {
         return TunnelResult::error(
             spec.id.clone(),
             AppCode::UnsupportedTunnelType,
-            format!("unsupported tunnel type: {}", spec.tunnel_type),
+            "sni routing is not yet supported",
         );
     }
 
@@ -209,9 +249,34 @@ async fn register_tunnel(
         Err(result) => return result,
     };
 
+    // for stream tunnels: bind the TCP port first so we know the allocated port
+    // before creating the tunnel. the listener is started after registration.
+    let tcp_listener = if spec.tunnel_type == TunnelType::Stream {
+        match state
+            .stream_listeners
+            .bind(spec.remote_port, &state.host)
+            .await
+        {
+            Ok(pair) => Some(pair),
+            Err(e) => {
+                return TunnelResult::error(
+                    spec.id.clone(),
+                    AppCode::PortUnavailable,
+                    e.to_string(),
+                );
+            }
+        }
+    } else {
+        None
+    };
+
+    let remote_port = tcp_listener.as_ref().map(|(_, port)| *port);
+
     let tunnel = Arc::new(ActiveTunnel::new(
         spec.id.clone(),
         conn.clone(),
+        spec.tunnel_type.clone(),
+        remote_port,
         user_id,
         team_id,
     ));
@@ -228,7 +293,18 @@ async fn register_tunnel(
         );
     }
 
-    TunnelResult::ok(spec.id.clone())
+    // start the TCP listener now that the tunnel is registered
+    if let Some((listener, port)) = tcp_listener {
+        state
+            .stream_listeners
+            .run(spec.id.clone(), tunnel, listener, port);
+    }
+
+    match spec.tunnel_type {
+        TunnelType::Http => TunnelResult::ok(spec.id.clone()),
+        TunnelType::Stream => TunnelResult::ok_with_port(spec.id.clone(), remote_port.unwrap_or(0)),
+        TunnelType::Dgram => unreachable!(),
+    }
 }
 
 async fn resolve_team(
@@ -261,17 +337,13 @@ async fn resolve_team(
             )
         })?;
 
-    let is_member = state
-        .teams
-        .is_member(team.id, user_id)
-        .await
-        .map_err(|e| {
-            TunnelResult::error(
-                tunnel_id.clone(),
-                AppCode::TeamMembershipRequired,
-                format!("membership check failed: {e}"),
-            )
-        })?;
+    let is_member = state.teams.is_member(team.id, user_id).await.map_err(|e| {
+        TunnelResult::error(
+            tunnel_id.clone(),
+            AppCode::TeamMembershipRequired,
+            format!("membership check failed: {e}"),
+        )
+    })?;
 
     if !is_member {
         return Err(TunnelResult::error(

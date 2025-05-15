@@ -7,9 +7,24 @@ use funnel_core::tunnel::id::TunnelId;
 use crate::app::AppState;
 use crate::auth::{Management, Scoped};
 use crate::error::AppError;
+use crate::openapi::TagSeo;
 use crate::response::{Many, One};
 use funnel_core::api::TunnelInfo;
 use funnel_core::api::envelope::ErrorData;
+
+pub const TAG_SEO: TagSeo = TagSeo {
+    tag: "Tunnels",
+    title: "Tunnels API: list, inspect, and manage active tunnels",
+    description: "REST API for listing all active QUIC tunnels, inspecting tunnel \
+                  details and live traffic stats, and force-closing tunnels on the funnel server.",
+    keywords: &[
+        "tunnel management API",
+        "list active tunnels",
+        "QUIC tunnel status",
+        "tunnel traffic stats",
+        "close tunnel",
+    ],
+};
 
 #[utoipa::path(
     get,
@@ -80,6 +95,8 @@ pub async fn get_tunnel(
 
     let info = TunnelInfo {
         id: tunnel.id().to_string(),
+        tunnel_type: tunnel.tunnel_type().to_string(),
+        remote_port: tunnel.remote_port(),
         uptime_secs: tunnel.connected_at().elapsed().as_secs_f64(),
         stats: tunnel.stats(),
         owner_id: tunnel.owner_id(),
@@ -129,6 +146,8 @@ pub async fn delete(
     if !auth.is_admin() {
         let info = TunnelInfo {
             id: tunnel.id().to_string(),
+            tunnel_type: tunnel.tunnel_type().to_string(),
+            remote_port: tunnel.remote_port(),
             uptime_secs: 0.0,
             stats: tunnel.stats(),
             owner_id: tunnel.owner_id(),
@@ -146,6 +165,8 @@ pub async fn delete(
 
     // drop the Arc from get() before removing
     drop(tunnel);
+
+    state.stream_listeners.stop(&tunnel_id);
 
     let tunnel = state
         .tunnels

@@ -30,15 +30,8 @@ pub enum OAuthError {
 pub trait OAuthProvider: Send + Sync {
     fn name(&self) -> &'static str;
     fn authorize_url(&self, redirect_uri: &str, state: &str) -> String;
-    async fn exchange_code(
-        &self,
-        code: &str,
-        redirect_uri: &str,
-    ) -> Result<String, OAuthError>;
-    async fn fetch_user_info(
-        &self,
-        access_token: &str,
-    ) -> Result<OAuthUserInfo, OAuthError>;
+    async fn exchange_code(&self, code: &str, redirect_uri: &str) -> Result<String, OAuthError>;
+    async fn fetch_user_info(&self, access_token: &str) -> Result<OAuthUserInfo, OAuthError>;
 }
 
 pub struct PendingAuth {
@@ -62,6 +55,12 @@ impl OAuthState {
             pending: DashMap::new(),
             base_url,
         }
+    }
+
+    pub fn provider_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.providers.keys().cloned().collect();
+        names.sort();
+        names
     }
 
     pub fn generate_state_token() -> Result<String, getrandom::Error> {
