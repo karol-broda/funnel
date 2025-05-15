@@ -14,12 +14,60 @@ use funnel_core::protocol::frame;
 use funnel_core::protocol::handshake::{
     Handshake, HandshakeResult, TunnelSpec, TunnelStatus, TunnelType,
 };
-use funnel_core::protocol::request::HttpRequest;
+use funnel_core::protocol::request::{DataHeader, HttpRequest};
 use funnel_core::protocol::{PROTOCOL_VERSION, QUIC_ALPN};
+use funnel_core::relay;
 use funnel_core::tunnel::id::TunnelId;
 
 use super::display::{RequestResult, TunnelDisplay};
 use super::forwarder::{ForwardResult, ForwardUpgradeResult, Forwarder};
+
+/// handshake was rejected with an error the server will never change its
+/// mind about. reconnecting will produce the same rejection.
+#[derive(Debug)]
+pub struct PermanentError {
+    pub code: String,
+    pub message: String,
+}
+
+impl std::fmt::Display for PermanentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for PermanentError {}
+
+/// errors from connect() that the runner can inspect to decide whether to retry.
+#[derive(Debug)]
+pub enum ConnectError {
+    Permanent(PermanentError),
+    Transient(anyhow::Error),
+}
+
+impl std::fmt::Display for ConnectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Permanent(e) => write!(f, "{e}"),
+            Self::Transient(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for ConnectError {}
+
+impl From<PermanentError> for ConnectError {
+    fn from(e: PermanentError) -> Self {
+        Self::Permanent(e)
+    }
+}
+
+/// tunnel registration result returned from connect().
+pub struct ConnectResult {
+    pub conn: quinn::Connection,
+    /// server-allocated remote port for stream tunnels.
+    pub remote_port: Option<u16>,
+}
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_CONCURRENT_REQUESTS: usize = 128;
@@ -27,11 +75,13 @@ const MAX_CONCURRENT_REQUESTS: usize = 128;
 pub struct TunnelClient {
     pub tunnel_id: TunnelId,
     local_addr: String,
+    tunnel_type: TunnelType,
     token: Option<String>,
     quic_addr: SocketAddr,
     host: String,
     endpoint: quinn::Endpoint,
     team: Option<String>,
+    remote_port: Option<u16>,
 }
 
 impl TunnelClient {
@@ -39,10 +89,12 @@ impl TunnelClient {
         tunnel_id: TunnelId,
         server_url: &str,
         local_addr: String,
+        tunnel_type: TunnelType,
         token: Option<String>,
         quic_port: u16,
         insecure: bool,
         team: Option<String>,
+        remote_port: Option<u16>,
     ) -> anyhow::Result<Self> {
         let url = Url::parse(server_url)?;
         let host = url
@@ -67,11 +119,13 @@ impl TunnelClient {
         Ok(Self {
             tunnel_id,
             local_addr,
+            tunnel_type,
             token,
             quic_addr,
             host,
             endpoint,
             team,
+            remote_port,
         })
     }
 
@@ -80,8 +134,13 @@ impl TunnelClient {
         &self,
         cancel: CancellationToken,
         display: &Arc<TunnelDisplay>,
-    ) -> anyhow::Result<()> {
-        let conn = self.connect().await?;
+    ) -> Result<(), ConnectError> {
+        let result = self.connect().await?;
+        let conn = result.conn;
+
+        if let Some(port) = result.remote_port {
+            display.println(&format!("  remote port {port} (allocated)"));
+        }
         let forwarder = Arc::new(Forwarder::new(self.local_addr.clone()));
         let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
 
@@ -126,46 +185,76 @@ impl TunnelClient {
         Ok(())
     }
 
-    async fn connect(&self) -> anyhow::Result<quinn::Connection> {
+    async fn connect(&self) -> Result<ConnectResult, ConnectError> {
         tracing::debug!(addr = %self.quic_addr, host = %self.host, "connecting via quic");
 
-        let connecting = self.endpoint.connect(self.quic_addr, &self.host)?;
+        let connecting = self
+            .endpoint
+            .connect(self.quic_addr, &self.host)
+            .map_err(|e| ConnectError::Transient(e.into()))?;
 
         let conn = tokio::time::timeout(HANDSHAKE_TIMEOUT, connecting)
             .await
-            .map_err(|_| anyhow::anyhow!("quic handshake timed out after {HANDSHAKE_TIMEOUT:?}"))
-            .and_then(|r| r.map_err(Into::into))?;
+            .map_err(|_| {
+                ConnectError::Transient(anyhow::anyhow!(
+                    "quic handshake timed out after {HANDSHAKE_TIMEOUT:?}"
+                ))
+            })
+            .and_then(|r| r.map_err(|e| ConnectError::Transient(e.into())))?;
 
-        let (mut send, mut recv) = conn.open_bi().await?;
+        let (mut send, mut recv) = conn
+            .open_bi()
+            .await
+            .map_err(|e| ConnectError::Transient(e.into()))?;
 
         let handshake = Handshake {
             version: PROTOCOL_VERSION,
             token: self.token.clone(),
             tunnels: vec![TunnelSpec {
                 id: self.tunnel_id.clone(),
-                tunnel_type: TunnelType::Http,
+                tunnel_type: self.tunnel_type.clone(),
                 team: self.team.clone(),
                 local_port: None,
                 routing: None,
-                remote_port: None,
+                remote_port: self.remote_port,
             }],
         };
 
-        frame::write_meta(&mut send, &handshake).await?;
+        frame::write_meta(&mut send, &handshake)
+            .await
+            .map_err(|e| ConnectError::Transient(e.into()))?;
 
-        let result: HandshakeResult = frame::read_meta(&mut recv).await?;
+        let result: HandshakeResult = frame::read_meta(&mut recv)
+            .await
+            .map_err(|e| ConnectError::Transient(e.into()))?;
 
         let tunnel_result = result
             .tunnels
             .iter()
             .find(|t| t.id == self.tunnel_id)
-            .ok_or_else(|| anyhow::anyhow!("server did not return result for tunnel {}", self.tunnel_id))?;
+            .ok_or_else(|| {
+                ConnectError::Transient(anyhow::anyhow!(
+                    "server did not return result for tunnel {}",
+                    self.tunnel_id
+                ))
+            })?;
 
         if tunnel_result.status == TunnelStatus::Error {
-            let code = tunnel_result.error_code.map_or("unknown", funnel_core::protocol::error_codes::AppCode::as_str);
-            let msg = tunnel_result.error_message.as_deref().unwrap_or("unknown error");
-            anyhow::bail!("handshake rejected: [{code}] {msg}");
+            let code = tunnel_result
+                .error_code
+                .map_or_else(|| "unknown".to_string(), |c| c.as_str().to_string());
+            let msg = tunnel_result
+                .error_message
+                .clone()
+                .unwrap_or_else(|| "unknown error".to_string());
+
+            return Err(ConnectError::Permanent(PermanentError {
+                code,
+                message: msg,
+            }));
         }
+
+        let remote_port = tunnel_result.remote_port;
 
         tracing::info!(tunnel_id = %self.tunnel_id, "quic tunnel connected");
 
@@ -177,18 +266,31 @@ impl TunnelClient {
             let _ = recv.read(&mut buf).await;
         });
 
-        Ok(conn)
+        Ok(ConnectResult { conn, remote_port })
     }
 }
 
 async fn handle_stream(
-    mut send: quinn::SendStream,
+    send: quinn::SendStream,
     mut recv: quinn::RecvStream,
     forwarder: &Forwarder,
 ) -> anyhow::Result<RequestResult> {
     let start = Instant::now();
-    let meta: HttpRequest = frame::read_meta(&mut recv).await?;
+    let header: DataHeader = frame::read_meta(&mut recv).await?;
 
+    match header {
+        DataHeader::Http(meta) => handle_http_stream(send, recv, forwarder, meta, start).await,
+        DataHeader::Stream(header) => handle_tcp_stream(send, recv, forwarder, header, start).await,
+    }
+}
+
+async fn handle_http_stream(
+    mut send: quinn::SendStream,
+    mut recv: quinn::RecvStream,
+    forwarder: &Forwarder,
+    meta: HttpRequest,
+    start: Instant,
+) -> anyhow::Result<RequestResult> {
     let method = meta.method.clone();
     let path = meta.path.clone();
 
@@ -196,7 +298,6 @@ async fn handle_stream(
         return handle_upgrade_stream(send, recv, forwarder, &meta, &method, &path, start).await;
     }
 
-    // read full body from quic for normal requests
     let body = recv.read_to_end(64 * 1024 * 1024).await?;
     let body = Bytes::from(body);
 
@@ -232,6 +333,38 @@ async fn handle_stream(
             })
         }
     }
+}
+
+async fn handle_tcp_stream(
+    mut send: quinn::SendStream,
+    mut recv: quinn::RecvStream,
+    forwarder: &Forwarder,
+    header: funnel_core::protocol::request::StreamHeader,
+    start: Instant,
+) -> anyhow::Result<RequestResult> {
+    let local_addr = forwarder.local_addr();
+    let tcp_stream = match tokio::net::TcpStream::connect(local_addr).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::debug!(error = %e, addr = %local_addr, "failed to connect to local service");
+            send.reset(quinn::VarInt::from_u32(0x05))?;
+            anyhow::bail!("local service unreachable: {e}");
+        }
+    };
+
+    let (mut tcp_read, mut tcp_write) = io::split(tcp_stream);
+
+    let _ =
+        relay::copy_bidirectional_split(&mut recv, &mut send, &mut tcp_read, &mut tcp_write).await;
+
+    let _ = send.finish();
+
+    Ok(RequestResult {
+        method: "TCP".to_string(),
+        path: header.remote_addr,
+        status: 0,
+        duration: start.elapsed(),
+    })
 }
 
 async fn stream_body_to_quic(

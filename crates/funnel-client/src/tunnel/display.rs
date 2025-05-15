@@ -49,13 +49,27 @@ impl TunnelDisplay {
     pub fn log_request(&self, result: &RequestResult) {
         self.requests.fetch_add(1, Ordering::Relaxed);
 
+        let duration = format_duration(result.duration);
+
+        // status 0 means a raw stream connection (TCP/TLS), not HTTP
+        if result.status == 0 {
+            let style = Style::new().cyan();
+            self.pb.println(format!(
+                "{} {} {} {}",
+                result.method,
+                result.path,
+                style.apply_to("connected"),
+                duration,
+            ));
+            return;
+        }
+
         let status_style = match result.status {
             200..=299 => Style::new().green(),
             300..=499 => Style::new().yellow(),
             _ => Style::new().red(),
         };
 
-        let duration = format_duration(result.duration);
         let status = status_style.apply_to(result.status);
 
         self.pb.println(format!(

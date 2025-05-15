@@ -41,6 +41,10 @@ struct Cli {
 enum Command {
     /// create an http tunnel to a local service
     Http(cmd::http::Args),
+    /// create a tcp tunnel to a local service (databases, ssh, game servers)
+    Tcp(cmd::tcp::Args),
+    /// create a tls passthrough tunnel (traffic forwarded without termination)
+    Tls(cmd::tls::Args),
     /// log in via oauth
     #[command(after_long_help = cmd::examples![
         "funnel login  # uses github by default",
@@ -138,7 +142,10 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    let default_filter = if matches!(cli.command, Command::Http(_)) {
+    let default_filter = if matches!(
+        cli.command,
+        Command::Http(_) | Command::Tcp(_) | Command::Tls(_)
+    ) {
         "error"
     } else {
         "info"
@@ -154,6 +161,8 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Command::Http(args) => cmd::http::run(ctx, args).await,
+        Command::Tcp(args) => cmd::tcp::run(ctx, args).await,
+        Command::Tls(args) => cmd::tls::run(ctx, args).await,
         Command::Login { provider } => {
             let cfg = config::load()?;
             let name = ctx.unwrap_or(&cfg.current_context).to_string();

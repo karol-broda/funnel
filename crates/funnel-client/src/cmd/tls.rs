@@ -11,14 +11,13 @@ use crate::tunnel::{client::TunnelClient, display::TunnelDisplay, runner};
 
 #[derive(clap::Args)]
 #[command(after_long_help = super::examples![
-    "funnel http 3000  # localhost:3000",
-    "funnel http 3000 --id my-app  # custom subdomain",
-    "funnel http 127.0.0.1:8080 --server https://tunnel.example.com  # explicit server",
-    "funnel http 3000 --team backend  # associate with team",
+    "funnel tls 8443  # expose localhost:8443 with tls passthrough",
+    "funnel tls 8443 --id secure-app  # custom tunnel id",
+    "funnel tls 443 --remote-port 8443  # request specific server port",
 ])]
 pub struct Args {
-    /// local address or port to forward to (e.g. "3000" or "localhost:3000")
-    pub address: String,
+    /// local port to forward to (TLS traffic is passed through without termination)
+    pub port: u16,
 
     /// tunnel server url (overrides config)
     #[arg(short, long)]
@@ -43,10 +42,14 @@ pub struct Args {
     /// associate tunnel with a team
     #[arg(long)]
     pub team: Option<String>,
+
+    /// request a specific port on the server (0 = auto-assign)
+    #[arg(long, default_value_t = 0)]
+    pub remote_port: u16,
 }
 
 pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
-    let local_addr = normalize_address(&args.address);
+    let local_addr = format!("localhost:{}", args.port);
 
     let cfg = config::load().unwrap_or_default();
     let resolved = config::resolve(&cfg, ctx_override).ok();
@@ -75,8 +78,8 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
     let quic_port = if let Some(port) = args.quic_port {
         port
     } else {
-        let client = api_client::ApiClient::new(&server_url, token.clone());
-        let info = client.request(&funnel_core::api::INFO).await?;
+        let api = api_client::ApiClient::new(&server_url, token.clone());
+        let info = api.request(&funnel_core::api::INFO).await?;
         info.quic_port
     };
 
@@ -85,15 +88,20 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
         None => TunnelId::generate(),
     };
 
-    let public_url = runner::build_public_url(&server_url, &tunnel_id)
-        .unwrap_or_else(|| "<unknown>".to_string());
+    let remote_port = if args.remote_port != 0 {
+        Some(args.remote_port)
+    } else {
+        None
+    };
 
-    println!("funnel\n");
-    println!("  public url  {public_url}");
-    println!("  forwarding  {local_addr}");
+    println!("funnel tls\n");
+    println!("  forwarding  {local_addr} (tls passthrough)");
     println!("  tunnel id   {tunnel_id}");
     if let Some(ref team_name) = args.team {
         println!("  team        {team_name}");
+    }
+    if let Some(rp) = remote_port {
+        println!("  remote port {rp} (requested)");
     }
     println!();
 
@@ -103,12 +111,12 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
         tunnel_id,
         &server_url,
         local_addr,
-        TunnelType::Http,
+        TunnelType::Stream,
         token,
         quic_port,
         args.insecure,
         args.team,
-        None,
+        remote_port,
     )?;
 
     let shutdown = CancellationToken::new();
@@ -124,27 +132,4 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
     display.finish();
 
     Ok(())
-}
-
-fn normalize_address(addr: &str) -> String {
-    if addr.contains(':') {
-        addr.to_string()
-    } else {
-        format!("localhost:{addr}")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalize_port_only() {
-        assert_eq!(normalize_address("3000"), "localhost:3000");
-    }
-
-    #[test]
-    fn normalize_full_address() {
-        assert_eq!(normalize_address("127.0.0.1:8080"), "127.0.0.1:8080");
-    }
 }
