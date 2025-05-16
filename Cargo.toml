@@ -52,6 +52,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # cli
 clap = { version = "4", features = ["derive", "env"] }
+clap_complete = "4"
 
 # database
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "migrate", "ipnetwork"] }
