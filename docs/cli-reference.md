@@ -1,3 +1,4 @@
+{<-- -->}
 ## funnel http
 
 create an http tunnel to a local service.
@@ -18,9 +19,63 @@ funnel http <address>
 | `--team` | associate tunnel with a team |
 
 ```bash
-funnel http 3000
-funnel http 3000 --id my-app
-funnel http 127.0.0.1:8080 --server https://tunnel.example.com
+funnel http 3000  # localhost:3000
+funnel http 3000 --id my-app  # custom subdomain
+funnel http 127.0.0.1:8080 --server https://tunnel.example.com  # explicit server
+funnel http 3000 --team backend  # associate with team
+```
+
+## funnel tcp
+
+create a tcp tunnel to a local service (databases, ssh, game servers).
+
+```bash
+funnel tcp <port>
+```
+
+`<port>` is local port to forward to.
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `-s`, `--server` | tunnel server url (overrides config) |  |
+| `-i`, `--id` | tunnel id (subdomain), generated if omitted |  |
+| `-t`, `--token` | authentication token (overrides config) |  |
+| `--quic-port` | quic port on the server (overrides discovery) |  |
+| `--insecure` | skip tls certificate verification (for development) |  |
+| `--team` | associate tunnel with a team |  |
+| `--remote-port` | request a specific port on the server (0 = auto-assign) | `0` |
+
+```bash
+funnel tcp 5432  # expose localhost:5432
+funnel tcp 5432 --id my-db  # custom tunnel id
+funnel tcp 22 --id my-ssh --remote-port 2222  # request specific server port
+funnel tcp 5432 --team backend  # associate with team
+```
+
+## funnel tls
+
+create a tls passthrough tunnel (traffic forwarded without termination).
+
+```bash
+funnel tls <port>
+```
+
+`<port>` is local port to forward to (TLS traffic is passed through without termination).
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `-s`, `--server` | tunnel server url (overrides config) |  |
+| `-i`, `--id` | tunnel id (subdomain), generated if omitted |  |
+| `-t`, `--token` | authentication token (overrides config) |  |
+| `--quic-port` | quic port on the server (overrides discovery) |  |
+| `--insecure` | skip tls certificate verification (for development) |  |
+| `--team` | associate tunnel with a team |  |
+| `--remote-port` | request a specific port on the server (0 = auto-assign) | `0` |
+
+```bash
+funnel tls 8443  # expose localhost:8443 with tls passthrough
+funnel tls 8443 --id secure-app  # custom tunnel id
+funnel tls 443 --remote-port 8443  # request specific server port
 ```
 
 ## funnel login
@@ -36,8 +91,8 @@ funnel login
 | `--provider` | oauth provider name | `github` |
 
 ```bash
-funnel login
-funnel login --provider gitlab
+funnel login  # uses github by default
+funnel login --provider gitlab  # use a different provider
 ```
 
 ## funnel logout
@@ -70,8 +125,8 @@ manage api keys.
 
 ```bash
 funnel keys list
-funnel keys create deploy-key
-funnel keys create deploy-key --scopes tunnels
+funnel keys create deploy-key  # full access
+funnel keys create ci-runner --scopes tunnels  # tunnels only
 funnel keys revoke <id>
 ```
 
@@ -122,7 +177,7 @@ funnel sessions
 
 ```bash
 funnel sessions
-funnel sessions --all
+funnel sessions --all  # admin: show all users' sessions
 funnel sessions --limit 100
 ```
 
@@ -132,9 +187,8 @@ manage users (admin only).
 
 ```bash
 funnel users list
-funnel users list --limit 100
-funnel users set-role <id> admin
-funnel users deactivate <id>
+funnel users set-role <id> admin  # promote to admin
+funnel users deactivate <id>  # revoke access
 funnel users reactivate <id>
 ```
 
@@ -187,13 +241,11 @@ funnel users reactivate <id>
 manage teams.
 
 ```bash
-funnel teams list
 funnel teams create backend
-funnel teams delete <id>
 funnel teams members <id>
 funnel teams add-member <team_id> <user_id>
+funnel teams set-role <team_id> <user_id> owner  # promote to owner
 funnel teams remove-member <team_id> <user_id>
-funnel teams set-role <team_id> <user_id> owner
 ```
 
 ### funnel teams list
@@ -278,9 +330,8 @@ manage server contexts.
 
 ```bash
 funnel context create staging --server https://tunnel.example.com
-funnel context use staging
+funnel context use staging  # switch active context
 funnel context list
-funnel context delete staging
 ```
 
 ### funnel context list

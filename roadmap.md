@@ -20,6 +20,8 @@
 - OCI container images
 - multi-arch releases (linux/macOS, amd64/arm64)
 - install script with checksum verification
+- TCP tunneling (`funnel tcp`) with auto port allocation
+- TLS passthrough (`funnel tls`) via stream tunnels
 
 ## project config file
 
@@ -128,23 +130,6 @@ server-side web UI. active tunnel overview with live status, per-tunnel and per-
 ## HTTP/2 proxying
 
 the tunnel currently proxies HTTP/1.1. HTTP/2 support enables gRPC tunneling and multiplexed browser requests.
-
-## TCP tunneling
-
-```bash
-funnel tcp 5432 --id my-db
-funnel tcp 22 --id my-ssh
-```
-
-raw TCP forwarding without HTTP framing. the server allocates a port and forwards bytes bidirectionally.
-
-## TLS passthrough
-
-```bash
-funnel tls 8443 --id secure-app
-```
-
-forward TLS connections without terminating them at the server. routes via SNI. useful for applications that handle their own TLS or need mutual TLS.
 
 ## UDP tunneling
 

@@ -11,7 +11,7 @@
   "servers": [
     {
       "url": "/api/v1",
-      "description": "API v2"
+      "description": "API v1"
     }
   ],
   "paths": {
@@ -81,7 +81,7 @@
         "operationId": "get_server_info",
         "responses": {
           "200": {
-            "description": "Server version and QUIC port",
+            "description": "Server info, capabilities, and configuration",
             "content": {
               "application/json": {
                 "schema": {
@@ -1375,10 +1375,17 @@
           "scopes": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ApiScope"
             }
           }
         }
+      },
+      "ApiScope": {
+        "type": "string",
+        "enum": [
+          "management",
+          "tunnels"
+        ]
       },
       "CreateKeyRequest": {
         "type": "object",
@@ -1402,7 +1409,7 @@
               "null"
             ],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ApiScope"
             }
           }
         }
@@ -1484,13 +1491,52 @@
           }
         }
       },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "admin",
+          "member"
+        ]
+      },
+      "ServerCapabilities": {
+        "type": "object",
+        "required": [
+          "tunnel_types",
+          "tls",
+          "oauth_providers"
+        ],
+        "properties": {
+          "oauth_providers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "configured OAuth providers available for `funnel login`"
+          },
+          "tls": {
+            "type": "boolean",
+            "description": "whether the server terminates TLS on public-facing connections"
+          },
+          "tunnel_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "tunnel types the server accepts (e.g. \"http\", \"tcp\")"
+          }
+        }
+      },
       "ServerInfo": {
         "type": "object",
         "required": [
           "version",
-          "quic_port"
+          "quic_port",
+          "capabilities"
         ],
         "properties": {
+          "capabilities": {
+            "$ref": "#/components/schemas/ServerCapabilities"
+          },
           "quic_port": {
             "type": "integer",
             "format": "int32",
@@ -1510,7 +1556,7 @@
         ],
         "properties": {
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/TeamRole"
           }
         }
       },
@@ -1521,7 +1567,7 @@
         ],
         "properties": {
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/Role"
           }
         }
       },
@@ -1570,7 +1616,7 @@
             "format": "uuid"
           },
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/TeamRole"
           },
           "team_id": {
             "type": "string",
@@ -1582,10 +1628,18 @@
           }
         }
       },
+      "TeamRole": {
+        "type": "string",
+        "enum": [
+          "owner",
+          "member"
+        ]
+      },
       "TunnelInfo": {
         "type": "object",
         "required": [
           "id",
+          "tunnel_type",
           "uptime_secs",
           "stats",
           "owner_id"
@@ -1598,6 +1652,14 @@
             "type": "string",
             "format": "uuid"
           },
+          "remote_port": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
           "stats": {
             "$ref": "#/components/schemas/TunnelStatsSnapshot"
           },
@@ -1607,6 +1669,9 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "tunnel_type": {
+            "type": "string"
           },
           "uptime_secs": {
             "type": "number",
@@ -1738,7 +1803,7 @@
             ]
           },
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/Role"
           },
           "updated_at": {
             "type": "string",
@@ -1758,32 +1823,96 @@
     {
       "name": "Server",
       "description": "Server health and info",
+      "x-seo": {
+        "description": "REST API endpoints for monitoring funnel server health status and retrieving server version and configuration details.",
+        "keywords": [
+          "funnel health check",
+          "server status API",
+          "server info endpoint",
+          "self-hosted tunnel monitoring"
+        ],
+        "title": "Server endpoints: health check, version, and server info"
+      },
       "x-displayName": "Server"
     },
     {
       "name": "Tunnels",
       "description": "Tunnel management",
-      "x-displayName": "Tunnels"
+      "x-displayName": "Tunnels",
+      "x-seo": {
+        "description": "REST API for listing all active QUIC tunnels, inspecting tunnel details and live traffic stats, and force-closing tunnels on the funnel server.",
+        "keywords": [
+          "tunnel management API",
+          "list active tunnels",
+          "QUIC tunnel status",
+          "tunnel traffic stats",
+          "close tunnel"
+        ],
+        "title": "Tunnels API: list, inspect, and manage active tunnels"
+      }
     },
     {
       "name": "API Keys",
       "description": "API key management",
+      "x-seo": {
+        "description": "REST API for managing funnel API keys with scoped permissions. Create keys for CI/CD pipelines, list existing keys, and revoke compromised tokens.",
+        "keywords": [
+          "API key management",
+          "scoped access tokens",
+          "create API key",
+          "revoke API key",
+          "CI/CD tunnel authentication"
+        ],
+        "title": "API keys: create, list, and revoke scoped access tokens"
+      },
       "x-displayName": "API Keys"
     },
     {
       "name": "Profile",
       "description": "Current user profile and sessions",
+      "x-seo": {
+        "description": "REST API for retrieving the authenticated user's profile, listing linked OAuth accounts, and viewing tunnel session history with traffic statistics.",
+        "keywords": [
+          "user profile API",
+          "tunnel session history",
+          "OAuth linked accounts",
+          "tunnel usage stats"
+        ],
+        "title": "Profile API: current user, linked accounts, and session history"
+      },
       "x-displayName": "Profile"
     },
     {
       "name": "Users",
       "description": "User management (admin only)",
-      "x-displayName": "Users"
+      "x-displayName": "Users",
+      "x-seo": {
+        "description": "Admin REST API for managing funnel users. List all users, change roles between member and admin, and deactivate or reactivate accounts.",
+        "keywords": [
+          "user management API",
+          "admin API",
+          "user roles",
+          "deactivate user",
+          "tunnel server admin"
+        ],
+        "title": "Users API: list, promote, and deactivate user accounts"
+      }
     },
     {
       "name": "Teams",
       "description": "Team management",
-      "x-displayName": "Teams"
+      "x-displayName": "Teams",
+      "x-seo": {
+        "description": "REST API for creating teams, adding and removing members, setting team roles, and organizing tunnel access by team on the funnel server.",
+        "keywords": [
+          "team management API",
+          "team membership",
+          "team roles",
+          "team-scoped tunnels",
+          "multi-tenant tunnels"
+        ],
+        "title": "Teams API: create teams and manage team membership"
+      }
     }
   ]
 }

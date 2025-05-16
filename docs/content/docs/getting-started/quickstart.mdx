@@ -1,6 +1,19 @@
 ---
 title: Quickstart
 description: Get a tunnel running in under two minutes
+seo:
+  title: "Quickstart: expose a local port to the internet in three commands"
+  description: "Connect to a funnel server, authenticate via OAuth, and expose a local HTTP service, TCP port, or TLS service through a public URL in under two minutes."
+  keywords:
+    - expose local port to internet
+    - localhost public URL
+    - tunnel quickstart
+    - expose localhost HTTPS
+    - custom subdomain tunnel
+    - share local dev server
+    - TCP tunnel database
+    - TLS passthrough tunnel
+  priority: 0.9
 ---
 
 This guide assumes you have a funnel server running and the client installed. If not, see [installation](/docs/getting-started/installation) and [server deployment](/docs/server/deployment).
@@ -51,6 +64,42 @@ funnel http 3000 --id my-app
 
 This gives you `https://my-app.tunnel.example.com`.
 
+## TCP tunnel
+
+TCP tunnels require `--enable-tcp-tunnels` on the server (see [deployment](/docs/server/deployment)).
+
+Expose a local database or any TCP service:
+
+```bash
+funnel tcp 5432 --id my-db
+```
+
+```
+funnel tcp
+
+  forwarding  localhost:5432
+  tunnel id   my-db
+  remote port 15432 (allocated)
+```
+
+The server allocates a port and listens for TCP connections on it. Remote clients connect to `tunnel.example.com:15432` and traffic is forwarded to your local port.
+
+You can request a specific port:
+
+```bash
+funnel tcp 5432 --remote-port 15432
+```
+
+## TLS passthrough
+
+Forward TLS traffic without the server terminating it:
+
+```bash
+funnel tls 8443 --id secure-app
+```
+
+Same as TCP, but signals that the traffic is TLS. The server never sees the plaintext.
+
 ## Check active tunnels
 
 ```bash
@@ -59,6 +108,7 @@ funnel status
 
 ## Next steps
 
+- [Architecture](/docs/reference/architecture): how HTTP, TCP, and TLS tunnels differ
 - [Contexts](/docs/getting-started/contexts): manage multiple servers
 - [CLI reference](/docs/client/cli): all commands and flags
 - [Teams](/docs/server/teams): team-scoped tunnels

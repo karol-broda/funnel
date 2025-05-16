@@ -30,6 +30,59 @@ funnel http 127.0.0.1:8080 --server https://tunnel.example.com  # explicit serve
 funnel http 3000 --team backend  # associate with team
 ```
 
+## funnel tcp
+
+create a tcp tunnel to a local service (databases, ssh, game servers).
+
+```bash
+funnel tcp <port>
+```
+
+`<port>` is local port to forward to.
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `-s`, `--server` | tunnel server url (overrides config) |  |
+| `-i`, `--id` | tunnel id (subdomain), generated if omitted |  |
+| `-t`, `--token` | authentication token (overrides config) |  |
+| `--quic-port` | quic port on the server (overrides discovery) |  |
+| `--insecure` | skip tls certificate verification (for development) |  |
+| `--team` | associate tunnel with a team |  |
+| `--remote-port` | request a specific port on the server (0 = auto-assign) | `0` |
+
+```bash
+funnel tcp 5432  # expose localhost:5432
+funnel tcp 5432 --id my-db  # custom tunnel id
+funnel tcp 22 --id my-ssh --remote-port 2222  # request specific server port
+funnel tcp 5432 --team backend  # associate with team
+```
+
+## funnel tls
+
+create a tls passthrough tunnel (traffic forwarded without termination).
+
+```bash
+funnel tls <port>
+```
+
+`<port>` is local port to forward to (TLS traffic is passed through without termination).
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `-s`, `--server` | tunnel server url (overrides config) |  |
+| `-i`, `--id` | tunnel id (subdomain), generated if omitted |  |
+| `-t`, `--token` | authentication token (overrides config) |  |
+| `--quic-port` | quic port on the server (overrides discovery) |  |
+| `--insecure` | skip tls certificate verification (for development) |  |
+| `--team` | associate tunnel with a team |  |
+| `--remote-port` | request a specific port on the server (0 = auto-assign) | `0` |
+
+```bash
+funnel tls 8443  # expose localhost:8443 with tls passthrough
+funnel tls 8443 --id secure-app  # custom tunnel id
+funnel tls 443 --remote-port 8443  # request specific server port
+```
+
 ## funnel login
 
 log in via oauth.
