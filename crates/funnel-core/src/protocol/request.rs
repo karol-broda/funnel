@@ -316,7 +316,7 @@ mod tests {
                 assert!(req.upgrade);
                 assert_eq!(req.headers.get("x-multi").map(Vec::len), Some(2));
             }
-            _ => panic!("expected Http variant"),
+            DataHeader::Stream(_) => panic!("expected Http variant"),
         }
         Ok(())
     }
