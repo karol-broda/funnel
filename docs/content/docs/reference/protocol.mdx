@@ -50,6 +50,18 @@ TunnelSpec {
   +------------+-------------------------+
   | remote_port| uint16 (optional)       |
   +------------+-------------------------+
+  | access     | AccessControl (optional)|
+  +------------+-------------------------+
+}
+
+AccessControl {
+  +-------------+------------------------+
+  | basic_auth  | string (optional)      |
+  +-------------+------------------------+
+  | allow_ip    | array<string> (cidr)   |
+  +-------------+------------------------+
+  | expires_secs| uint64 (optional)      |
+  +-------------+------------------------+
 }
 ```
 
@@ -59,6 +71,8 @@ TunnelSpec {
 - `http`: HTTP tunneling with subdomain routing
 - `stream`: raw TCP/TLS forwarding with port-based routing
 - `dgram`: UDP forwarding (reserved, not yet implemented)
+
+**access** applies optional access control, enforced by the server at the tunnel edge for `http` tunnels. `basic_auth` holds `user:pass` credentials, `allow_ip` is a list of cidr ranges permitted to connect, and `expires_secs` closes the tunnel after the given number of seconds. Invalid cidr entries fail registration with `bad_request`.
 
 ### Server to client
 

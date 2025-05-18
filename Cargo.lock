@@ -1835,6 +1835,7 @@ dependencies = [
  "axum",
  "axum-server",
  "axum-test",
+ "base64",
  "chrono",
  "clap",
  "dashmap",

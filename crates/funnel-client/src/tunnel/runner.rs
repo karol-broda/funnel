@@ -25,6 +25,9 @@ pub async fn run(client: &TunnelClient, shutdown: CancellationToken, display: &A
         let run_cancel = shutdown.child_token();
         match client.run(run_cancel, display).await {
             Ok(()) => {
+                if shutdown.is_cancelled() {
+                    break;
+                }
                 attempt = 0;
                 display.println("connection lost, reconnecting...");
             }

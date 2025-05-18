@@ -60,6 +60,7 @@ turso = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v7", "serde"] }
 ipnetwork = "0.20"
+base64 = "0.22"
 
 # openapi
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }

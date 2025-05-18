@@ -1,0 +1,69 @@
+---
+title: Access Control
+description: Protect a tunnel with basic auth, ip allowlists, and expiry
+seo:
+  title: "Tunnel access control: basic auth, ip allowlist, and expiry"
+  description: "Restrict who can reach an http tunnel with http basic auth, cidr ip allowlists, and automatic expiry. Enforced at the server edge before requests reach your local service."
+  keywords:
+    - tunnel basic auth
+    - tunnel ip allowlist
+    - tunnel expiry
+    - protect localhost tunnel
+    - restrict tunnel access
+  priority: 0.7
+---
+
+Access control restricts who can reach an http tunnel. All checks run on the
+server, at the tunnel edge, before a request is forwarded to your local
+service. The options are independent and can be combined.
+
+These flags apply to `funnel http` tunnels.
+
+## Basic auth
+
+Require http basic auth credentials on every incoming request:
+
+```bash
+funnel http 3000 --auth admin:secret
+```
+
+Requests without matching credentials get a `401` with a `WWW-Authenticate`
+header. Credentials are sent to the server over the encrypted QUIC connection
+and held in memory for the lifetime of the tunnel.
+
+## IP allowlist
+
+Restrict access to one or more client ip ranges in cidr notation. The flag can
+be repeated:
+
+```bash
+funnel http 3000 --allow-ip 10.0.0.0/8
+funnel http 3000 --allow-ip 192.168.0.0/16 --allow-ip 203.0.113.4/32
+```
+
+Requests from any other peer address get a `403`. The matched address is the
+peer connecting to the funnel server, so behind a load balancer this is the
+balancer's address rather than the original client.
+
+## Expiry
+
+Automatically close the tunnel after a duration:
+
+```bash
+funnel http 3000 --expires 2h
+```
+
+Accepted units are seconds (`s`), minutes (`m`), hours (`h`), and days (`d`). A
+bare number is treated as seconds. When the deadline passes, the server stops
+serving traffic and closes the connection, which ends the client process.
+
+## Combining options
+
+```bash
+funnel http 3000 \
+  --auth admin:secret \
+  --allow-ip 10.0.0.0/8 \
+  --expires 30m
+```
+
+Checks are evaluated in order: expiry, then ip allowlist, then basic auth.

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::app::AppState;
+use crate::tunnel::access::AccessPolicy;
 use crate::tunnel::connection::ActiveTunnel;
 use funnel_core::api::ApiScope;
 use funnel_core::protocol::PROTOCOL_VERSION;
@@ -272,6 +273,13 @@ async fn register_tunnel(
 
     let remote_port = tcp_listener.as_ref().map(|(_, port)| *port);
 
+    let access = match AccessPolicy::from_spec(spec.access.as_ref(), tokio::time::Instant::now()) {
+        Ok(policy) => policy,
+        Err(message) => {
+            return TunnelResult::error(spec.id.clone(), AppCode::BadRequest, message);
+        }
+    };
+
     let tunnel = Arc::new(ActiveTunnel::new(
         spec.id.clone(),
         conn.clone(),
@@ -279,6 +287,7 @@ async fn register_tunnel(
         remote_port,
         user_id,
         team_id,
+        access,
     ));
 
     if state

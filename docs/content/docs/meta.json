@@ -14,6 +14,7 @@
     "server/teams",
     "---Client---",
     "client/cli",
+    "client/access-control",
     "---NixOS---",
     "nix/flake",
     "nix/nixos-module",

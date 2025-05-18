@@ -34,6 +34,34 @@ pub struct TestEnv {
 
 impl TestEnv {
     pub async fn start() -> Result<Self, Box<dyn std::error::Error>> {
+        let env = Self::start_inner(&[]).await?;
+        wait_for_tunnel(&env.client, env.http_port, &env.host_header).await;
+        Ok(env)
+    }
+
+    /// start with http basic auth enforced on the tunnel. readiness is probed
+    /// with valid credentials.
+    pub async fn start_with_auth(
+        user: &str,
+        pass: &str,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let creds = format!("{user}:{pass}");
+        let env = Self::start_inner(&["--auth", &creds]).await?;
+        wait_for_tunnel_auth(&env.client, env.http_port, &env.host_header, user, pass).await;
+        Ok(env)
+    }
+
+    /// start with extra `funnel http` flags. readiness waits until the tunnel is
+    /// registered, which covers responses the access policy rejects (401/403).
+    pub async fn start_with_client_args(
+        extra_args: &[&str],
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let env = Self::start_inner(extra_args).await?;
+        wait_for_tunnel_registered(&env.client, env.http_port, &env.host_header).await;
+        Ok(env)
+    }
+
+    async fn start_inner(client_args: &[&str]) -> Result<Self, Box<dyn std::error::Error>> {
         let (local_handle, local_port) = start_mock_server()?;
         let http_port = free_port()?;
         let quic_port = free_port()?;
@@ -49,10 +77,7 @@ impl TestEnv {
         wait_for_tcp(http_port).await;
 
         let (client_process, client_log) =
-            start_client_process(local_port, http_port, TUNNEL_ID, &seed_key)?;
-
-        let client = reqwest::Client::new();
-        wait_for_tunnel(&client, http_port, &host_header).await;
+            start_client_process(local_port, http_port, TUNNEL_ID, &seed_key, client_args)?;
 
         Ok(Self {
             server_process,
@@ -63,7 +88,7 @@ impl TestEnv {
             turso_db_path,
             http_port,
             host_header,
-            client,
+            client: reqwest::Client::new(),
             seed_key,
         })
     }
@@ -253,21 +278,27 @@ fn start_client_process(
     server_http_port: u16,
     tunnel_id: &str,
     token: &str,
+    extra_args: &[&str],
 ) -> Result<(Child, PathBuf), Box<dyn std::error::Error>> {
     let (stderr_file, log_path) = log_file("client")?;
 
+    let mut args = vec![
+        "http".to_string(),
+        format!("127.0.0.1:{local_port}"),
+        "--server".to_string(),
+        format!("http://127.0.0.1:{server_http_port}"),
+        "--id".to_string(),
+        tunnel_id.to_string(),
+        "--insecure".to_string(),
+        "--token".to_string(),
+        token.to_string(),
+    ];
+    for arg in extra_args {
+        args.push((*arg).to_string());
+    }
+
     let child = Command::new(binary_path("funnel-client")?)
-        .args([
-            "http",
-            &format!("127.0.0.1:{local_port}"),
-            "--server",
-            &format!("http://127.0.0.1:{server_http_port}"),
-            "--id",
-            tunnel_id,
-            "--insecure",
-            "--token",
-            token,
-        ])
+        .args(&args)
         .stdout(Stdio::null())
         .stderr(Stdio::from(stderr_file))
         .spawn()?;
@@ -285,6 +316,7 @@ pub struct TcpTestEnv {
     client_log: PathBuf,
     turso_db_path: PathBuf,
     pub remote_port: u16,
+    #[allow(dead_code)]
     pub seed_key: String,
 }
 
@@ -371,9 +403,8 @@ fn start_tcp_echo_server() -> Result<(JoinHandle<()>, u16), std::io::Error> {
 
     let handle = tokio::spawn(async move {
         loop {
-            let (mut stream, _) = match tokio_listener.accept().await {
-                Ok(pair) => pair,
-                Err(_) => continue,
+            let Ok((mut stream, _)) = tokio_listener.accept().await else {
+                continue;
             };
             tokio::spawn(async move {
                 let (mut read, mut write) = tokio::io::split(&mut stream);
@@ -441,6 +472,48 @@ async fn wait_for_tunnel(client: &reqwest::Client, http_port: u16, host_header: 
             "tunnel did not become ready"
         );
         match client.get(&url).header("host", host_header).send().await {
+            Ok(resp) if resp.status().is_success() => return,
+            _ => tokio::time::sleep(POLL_INTERVAL).await,
+        }
+    }
+}
+
+async fn wait_for_tunnel_registered(client: &reqwest::Client, http_port: u16, host_header: &str) {
+    let url = format!("http://127.0.0.1:{http_port}/hello");
+    let deadline = tokio::time::Instant::now() + READY_TIMEOUT;
+    loop {
+        assert!(
+            tokio::time::Instant::now() <= deadline,
+            "tunnel did not register"
+        );
+        match client.get(&url).header("host", host_header).send().await {
+            Ok(resp) if resp.status() != reqwest::StatusCode::NOT_FOUND => return,
+            _ => tokio::time::sleep(POLL_INTERVAL).await,
+        }
+    }
+}
+
+async fn wait_for_tunnel_auth(
+    client: &reqwest::Client,
+    http_port: u16,
+    host_header: &str,
+    user: &str,
+    pass: &str,
+) {
+    let url = format!("http://127.0.0.1:{http_port}/hello");
+    let deadline = tokio::time::Instant::now() + READY_TIMEOUT;
+    loop {
+        assert!(
+            tokio::time::Instant::now() <= deadline,
+            "auth tunnel did not become ready"
+        );
+        match client
+            .get(&url)
+            .header("host", host_header)
+            .basic_auth(user, Some(pass))
+            .send()
+            .await
+        {
             Ok(resp) if resp.status().is_success() => return,
             _ => tokio::time::sleep(POLL_INTERVAL).await,
         }

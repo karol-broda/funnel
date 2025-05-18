@@ -77,6 +77,18 @@ funnel http 3000 --id staging --team backend
 
 each http request runs on its own QUIC stream. websocket upgrades are forwarded as bidirectional byte streams.
 
+### access control
+
+restrict who can reach an http tunnel. checks run on the server before requests reach your local service.
+
+```bash
+funnel http 3000 --auth admin:secret  # require http basic auth
+funnel http 3000 --allow-ip 10.0.0.0/8  # restrict by client ip (repeatable)
+funnel http 3000 --expires 2h  # auto close after a duration
+```
+
+the options can be combined. see the [access control docs](https://funnel.karolbroda.com/docs/client/access-control) for details.
+
 ### contexts
 
 the client supports named contexts for connecting to multiple servers.

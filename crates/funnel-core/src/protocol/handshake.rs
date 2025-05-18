@@ -23,6 +23,31 @@ pub struct TunnelSpec {
     pub routing: Option<RoutingMode>,
     #[serde(default)]
     pub remote_port: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access: Option<AccessControl>,
+}
+
+/// optional access control applied at the tunnel edge by the server.
+/// all fields are independent and may be combined.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccessControl {
+    /// http basic auth credentials in `user:pass` form. when set, the server
+    /// rejects requests without matching credentials.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub basic_auth: Option<String>,
+    /// cidr ranges allowed to reach the tunnel. when non empty, requests from
+    /// any other peer address are rejected.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow_ip: Vec<String>,
+    /// number of seconds after connect when the tunnel stops serving traffic.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_secs: Option<u64>,
+}
+
+impl AccessControl {
+    pub const fn is_empty(&self) -> bool {
+        self.basic_auth.is_none() && self.allow_ip.is_empty() && self.expires_secs.is_none()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -151,6 +176,7 @@ impl std::fmt::Display for TunnelType {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::protocol::PROTOCOL_VERSION;
@@ -169,6 +195,7 @@ mod tests {
                 local_port: Some(3000),
                 routing: None,
                 remote_port: None,
+                access: None,
             }],
         };
 
@@ -218,11 +245,66 @@ mod tests {
             local_port: None,
             routing: Some(RoutingMode::Sni),
             remote_port: None,
+            access: None,
         };
 
         let json = serde_json::to_value(&spec)?;
         assert_eq!(json["type"], "stream");
         assert_eq!(json["routing"], "sni");
+        Ok(())
+    }
+
+    #[test]
+    fn access_control_is_empty() {
+        assert!(AccessControl::default().is_empty());
+        assert!(
+            !AccessControl {
+                basic_auth: Some("user:pass".into()),
+                ..Default::default()
+            }
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn tunnel_spec_access_roundtrip() -> TestResult {
+        let spec = TunnelSpec {
+            id: TunnelId::new("guarded")?,
+            tunnel_type: TunnelType::Http,
+            team: None,
+            local_port: Some(3000),
+            routing: None,
+            remote_port: None,
+            access: Some(AccessControl {
+                basic_auth: Some("admin:secret".into()),
+                allow_ip: vec!["10.0.0.0/8".into()],
+                expires_secs: Some(7200),
+            }),
+        };
+
+        let encoded = rmp_serde::to_vec_named(&spec)?;
+        let decoded: TunnelSpec = rmp_serde::from_slice(&encoded)?;
+        let access = decoded.access.expect("access present");
+        assert_eq!(access.basic_auth.as_deref(), Some("admin:secret"));
+        assert_eq!(access.allow_ip, vec!["10.0.0.0/8".to_string()]);
+        assert_eq!(access.expires_secs, Some(7200));
+        Ok(())
+    }
+
+    #[test]
+    fn tunnel_spec_without_access_omits_field() -> TestResult {
+        let spec = TunnelSpec {
+            id: TunnelId::new("plain")?,
+            tunnel_type: TunnelType::Http,
+            team: None,
+            local_port: None,
+            routing: None,
+            remote_port: None,
+            access: None,
+        };
+
+        let json = serde_json::to_value(&spec)?;
+        assert!(json.get("access").is_none());
         Ok(())
     }
 }

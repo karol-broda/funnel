@@ -12,6 +12,7 @@ use funnel_core::tunnel::id::TunnelId;
 
 use super::headers::prepare_forwarding_headers;
 use crate::app::AppState;
+use crate::tunnel::access::AccessDenied;
 use crate::tunnel::connection::{ActiveTunnel, CountedRecvStream, SendError};
 
 fn is_upgrade_request(req: &Request<Body>) -> bool {
@@ -48,18 +49,22 @@ pub async fn handle_tunnel_request(
         return not_found("tunnel not found");
     };
 
-    if is_upgrade_request(&request) {
-        return handle_upgrade(&mut request, &host, &state, &tunnel).await;
-    }
-
-    let method = request.method().to_string();
-    let path = request.uri().to_string();
-
     let fallback_addr = std::net::SocketAddr::from(([0, 0, 0, 0], 0));
     let remote_addr = request
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
         .map_or(fallback_addr, |ci| ci.0);
+
+    if let Err(denied) = tunnel.check_access(request.headers(), remote_addr.ip()) {
+        return access_denied_response(denied);
+    }
+
+    if is_upgrade_request(&request) {
+        return handle_upgrade(&mut request, &host, remote_addr, &state, &tunnel).await;
+    }
+
+    let method = request.method().to_string();
+    let path = request.uri().to_string();
 
     let headers = prepare_forwarding_headers(request.headers(), &host, remote_addr, state.is_tls);
 
@@ -91,17 +96,12 @@ pub async fn handle_tunnel_request(
 async fn handle_upgrade(
     request: &mut Request<Body>,
     host: &str,
+    remote_addr: std::net::SocketAddr,
     state: &AppState,
     tunnel: &ActiveTunnel,
 ) -> Response<Body> {
     let method = request.method().to_string();
     let path = request.uri().to_string();
-
-    let fallback_addr = std::net::SocketAddr::from(([0, 0, 0, 0], 0));
-    let remote_addr = request
-        .extensions()
-        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-        .map_or(fallback_addr, |ci| ci.0);
 
     let headers = prepare_forwarding_headers(request.headers(), host, remote_addr, state.is_tls);
 
@@ -216,6 +216,19 @@ fn build_response(meta: &HttpResponse, recv: CountedRecvStream) -> Response<Body
 
 fn not_found(msg: &str) -> Response<Body> {
     error_response(StatusCode::NOT_FOUND, msg)
+}
+
+fn access_denied_response(denied: AccessDenied) -> Response<Body> {
+    match denied {
+        AccessDenied::Expired => error_response(StatusCode::GONE, "tunnel expired"),
+        AccessDenied::IpForbidden => error_response(StatusCode::FORBIDDEN, "access denied"),
+        AccessDenied::Unauthorized => Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header("content-type", "text/plain")
+            .header("www-authenticate", "Basic realm=\"funnel\"")
+            .body(Body::from("authentication required"))
+            .unwrap_or_else(|_| Response::new(Body::from("authentication required"))),
+    }
 }
 
 fn error_response(status: StatusCode, msg: &str) -> Response<Body> {
