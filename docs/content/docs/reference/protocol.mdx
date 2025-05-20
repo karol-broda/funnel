@@ -249,6 +249,7 @@ Used in `Connection::close()`. Fatal, all tunnels on the connection are torn dow
 | `VersionMismatch` | `0x03` | incompatible protocol version |
 | `InternalError` | `0x04` | server-side failure |
 | `ShuttingDown` | `0x05` | server is shutting down gracefully |
+| `TunnelExpired` | `0x06` | tunnel reached its configured expiry; the client does not reconnect |
 
 ### Stream codes
 

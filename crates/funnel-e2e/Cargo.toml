@@ -14,4 +14,5 @@ tokio-tungstenite = "0.26"
 reqwest = { workspace = true, features = ["rustls", "json"] }
 serde_json.workspace = true
 axum = { workspace = true, features = ["ws"] }
+base64.workspace = true
 futures-util = "0.3"

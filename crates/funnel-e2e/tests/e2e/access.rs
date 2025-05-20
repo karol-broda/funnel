@@ -1,8 +1,38 @@
+use base64::Engine;
+use futures_util::{SinkExt, StreamExt};
 use reqwest::Method;
+use tokio_tungstenite::tungstenite;
 
 use crate::harness::TestEnv;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+fn basic_auth_header(user: &str, pass: &str) -> String {
+    let encoded = base64::engine::general_purpose::STANDARD.encode(format!("{user}:{pass}"));
+    format!("Basic {encoded}")
+}
+
+fn websocket_request(
+    env: &TestEnv,
+    path: &str,
+    authorization: Option<&str>,
+) -> Result<tungstenite::http::Request<()>, tungstenite::http::Error> {
+    let url = format!("ws://127.0.0.1:{}{path}", env.http_port);
+    let mut builder = tungstenite::http::Request::builder()
+        .uri(&url)
+        .header("host", &env.host_header)
+        .header("connection", "Upgrade")
+        .header("upgrade", "websocket")
+        .header("sec-websocket-version", "13")
+        .header(
+            "sec-websocket-key",
+            tungstenite::handshake::client::generate_key(),
+        );
+    if let Some(authorization) = authorization {
+        builder = builder.header("authorization", authorization);
+    }
+    builder.body(())
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn basic_auth_rejects_without_credentials() -> TestResult {
@@ -62,6 +92,41 @@ async fn ip_allowlist_blocks_unlisted_peer() -> TestResult {
     let resp = env.tunnel_request(Method::GET, "/hello").send().await?;
 
     assert_eq!(resp.status(), 403);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn basic_auth_rejects_websocket_upgrade_without_credentials() -> TestResult {
+    let env = TestEnv::start_with_auth("admin", "secret").await?;
+
+    let request = websocket_request(&env, "/ws-echo", None)?;
+    let result = tokio_tungstenite::connect_async(request).await;
+
+    match result {
+        Err(tungstenite::Error::Http(response)) => {
+            assert_eq!(response.status(), 401);
+            Ok(())
+        }
+        Err(other) => Err(format!("expected http 401, got error: {other}").into()),
+        Ok(_) => Err("expected upgrade to be rejected, but it succeeded".into()),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn basic_auth_allows_websocket_upgrade_with_credentials() -> TestResult {
+    let env = TestEnv::start_with_auth("admin", "secret").await?;
+
+    let authorization = basic_auth_header("admin", "secret");
+    let request = websocket_request(&env, "/ws-echo", Some(&authorization))?;
+    let (mut socket, _response) = tokio_tungstenite::connect_async(request).await?;
+
+    socket
+        .send(tungstenite::Message::Text("ping".into()))
+        .await?;
+    let echoed = socket.next().await.ok_or("no message received")??;
+    assert_eq!(echoed.into_text()?, "ping");
+
+    socket.close(None).await?;
     Ok(())
 }
 

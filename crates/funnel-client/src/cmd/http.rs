@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
 
@@ -106,7 +105,6 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
     };
 
     let access = build_access_control(args.auth, args.allow_ip, args.expires.as_deref())?;
-    let expiry = access.as_ref().and_then(|access| access.expires_secs);
 
     let public_url = runner::build_public_url(&server_url, &tunnel_id)
         .unwrap_or_else(|| "<unknown>".to_string());
@@ -155,16 +153,6 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
         tokio::signal::ctrl_c().await.ok();
         shutdown_signal.cancel();
     });
-
-    if let Some(expiry_secs) = expiry {
-        let expiry_shutdown = shutdown.clone();
-        let expiry_display = Arc::clone(&display);
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(expiry_secs)).await;
-            expiry_display.println("tunnel expired");
-            expiry_shutdown.cancel();
-        });
-    }
 
     runner::run(&client, shutdown, &display).await;
 

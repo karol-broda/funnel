@@ -10,11 +10,8 @@ use funnel_core::protocol::handshake::AccessControl;
 /// reason an incoming request was rejected at the tunnel edge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccessDenied {
-    /// tunnel has passed its configured lifetime.
     Expired,
-    /// peer address is not in the configured allowlist.
     IpForbidden,
-    /// missing or incorrect http basic auth credentials.
     Unauthorized,
 }
 
@@ -28,9 +25,8 @@ pub struct AccessPolicy {
 }
 
 impl AccessPolicy {
-    /// build a policy from a tunnel spec's access control config.
-    /// `connected_at` anchors the expiry clock. returns an error message when
-    /// an allowlist entry is not valid cidr notation.
+    /// `connected_at` anchors the expiry clock. errors when an allowlist entry
+    /// is not valid cidr notation.
     pub fn from_spec(
         access: Option<&AccessControl>,
         connected_at: Instant,
@@ -61,6 +57,10 @@ impl AccessPolicy {
             allow_networks,
             expires_at,
         })
+    }
+
+    pub const fn expires_at(&self) -> Option<Instant> {
+        self.expires_at
     }
 
     /// check an incoming request against the policy. checks run cheapest first:
@@ -182,6 +182,26 @@ mod tests {
         );
 
         let blocked = "203.0.113.1".parse().unwrap();
+        assert_eq!(
+            policy.check(&HeaderMap::new(), blocked, Instant::now()),
+            Err(AccessDenied::IpForbidden)
+        );
+    }
+
+    #[test]
+    fn ip_allowlist_matches_any_of_multiple_ranges() {
+        let access = AccessControl {
+            allow_ip: vec!["10.0.0.0/8".into(), "192.168.0.0/16".into()],
+            ..Default::default()
+        };
+        let policy = AccessPolicy::from_spec(Some(&access), Instant::now()).unwrap();
+
+        for allowed in ["10.1.2.3", "192.168.5.6"] {
+            let ip = allowed.parse().unwrap();
+            assert!(policy.check(&HeaderMap::new(), ip, Instant::now()).is_ok());
+        }
+
+        let blocked = "172.16.0.1".parse().unwrap();
         assert_eq!(
             policy.check(&HeaderMap::new(), blocked, Instant::now()),
             Err(AccessDenied::IpForbidden)

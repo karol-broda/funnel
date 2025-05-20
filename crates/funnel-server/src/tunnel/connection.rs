@@ -55,7 +55,10 @@ impl ActiveTunnel {
         &self.id
     }
 
-    /// check an incoming http request against the tunnel's access policy.
+    pub const fn expires_at(&self) -> Option<tokio::time::Instant> {
+        self.access.expires_at()
+    }
+
     pub fn check_access(
         &self,
         headers: &axum::http::HeaderMap,

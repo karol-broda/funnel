@@ -5,7 +5,7 @@ use crate::tunnel::access::AccessPolicy;
 use crate::tunnel::connection::ActiveTunnel;
 use funnel_core::api::ApiScope;
 use funnel_core::protocol::PROTOCOL_VERSION;
-use funnel_core::protocol::error_codes::AppCode;
+use funnel_core::protocol::error_codes::{AppCode, ConnectionCode};
 use funnel_core::protocol::frame;
 use funnel_core::protocol::handshake::{
     Handshake, HandshakeResult, RoutingMode, ServerLimits, TunnelResult, TunnelSpec, TunnelType,
@@ -168,10 +168,26 @@ pub async fn handle_connection(
         sessions.push((tunnel_id.clone(), session));
     }
 
+    let earliest_expiry = registered_ids
+        .iter()
+        .filter_map(|id| state.tunnels.get(id))
+        .filter_map(|tunnel| tunnel.expires_at())
+        .min();
+
     let mut buf = [0u8; 1];
     tokio::select! {
         _ = recv.read(&mut buf) => {},
         _ = conn.closed() => {},
+        () = wait_for_expiry(earliest_expiry) => {
+            tracing::info!(
+                tunnels = ?registered_ids.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "tunnels expired, closing connection"
+            );
+            conn.close(
+                quinn::VarInt::from_u32(ConnectionCode::TunnelExpired.as_u32()),
+                b"tunnel expired",
+            );
+        },
     }
 
     for (tunnel_id, session) in &sessions {
@@ -209,6 +225,14 @@ pub async fn handle_connection(
     );
 
     Ok(())
+}
+
+/// resolve once the given instant arrives, or never if no expiry is set.
+async fn wait_for_expiry(expiry: Option<tokio::time::Instant>) {
+    match expiry {
+        Some(deadline) => tokio::time::sleep_until(deadline).await,
+        None => std::future::pending::<()>().await,
+    }
 }
 
 async fn register_tunnel(

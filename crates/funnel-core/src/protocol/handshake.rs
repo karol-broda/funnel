@@ -27,19 +27,15 @@ pub struct TunnelSpec {
     pub access: Option<AccessControl>,
 }
 
-/// optional access control applied at the tunnel edge by the server.
-/// all fields are independent and may be combined.
+/// access control enforced by the server at the tunnel edge, configured by the
+/// authenticated tunnel owner.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccessControl {
-    /// http basic auth credentials in `user:pass` form. when set, the server
-    /// rejects requests without matching credentials.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub basic_auth: Option<String>,
-    /// cidr ranges allowed to reach the tunnel. when non empty, requests from
-    /// any other peer address are rejected.
+    /// empty means no ip restriction.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allow_ip: Vec<String>,
-    /// number of seconds after connect when the tunnel stops serving traffic.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_secs: Option<u64>,
 }

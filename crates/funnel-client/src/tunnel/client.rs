@@ -10,6 +10,7 @@ use tokio::io;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+use funnel_core::protocol::error_codes::ConnectionCode;
 use funnel_core::protocol::frame;
 use funnel_core::protocol::handshake::{
     AccessControl, Handshake, HandshakeResult, TunnelSpec, TunnelStatus, TunnelType,
@@ -72,7 +73,6 @@ pub struct ConnectResult {
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_CONCURRENT_REQUESTS: usize = 128;
 
-/// configuration for a single tunnel connection.
 pub struct TunnelOptions {
     pub tunnel_id: TunnelId,
     pub local_addr: String,
@@ -184,6 +184,15 @@ impl TunnelClient {
                 }
                 () = cancel.cancelled() => break,
             }
+        }
+
+        if let Some(quinn::ConnectionError::ApplicationClosed(close)) = conn.close_reason()
+            && close.error_code == quinn::VarInt::from_u32(ConnectionCode::TunnelExpired.as_u32())
+        {
+            return Err(ConnectError::Permanent(PermanentError {
+                code: "tunnel_expired".to_string(),
+                message: "tunnel expired".to_string(),
+            }));
         }
 
         conn.close(quinn::VarInt::from_u32(0), b"client shutdown");

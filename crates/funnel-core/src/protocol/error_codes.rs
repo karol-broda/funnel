@@ -11,6 +11,7 @@ pub enum ConnectionCode {
     VersionMismatch = 0x03,
     InternalError = 0x04,
     ShuttingDown = 0x05,
+    TunnelExpired = 0x06,
 }
 
 impl ConnectionCode {
@@ -102,6 +103,7 @@ mod tests {
         assert_eq!(ConnectionCode::VersionMismatch.as_u32(), 0x03);
         assert_eq!(ConnectionCode::InternalError.as_u32(), 0x04);
         assert_eq!(ConnectionCode::ShuttingDown.as_u32(), 0x05);
+        assert_eq!(ConnectionCode::TunnelExpired.as_u32(), 0x06);
     }
 
     #[test]
