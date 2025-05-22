@@ -21,15 +21,27 @@ These flags apply to `funnel http` tunnels.
 
 ## Basic auth
 
-Require http basic auth credentials on every incoming request:
+Require basic auth credentials on every incoming request:
 
 ```bash
 funnel http 3000 --auth admin:secret
 ```
 
-Requests without matching credentials get a `401` with a `WWW-Authenticate`
-header. Credentials are sent to the server over the encrypted QUIC connection
-and held in memory for the lifetime of the tunnel.
+Credentials are carried in the `Proxy-Authorization` header, not `Authorization`.
+funnel is acting as a proxy, so it authenticates with the proxy-level header and
+leaves your application's `Authorization` header untouched. The server strips
+`Proxy-Authorization` before forwarding, so your local service never sees
+funnel's credentials.
+
+Requests without matching credentials get a `407 Proxy Authentication Required`
+with a `Proxy-Authenticate` header. Send credentials like this:
+
+```bash
+curl -H "Proxy-Authorization: Basic $(printf 'admin:secret' | base64)" https://my-app.tunnel.example.com
+```
+
+Credentials travel to the server over the encrypted QUIC connection and are held
+in memory for the lifetime of the tunnel.
 
 ## IP allowlist
 

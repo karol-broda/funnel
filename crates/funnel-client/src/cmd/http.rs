@@ -19,7 +19,7 @@ use crate::tunnel::{
     "funnel http 3000 --id my-app  # custom subdomain",
     "funnel http 127.0.0.1:8080 --server https://tunnel.example.com  # explicit server",
     "funnel http 3000 --team backend  # associate with team",
-    "funnel http 3000 --auth admin:secret  # require http basic auth",
+    "funnel http 3000 --auth admin:secret  # basic auth via Proxy-Authorization",
     "funnel http 3000 --allow-ip 10.0.0.0/8  # restrict by client ip",
     "funnel http 3000 --expires 2h  # auto close after a duration",
 ])]
@@ -51,7 +51,7 @@ pub struct Args {
     #[arg(long)]
     pub team: Option<String>,
 
-    /// require http basic auth for incoming requests (format: user:pass)
+    /// require basic auth via the Proxy-Authorization header (format: user:pass)
     #[arg(long, value_name = "USER:PASS")]
     pub auth: Option<String>,
 

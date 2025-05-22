@@ -1,21 +1,15 @@
-use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Method;
 use tokio_tungstenite::tungstenite;
 
-use crate::harness::TestEnv;
+use crate::harness::{TestEnv, proxy_basic_auth};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
-
-fn basic_auth_header(user: &str, pass: &str) -> String {
-    let encoded = base64::engine::general_purpose::STANDARD.encode(format!("{user}:{pass}"));
-    format!("Basic {encoded}")
-}
 
 fn websocket_request(
     env: &TestEnv,
     path: &str,
-    authorization: Option<&str>,
+    proxy_authorization: Option<&str>,
 ) -> Result<tungstenite::http::Request<()>, tungstenite::http::Error> {
     let url = format!("ws://127.0.0.1:{}{path}", env.http_port);
     let mut builder = tungstenite::http::Request::builder()
@@ -28,8 +22,8 @@ fn websocket_request(
             "sec-websocket-key",
             tungstenite::handshake::client::generate_key(),
         );
-    if let Some(authorization) = authorization {
-        builder = builder.header("authorization", authorization);
+    if let Some(proxy_authorization) = proxy_authorization {
+        builder = builder.header("proxy-authorization", proxy_authorization);
     }
     builder.body(())
 }
@@ -40,8 +34,8 @@ async fn basic_auth_rejects_without_credentials() -> TestResult {
 
     let resp = env.tunnel_request(Method::GET, "/hello").send().await?;
 
-    assert_eq!(resp.status(), 401);
-    assert!(resp.headers().contains_key("www-authenticate"));
+    assert_eq!(resp.status(), 407);
+    assert!(resp.headers().contains_key("proxy-authenticate"));
     Ok(())
 }
 
@@ -51,11 +45,11 @@ async fn basic_auth_rejects_wrong_credentials() -> TestResult {
 
     let resp = env
         .tunnel_request(Method::GET, "/hello")
-        .basic_auth("admin", Some("wrong"))
+        .header("proxy-authorization", proxy_basic_auth("admin", "wrong"))
         .send()
         .await?;
 
-    assert_eq!(resp.status(), 401);
+    assert_eq!(resp.status(), 407);
     Ok(())
 }
 
@@ -65,12 +59,30 @@ async fn basic_auth_accepts_valid_credentials() -> TestResult {
 
     let resp = env
         .tunnel_request(Method::GET, "/hello")
-        .basic_auth("admin", Some("secret"))
+        .header("proxy-authorization", proxy_basic_auth("admin", "secret"))
         .send()
         .await?;
 
     assert_eq!(resp.status(), 200);
     assert_eq!(resp.text().await?, "hello from local service");
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn proxy_auth_is_stripped_and_application_authorization_passes_through() -> TestResult {
+    let env = TestEnv::start_with_auth("admin", "secret").await?;
+
+    let resp = env
+        .tunnel_request(Method::GET, "/headers")
+        .header("proxy-authorization", proxy_basic_auth("admin", "secret"))
+        .header("authorization", "Bearer app-token")
+        .send()
+        .await?;
+
+    assert_eq!(resp.status(), 200);
+    let received: serde_json::Value = resp.json().await?;
+    assert_eq!(received["authorization"], "Bearer app-token");
+    assert!(received.get("proxy-authorization").is_none());
     Ok(())
 }
 
@@ -104,10 +116,10 @@ async fn basic_auth_rejects_websocket_upgrade_without_credentials() -> TestResul
 
     match result {
         Err(tungstenite::Error::Http(response)) => {
-            assert_eq!(response.status(), 401);
+            assert_eq!(response.status(), 407);
             Ok(())
         }
-        Err(other) => Err(format!("expected http 401, got error: {other}").into()),
+        Err(other) => Err(format!("expected http 407, got error: {other}").into()),
         Ok(_) => Err("expected upgrade to be rejected, but it succeeded".into()),
     }
 }
@@ -116,8 +128,8 @@ async fn basic_auth_rejects_websocket_upgrade_without_credentials() -> TestResul
 async fn basic_auth_allows_websocket_upgrade_with_credentials() -> TestResult {
     let env = TestEnv::start_with_auth("admin", "secret").await?;
 
-    let authorization = basic_auth_header("admin", "secret");
-    let request = websocket_request(&env, "/ws-echo", Some(&authorization))?;
+    let proxy_authorization = proxy_basic_auth("admin", "secret");
+    let request = websocket_request(&env, "/ws-echo", Some(&proxy_authorization))?;
     let (mut socket, _response) = tokio_tungstenite::connect_async(request).await?;
 
     socket

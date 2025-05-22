@@ -12,14 +12,14 @@ use funnel_core::protocol::handshake::AccessControl;
 pub enum AccessDenied {
     Expired,
     IpForbidden,
-    Unauthorized,
+    ProxyAuthRequired,
 }
 
 /// access control resolved from a tunnel spec and enforced per request.
 #[derive(Debug, Default, Clone)]
 pub struct AccessPolicy {
-    /// precomputed `Basic <base64>` header value to match against.
-    expected_authorization: Option<String>,
+    /// precomputed `Basic <base64>` value matched against `Proxy-Authorization`.
+    expected_proxy_authorization: Option<String>,
     allow_networks: Vec<IpNetwork>,
     expires_at: Option<Instant>,
 }
@@ -35,7 +35,7 @@ impl AccessPolicy {
             return Ok(Self::default());
         };
 
-        let expected_authorization = access.basic_auth.as_ref().map(|creds| {
+        let expected_proxy_authorization = access.basic_auth.as_ref().map(|creds| {
             let encoded = base64::engine::general_purpose::STANDARD.encode(creds);
             format!("Basic {encoded}")
         });
@@ -53,7 +53,7 @@ impl AccessPolicy {
             .map(|secs| connected_at + Duration::from_secs(secs));
 
         Ok(Self {
-            expected_authorization,
+            expected_proxy_authorization,
             allow_networks,
             expires_at,
         })
@@ -81,13 +81,13 @@ impl AccessPolicy {
             return Err(AccessDenied::IpForbidden);
         }
 
-        if let Some(expected) = &self.expected_authorization {
+        if let Some(expected) = &self.expected_proxy_authorization {
             let provided = headers
-                .get(axum::http::header::AUTHORIZATION)
+                .get(axum::http::header::PROXY_AUTHORIZATION)
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("");
             if !constant_time_eq(provided.as_bytes(), expected.as_bytes()) {
-                return Err(AccessDenied::Unauthorized);
+                return Err(AccessDenied::ProxyAuthRequired);
             }
         }
 
@@ -113,10 +113,10 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 mod tests {
     use super::*;
 
-    fn auth_header(value: &str) -> HeaderMap {
+    fn proxy_auth_header(value: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(
-            axum::http::header::AUTHORIZATION,
+            axum::http::header::PROXY_AUTHORIZATION,
             value.parse().expect("valid header value"),
         );
         headers
@@ -142,7 +142,7 @@ mod tests {
         };
         let policy = AccessPolicy::from_spec(Some(&access), Instant::now()).unwrap();
         let ip = "203.0.113.1".parse().unwrap();
-        let headers = auth_header(&basic("admin:secret"));
+        let headers = proxy_auth_header(&basic("admin:secret"));
         assert!(policy.check(&headers, ip, Instant::now()).is_ok());
     }
 
@@ -157,12 +157,32 @@ mod tests {
 
         assert_eq!(
             policy.check(&HeaderMap::new(), ip, Instant::now()),
-            Err(AccessDenied::Unauthorized)
+            Err(AccessDenied::ProxyAuthRequired)
         );
-        let headers = auth_header(&basic("admin:wrong"));
+        let headers = proxy_auth_header(&basic("admin:wrong"));
         assert_eq!(
             policy.check(&headers, ip, Instant::now()),
-            Err(AccessDenied::Unauthorized)
+            Err(AccessDenied::ProxyAuthRequired)
+        );
+    }
+
+    #[test]
+    fn basic_auth_ignores_the_application_authorization_header() {
+        let access = AccessControl {
+            basic_auth: Some("admin:secret".into()),
+            ..Default::default()
+        };
+        let policy = AccessPolicy::from_spec(Some(&access), Instant::now()).unwrap();
+        let ip = "203.0.113.1".parse().unwrap();
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            basic("admin:secret").parse().unwrap(),
+        );
+        assert_eq!(
+            policy.check(&headers, ip, Instant::now()),
+            Err(AccessDenied::ProxyAuthRequired)
         );
     }
 

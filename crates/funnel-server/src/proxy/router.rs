@@ -222,12 +222,12 @@ fn access_denied_response(denied: AccessDenied) -> Response<Body> {
     match denied {
         AccessDenied::Expired => error_response(StatusCode::GONE, "tunnel expired"),
         AccessDenied::IpForbidden => error_response(StatusCode::FORBIDDEN, "access denied"),
-        AccessDenied::Unauthorized => Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
+        AccessDenied::ProxyAuthRequired => Response::builder()
+            .status(StatusCode::PROXY_AUTHENTICATION_REQUIRED)
             .header("content-type", "text/plain")
-            .header("www-authenticate", "Basic realm=\"funnel\"")
-            .body(Body::from("authentication required"))
-            .unwrap_or_else(|_| Response::new(Body::from("authentication required"))),
+            .header("proxy-authenticate", "Basic realm=\"funnel\"")
+            .body(Body::from("proxy authentication required"))
+            .unwrap_or_else(|_| Response::new(Body::from("proxy authentication required"))),
     }
 }
 

@@ -52,7 +52,7 @@ impl TestEnv {
     }
 
     /// start with extra `funnel http` flags. readiness waits until the tunnel is
-    /// registered, which covers responses the access policy rejects (401/403).
+    /// registered, which covers responses the access policy rejects (403/407).
     pub async fn start_with_client_args(
         extra_args: &[&str],
     ) -> Result<Self, Box<dyn std::error::Error>> {
@@ -501,6 +501,7 @@ async fn wait_for_tunnel_auth(
     pass: &str,
 ) {
     let url = format!("http://127.0.0.1:{http_port}/hello");
+    let proxy_authorization = proxy_basic_auth(user, pass);
     let deadline = tokio::time::Instant::now() + READY_TIMEOUT;
     loop {
         assert!(
@@ -510,7 +511,7 @@ async fn wait_for_tunnel_auth(
         match client
             .get(&url)
             .header("host", host_header)
-            .basic_auth(user, Some(pass))
+            .header("proxy-authorization", &proxy_authorization)
             .send()
             .await
         {
@@ -518,4 +519,10 @@ async fn wait_for_tunnel_auth(
             _ => tokio::time::sleep(POLL_INTERVAL).await,
         }
     }
+}
+
+pub fn proxy_basic_auth(user: &str, pass: &str) -> String {
+    use base64::Engine;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(format!("{user}:{pass}"));
+    format!("Basic {encoded}")
 }

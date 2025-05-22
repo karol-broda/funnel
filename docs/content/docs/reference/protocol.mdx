@@ -72,7 +72,7 @@ AccessControl {
 - `stream`: raw TCP/TLS forwarding with port-based routing
 - `dgram`: UDP forwarding (reserved, not yet implemented)
 
-**access** applies optional access control, enforced by the server at the tunnel edge for `http` tunnels. `basic_auth` holds `user:pass` credentials, `allow_ip` is a list of cidr ranges permitted to connect, and `expires_secs` closes the tunnel after the given number of seconds. Invalid cidr entries fail registration with `bad_request`.
+**access** applies optional access control, enforced by the server at the tunnel edge for `http` tunnels. `basic_auth` holds `user:pass` credentials matched against the request's `Proxy-Authorization` header (rejected requests get `407`); the server strips that header before forwarding, leaving the application's `Authorization` untouched. `allow_ip` is a list of cidr ranges permitted to connect, and `expires_secs` closes the tunnel after the given number of seconds. Invalid cidr entries fail registration with `bad_request`.
 
 ### Server to client
 
