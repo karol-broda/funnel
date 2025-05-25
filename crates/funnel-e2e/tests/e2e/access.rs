@@ -87,6 +87,37 @@ async fn proxy_auth_is_stripped_and_application_authorization_passes_through() -
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn basic_scheme_rejects_without_credentials_with_401() -> TestResult {
+    let env =
+        TestEnv::start_with_client_args(&["--auth", "admin:secret", "--auth-scheme", "basic"])
+            .await?;
+
+    let resp = env.tunnel_request(Method::GET, "/hello").send().await?;
+
+    assert_eq!(resp.status(), 401);
+    assert!(resp.headers().contains_key("www-authenticate"));
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn basic_scheme_accepts_authorization_and_strips_it() -> TestResult {
+    let env =
+        TestEnv::start_with_client_args(&["--auth", "admin:secret", "--auth-scheme", "basic"])
+            .await?;
+
+    let resp = env
+        .tunnel_request(Method::GET, "/headers")
+        .basic_auth("admin", Some("secret"))
+        .send()
+        .await?;
+
+    assert_eq!(resp.status(), 200);
+    let received: serde_json::Value = resp.json().await?;
+    assert!(received.get("authorization").is_none());
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn ip_allowlist_permits_listed_peer() -> TestResult {
     let env = TestEnv::start_with_client_args(&["--allow-ip", "127.0.0.1/32"]).await?;
 

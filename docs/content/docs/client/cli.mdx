@@ -22,7 +22,8 @@ funnel http <address>
 | `--quic-port` | quic port on the server (overrides discovery) |
 | `--insecure` | skip tls certificate verification (for development) |
 | `--team` | associate tunnel with a team |
-| `--auth` | require basic auth via the Proxy-Authorization header (format: user:pass) |
+| `--auth` | require basic auth for incoming requests (format: user:pass) |
+| `--auth-scheme` | auth header scheme: proxy (Proxy-Authorization/407) or basic (Authorization/401, browser prompt). defaults to config or proxy |
 | `--allow-ip` | restrict access to client ip ranges in cidr notation (repeatable) |
 | `--expires` | automatically close the tunnel after a duration (e.g. 90s, 30m, 2h, 1d) |
 

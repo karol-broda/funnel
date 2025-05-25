@@ -27,17 +27,40 @@ pub struct TunnelSpec {
     pub access: Option<AccessControl>,
 }
 
+/// which http authentication scheme the server uses to gate the tunnel.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AuthScheme {
+    /// `Proxy-Authorization` + `407`; leaves the application's `Authorization`
+    /// untouched but browsers do not show a login prompt.
+    #[default]
+    Proxy,
+    /// `Authorization` + `401`; browsers show the native login prompt, but the
+    /// header is consumed by the gate and not forwarded to the application.
+    Basic,
+}
+
 /// access control enforced by the server at the tunnel edge, configured by the
 /// authenticated tunnel owner.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccessControl {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub basic_auth: Option<String>,
+    #[serde(default, skip_serializing_if = "AuthScheme::is_default")]
+    pub auth_scheme: AuthScheme,
     /// empty means no ip restriction.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allow_ip: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_secs: Option<u64>,
+}
+
+impl AuthScheme {
+    // signature is dictated by serde's skip_serializing_if, which passes &self
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    const fn is_default(&self) -> bool {
+        matches!(self, Self::Proxy)
+    }
 }
 
 impl AccessControl {
@@ -273,6 +296,7 @@ mod tests {
             remote_port: None,
             access: Some(AccessControl {
                 basic_auth: Some("admin:secret".into()),
+                auth_scheme: AuthScheme::Basic,
                 allow_ip: vec!["10.0.0.0/8".into()],
                 expires_secs: Some(7200),
             }),
@@ -282,8 +306,22 @@ mod tests {
         let decoded: TunnelSpec = rmp_serde::from_slice(&encoded)?;
         let access = decoded.access.expect("access present");
         assert_eq!(access.basic_auth.as_deref(), Some("admin:secret"));
+        assert_eq!(access.auth_scheme, AuthScheme::Basic);
         assert_eq!(access.allow_ip, vec!["10.0.0.0/8".to_string()]);
         assert_eq!(access.expires_secs, Some(7200));
+        Ok(())
+    }
+
+    #[test]
+    fn auth_scheme_defaults_to_proxy_and_is_omitted() -> TestResult {
+        let access = AccessControl {
+            basic_auth: Some("admin:secret".into()),
+            ..Default::default()
+        };
+        assert_eq!(access.auth_scheme, AuthScheme::Proxy);
+
+        let json = serde_json::to_value(&access)?;
+        assert!(json.get("auth_scheme").is_none());
         Ok(())
     }
 

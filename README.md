@@ -87,7 +87,7 @@ funnel http 3000 --allow-ip 10.0.0.0/8  # restrict by client ip (repeatable)
 funnel http 3000 --expires 2h  # auto close after a duration
 ```
 
-`--auth` uses the `Proxy-Authorization` header and is stripped before forwarding, so your app's `Authorization` is left alone. the options can be combined. see the [access control docs](https://funnel.karolbroda.com/docs/client/access-control) for details.
+`--auth` defaults to the `Proxy-Authorization` header (stripped before forwarding, so your app's `Authorization` is left alone). use `--auth-scheme basic` for the standard `Authorization` header and a browser login prompt. the options can be combined. see the [access control docs](https://funnel.karolbroda.com/docs/client/access-control) for details.
 
 ### contexts
 

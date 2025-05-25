@@ -58,6 +58,8 @@ AccessControl {
   +-------------+------------------------+
   | basic_auth  | string (optional)      |
   +-------------+------------------------+
+  | auth_scheme | "proxy"|"basic"        |
+  +-------------+------------------------+
   | allow_ip    | array<string> (cidr)   |
   +-------------+------------------------+
   | expires_secs| uint64 (optional)      |
@@ -72,7 +74,7 @@ AccessControl {
 - `stream`: raw TCP/TLS forwarding with port-based routing
 - `dgram`: UDP forwarding (reserved, not yet implemented)
 
-**access** applies optional access control, enforced by the server at the tunnel edge for `http` tunnels. `basic_auth` holds `user:pass` credentials matched against the request's `Proxy-Authorization` header (rejected requests get `407`); the server strips that header before forwarding, leaving the application's `Authorization` untouched. `allow_ip` is a list of cidr ranges permitted to connect, and `expires_secs` closes the tunnel after the given number of seconds. Invalid cidr entries fail registration with `bad_request`.
+**access** applies optional access control, enforced by the server at the tunnel edge for `http` tunnels. `basic_auth` holds `user:pass` credentials. `auth_scheme` (default `proxy`) selects which header carries them: `proxy` matches `Proxy-Authorization` and rejects with `407`, `basic` matches `Authorization` and rejects with `401`. Either way the gate strips the header it consumed before forwarding, so under `proxy` the application's `Authorization` is left untouched. `allow_ip` is a list of cidr ranges permitted to connect, and `expires_secs` closes the tunnel after the given number of seconds. Invalid cidr entries fail registration with `bad_request`.
 
 ### Server to client
 

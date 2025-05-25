@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use funnel_core::protocol::handshake::AuthScheme;
 use serde::{Deserialize, Serialize};
 
 const CONFIG_DIR: &str = "funnel";
@@ -10,6 +11,9 @@ const CONFIG_FILE: &str = "config.toml";
 pub struct FunnelConfig {
     #[serde(default = "default_context_name")]
     pub current_context: String,
+    /// default auth scheme for `funnel http --auth` when no flag is given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_auth_scheme: Option<AuthScheme>,
     #[serde(default)]
     pub contexts: HashMap<String, Context>,
 }
@@ -18,6 +22,7 @@ impl Default for FunnelConfig {
     fn default() -> Self {
         Self {
             current_context: default_context_name(),
+            default_auth_scheme: None,
             contexts: HashMap::new(),
         }
     }

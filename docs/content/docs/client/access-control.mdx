@@ -27,21 +27,47 @@ Require basic auth credentials on every incoming request:
 funnel http 3000 --auth admin:secret
 ```
 
-Credentials are carried in the `Proxy-Authorization` header, not `Authorization`.
-funnel is acting as a proxy, so it authenticates with the proxy-level header and
-leaves your application's `Authorization` header untouched. The server strips
+There are two schemes, chosen with `--auth-scheme`. Credentials travel to the
+server over the encrypted QUIC connection and are held in memory for the
+lifetime of the tunnel.
+
+### proxy scheme (default)
+
+Credentials are carried in the `Proxy-Authorization` header. funnel is acting as
+a proxy, so it authenticates with the proxy-level header and leaves your
+application's `Authorization` header untouched. The server strips
 `Proxy-Authorization` before forwarding, so your local service never sees
 funnel's credentials.
 
 Requests without matching credentials get a `407 Proxy Authentication Required`
-with a `Proxy-Authenticate` header. Send credentials like this:
+with a `Proxy-Authenticate` header. Browsers do not show a login prompt for
+this, so it suits CLI and programmatic clients:
 
 ```bash
 curl -H "Proxy-Authorization: Basic $(printf 'admin:secret' | base64)" https://my-app.tunnel.example.com
 ```
 
-Credentials travel to the server over the encrypted QUIC connection and are held
-in memory for the lifetime of the tunnel.
+### basic scheme
+
+```bash
+funnel http 3000 --auth admin:secret --auth-scheme basic
+```
+
+Credentials are carried in the standard `Authorization` header. Requests without
+matching credentials get a `401 Unauthorized` with a `WWW-Authenticate` header,
+which makes browsers show their native login prompt. The server consumes and
+strips `Authorization` before forwarding, so it never reaches your local
+service. The trade-off: an application behind a `basic` gate cannot use its own
+`Authorization` header, since the gate owns it.
+
+### choosing a default
+
+`--auth-scheme` overrides everything. Otherwise the default comes from
+`default_auth_scheme` in `~/.config/funnel/config.toml`, falling back to `proxy`:
+
+```toml
+default_auth_scheme = "basic"
+```
 
 ## IP allowlist
 

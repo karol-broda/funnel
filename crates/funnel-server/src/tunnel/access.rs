@@ -5,21 +5,25 @@ use base64::Engine;
 use ipnetwork::IpNetwork;
 use tokio::time::{Duration, Instant};
 
-use funnel_core::protocol::handshake::AccessControl;
+use funnel_core::protocol::handshake::{AccessControl, AuthScheme};
 
 /// reason an incoming request was rejected at the tunnel edge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccessDenied {
     Expired,
     IpForbidden,
+    /// missing/incorrect credentials under the `basic` scheme (`401`).
+    Unauthorized,
+    /// missing/incorrect credentials under the `proxy` scheme (`407`).
     ProxyAuthRequired,
 }
 
 /// access control resolved from a tunnel spec and enforced per request.
 #[derive(Debug, Default, Clone)]
 pub struct AccessPolicy {
-    /// precomputed `Basic <base64>` value matched against `Proxy-Authorization`.
-    expected_proxy_authorization: Option<String>,
+    /// precomputed `Basic <base64>` value matched against the gate header.
+    expected_credentials: Option<String>,
+    auth_scheme: AuthScheme,
     allow_networks: Vec<IpNetwork>,
     expires_at: Option<Instant>,
 }
@@ -35,7 +39,7 @@ impl AccessPolicy {
             return Ok(Self::default());
         };
 
-        let expected_proxy_authorization = access.basic_auth.as_ref().map(|creds| {
+        let expected_credentials = access.basic_auth.as_ref().map(|creds| {
             let encoded = base64::engine::general_purpose::STANDARD.encode(creds);
             format!("Basic {encoded}")
         });
@@ -53,7 +57,8 @@ impl AccessPolicy {
             .map(|secs| connected_at + Duration::from_secs(secs));
 
         Ok(Self {
-            expected_proxy_authorization,
+            expected_credentials,
+            auth_scheme: access.auth_scheme,
             allow_networks,
             expires_at,
         })
@@ -61,6 +66,12 @@ impl AccessPolicy {
 
     pub const fn expires_at(&self) -> Option<Instant> {
         self.expires_at
+    }
+
+    /// whether the gate consumed the `Authorization` header (basic scheme), so
+    /// the proxy must strip it before forwarding to the local service.
+    pub const fn strips_authorization_header(&self) -> bool {
+        matches!(self.auth_scheme, AuthScheme::Basic) && self.expected_credentials.is_some()
     }
 
     /// check an incoming request against the policy. checks run cheapest first:
@@ -81,13 +92,23 @@ impl AccessPolicy {
             return Err(AccessDenied::IpForbidden);
         }
 
-        if let Some(expected) = &self.expected_proxy_authorization {
+        if let Some(expected) = &self.expected_credentials {
+            let (header, denied) = match self.auth_scheme {
+                AuthScheme::Basic => (
+                    axum::http::header::AUTHORIZATION,
+                    AccessDenied::Unauthorized,
+                ),
+                AuthScheme::Proxy => (
+                    axum::http::header::PROXY_AUTHORIZATION,
+                    AccessDenied::ProxyAuthRequired,
+                ),
+            };
             let provided = headers
-                .get(axum::http::header::PROXY_AUTHORIZATION)
+                .get(header)
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("");
             if !constant_time_eq(provided.as_bytes(), expected.as_bytes()) {
-                return Err(AccessDenied::ProxyAuthRequired);
+                return Err(denied);
             }
         }
 
@@ -183,6 +204,62 @@ mod tests {
         assert_eq!(
             policy.check(&headers, ip, Instant::now()),
             Err(AccessDenied::ProxyAuthRequired)
+        );
+    }
+
+    #[test]
+    fn basic_scheme_matches_the_authorization_header() {
+        let access = AccessControl {
+            basic_auth: Some("admin:secret".into()),
+            auth_scheme: AuthScheme::Basic,
+            ..Default::default()
+        };
+        let policy = AccessPolicy::from_spec(Some(&access), Instant::now()).unwrap();
+        let ip = "203.0.113.1".parse().unwrap();
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            basic("admin:secret").parse().unwrap(),
+        );
+        assert!(policy.check(&headers, ip, Instant::now()).is_ok());
+
+        assert_eq!(
+            policy.check(&HeaderMap::new(), ip, Instant::now()),
+            Err(AccessDenied::Unauthorized)
+        );
+        // proxy-authorization is ignored under the basic scheme
+        assert_eq!(
+            policy.check(
+                &proxy_auth_header(&basic("admin:secret")),
+                ip,
+                Instant::now()
+            ),
+            Err(AccessDenied::Unauthorized)
+        );
+    }
+
+    #[test]
+    fn only_basic_scheme_strips_authorization() {
+        let basic_scheme = AccessControl {
+            basic_auth: Some("admin:secret".into()),
+            auth_scheme: AuthScheme::Basic,
+            ..Default::default()
+        };
+        assert!(
+            AccessPolicy::from_spec(Some(&basic_scheme), Instant::now())
+                .unwrap()
+                .strips_authorization_header()
+        );
+
+        let proxy_scheme = AccessControl {
+            basic_auth: Some("admin:secret".into()),
+            ..Default::default()
+        };
+        assert!(
+            !AccessPolicy::from_spec(Some(&proxy_scheme), Instant::now())
+                .unwrap()
+                .strips_authorization_header()
         );
     }
 

@@ -66,7 +66,11 @@ pub async fn handle_tunnel_request(
     let method = request.method().to_string();
     let path = request.uri().to_string();
 
-    let headers = prepare_forwarding_headers(request.headers(), &host, remote_addr, state.is_tls);
+    let mut headers =
+        prepare_forwarding_headers(request.headers(), &host, remote_addr, state.is_tls);
+    if tunnel.strips_authorization_header() {
+        headers.remove("authorization");
+    }
 
     let meta = HttpRequest {
         tunnel_id: tunnel_id.clone(),
@@ -103,7 +107,11 @@ async fn handle_upgrade(
     let method = request.method().to_string();
     let path = request.uri().to_string();
 
-    let headers = prepare_forwarding_headers(request.headers(), host, remote_addr, state.is_tls);
+    let mut headers =
+        prepare_forwarding_headers(request.headers(), host, remote_addr, state.is_tls);
+    if tunnel.strips_authorization_header() {
+        headers.remove("authorization");
+    }
 
     let meta = HttpRequest {
         tunnel_id: tunnel.id().clone(),
@@ -222,6 +230,12 @@ fn access_denied_response(denied: AccessDenied) -> Response<Body> {
     match denied {
         AccessDenied::Expired => error_response(StatusCode::GONE, "tunnel expired"),
         AccessDenied::IpForbidden => error_response(StatusCode::FORBIDDEN, "access denied"),
+        AccessDenied::Unauthorized => Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header("content-type", "text/plain")
+            .header("www-authenticate", "Basic realm=\"funnel\"")
+            .body(Body::from("authentication required"))
+            .unwrap_or_else(|_| Response::new(Body::from("authentication required"))),
         AccessDenied::ProxyAuthRequired => Response::builder()
             .status(StatusCode::PROXY_AUTHENTICATION_REQUIRED)
             .header("content-type", "text/plain")

@@ -59,6 +59,10 @@ impl ActiveTunnel {
         self.access.expires_at()
     }
 
+    pub const fn strips_authorization_header(&self) -> bool {
+        self.access.strips_authorization_header()
+    }
+
     pub fn check_access(
         &self,
         headers: &axum::http::HeaderMap,

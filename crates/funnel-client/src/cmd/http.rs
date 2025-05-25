@@ -2,8 +2,25 @@ use std::sync::Arc;
 
 use tokio_util::sync::CancellationToken;
 
-use funnel_core::protocol::handshake::{AccessControl, TunnelType};
+use funnel_core::protocol::handshake::{AccessControl, AuthScheme, TunnelType};
 use funnel_core::tunnel::id::TunnelId;
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+pub enum AuthSchemeArg {
+    /// Proxy-Authorization header, returns 407; leaves the app's Authorization alone
+    Proxy,
+    /// Authorization header, returns 401; browsers show a login prompt
+    Basic,
+}
+
+impl From<AuthSchemeArg> for AuthScheme {
+    fn from(arg: AuthSchemeArg) -> Self {
+        match arg {
+            AuthSchemeArg::Proxy => Self::Proxy,
+            AuthSchemeArg::Basic => Self::Basic,
+        }
+    }
+}
 
 use crate::api_client;
 use crate::config;
@@ -51,9 +68,14 @@ pub struct Args {
     #[arg(long)]
     pub team: Option<String>,
 
-    /// require basic auth via the Proxy-Authorization header (format: user:pass)
+    /// require basic auth for incoming requests (format: user:pass)
     #[arg(long, value_name = "USER:PASS")]
     pub auth: Option<String>,
+
+    /// auth header scheme: proxy (Proxy-Authorization/407) or basic
+    /// (Authorization/401, browser prompt). defaults to config or proxy
+    #[arg(long, value_enum)]
+    pub auth_scheme: Option<AuthSchemeArg>,
 
     /// restrict access to client ip ranges in cidr notation (repeatable)
     #[arg(long, value_name = "CIDR")]
@@ -104,7 +126,18 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
         None => TunnelId::generate(),
     };
 
-    let access = build_access_control(args.auth, args.allow_ip, args.expires.as_deref())?;
+    let auth_scheme = args
+        .auth_scheme
+        .map(AuthScheme::from)
+        .or(cfg.default_auth_scheme)
+        .unwrap_or_default();
+
+    let access = build_access_control(
+        args.auth,
+        auth_scheme,
+        args.allow_ip,
+        args.expires.as_deref(),
+    )?;
 
     let public_url = runner::build_public_url(&server_url, &tunnel_id)
         .unwrap_or_else(|| "<unknown>".to_string());
@@ -118,7 +151,7 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
     }
     if let Some(ref access) = access {
         if access.basic_auth.is_some() {
-            println!("  basic auth  enabled");
+            println!("  basic auth  enabled ({})", auth_scheme_label(auth_scheme));
         }
         if !access.allow_ip.is_empty() {
             println!("  allow ip    {}", access.allow_ip.join(", "));
@@ -169,8 +202,16 @@ fn normalize_address(addr: &str) -> String {
     }
 }
 
+const fn auth_scheme_label(scheme: AuthScheme) -> &'static str {
+    match scheme {
+        AuthScheme::Proxy => "proxy-authorization",
+        AuthScheme::Basic => "authorization",
+    }
+}
+
 fn build_access_control(
     auth: Option<String>,
+    auth_scheme: AuthScheme,
     allow_ip: Vec<String>,
     expires: Option<&str>,
 ) -> anyhow::Result<Option<AccessControl>> {
@@ -185,6 +226,7 @@ fn build_access_control(
 
     let access = AccessControl {
         basic_auth: auth,
+        auth_scheme,
         allow_ip,
         expires_secs,
     };
@@ -259,7 +301,7 @@ mod tests {
 
     #[test]
     fn build_access_control_empty_is_none() {
-        let access = build_access_control(None, vec![], None).unwrap();
+        let access = build_access_control(None, AuthScheme::Proxy, vec![], None).unwrap();
         assert!(access.is_none());
     }
 
@@ -267,18 +309,23 @@ mod tests {
     fn build_access_control_collects_fields() {
         let access = build_access_control(
             Some("admin:secret".into()),
+            AuthScheme::Basic,
             vec!["10.0.0.0/8".into()],
             Some("2h"),
         )
         .unwrap()
         .expect("access present");
         assert_eq!(access.basic_auth.as_deref(), Some("admin:secret"));
+        assert_eq!(access.auth_scheme, AuthScheme::Basic);
         assert_eq!(access.allow_ip, vec!["10.0.0.0/8".to_string()]);
         assert_eq!(access.expires_secs, Some(7200));
     }
 
     #[test]
     fn build_access_control_rejects_auth_without_colon() {
-        assert!(build_access_control(Some("nopassword".into()), vec![], None).is_err());
+        assert!(
+            build_access_control(Some("nopassword".into()), AuthScheme::Proxy, vec![], None)
+                .is_err()
+        );
     }
 }
