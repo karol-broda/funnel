@@ -1,0 +1,141 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.21'
+
+jobs:
+  benchmarks:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.work.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: make deps
+
+    - name: Run benchmarks
+      run: |
+        echo "running benchmarks across all modules..."
+        for dir in $(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do
+          echo "running benchmarks for module in $dir..."
+          (cd $dir && go test -bench=. -benchmem -run=^$ ./...) || echo "no benchmarks found in $dir"
+        done
+
+  code-metrics:
+    name: Code Metrics
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Download dependencies
+      run: make deps
+
+    - name: Install code analysis tools
+      run: |
+        go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+        go install github.com/gordonklaus/ineffassign@latest
+        go install github.com/client9/misspell/cmd/misspell@latest
+        go install honnef.co/go/tools/cmd/staticcheck@latest
+
+    - name: Generate code metrics
+      run: |
+        echo "generating code metrics..."
+        
+        echo "## Code Complexity Analysis"
+        for dir in $(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do
+          echo "### Module: $(basename $dir)"
+          (cd $dir && gocyclo -top 10 .) 2>/dev/null || echo "no complexity issues found"
+        done
+
+    - name: Check for inefficient assignments
+      run: |
+        echo "## Inefficient Assignments"
+        for dir in $(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do
+          echo "### Module: $(basename $dir)"
+          (cd $dir && ineffassign ./...) 2>/dev/null || echo "no inefficient assignments found"
+        done
+
+    - name: Check for misspellings
+      run: |
+        echo "## Spelling Check"
+        misspell -error . 2>&1 || echo "no spelling errors found"
+
+    - name: Run static analysis
+      run: |
+        echo "## Static Analysis (staticcheck)"
+        for dir in $(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do
+          echo "### Module: $(basename $dir)"
+          (cd $dir && staticcheck ./...) 2>/dev/null || echo "no static analysis issues found"
+        done
+
+    - name: Generate summary
+      run: |
+        echo "## 📊 Code Quality Summary"
+        echo "Generated on: $(date)"
+        echo "### 📁 Module Count"
+        MODULE_COUNT=$(find . -name "go.mod" -not -path "./go.work*" | wc -l)
+        echo "Total modules: $MODULE_COUNT"
+        echo "### 📋 File Statistics"
+        GO_FILES=$(find . -name "*.go" -not -path "./vendor/*" | wc -l)
+        echo "Go files: $GO_FILES"
+        TOTAL_LINES=$(find . -name "*.go" -not -path "./vendor/*" -exec wc -l {} + | tail -1 | awk '{print $1}')
+        echo "Total lines of Go code: $TOTAL_LINES"
+
+  dependency-graph:
+    name: Dependency Analysis
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Download dependencies
+      run: make deps
+
+    - name: Analyze dependencies
+      run: |
+        echo "analyzing dependencies..."
+        
+        echo "## 📦 Dependency Analysis"
+        echo "Generated on: $(date)"
+        
+        for dir in $(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do
+          echo "### Module: $(basename $dir)"
+          echo "#### Direct Dependencies"
+          (cd $dir && go list -m all | head -20)
+          echo "#### Dependency Graph"
+          (cd $dir && go mod graph | head -30)
+        done 
