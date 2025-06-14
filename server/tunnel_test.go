@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/karol-broda/go-tunnel-proxy/shared"
+	"github.com/karol-broda/funnel/shared"
 
 	"github.com/gorilla/websocket"
 )

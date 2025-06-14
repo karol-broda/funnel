@@ -1,27 +1,22 @@
-# project configuration
-PROJECT_NAME := tunneling
+PROJECT_NAME := funnel
 VERSION := 0.0.1a
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GIT_TAG := $(shell git describe --tags --exact-match 2>/dev/null || echo "unknown")
 
-# build configuration
 LDFLAGS := -ldflags "\
-	-X github.com/karol-broda/go-tunnel-proxy/version.Version=$(VERSION) \
-	-X github.com/karol-broda/go-tunnel-proxy/version.BuildDate=$(BUILD_DATE) \
-	-X github.com/karol-broda/go-tunnel-proxy/version.GitCommit=$(GIT_COMMIT) \
-	-X github.com/karol-broda/go-tunnel-proxy/version.GitTag=$(GIT_TAG) \
+	-X github.com/karol-broda/funnel/version.Version=$(VERSION) \
+	-X github.com/karol-broda/funnel/version.BuildDate=$(BUILD_DATE) \
+	-X github.com/karol-broda/funnel/version.GitCommit=$(GIT_COMMIT) \
+	-X github.com/karol-broda/funnel/version.GitTag=$(GIT_TAG) \
 	-s -w"
 
-# output directories
 BIN_DIR := bin
 DIST_DIR := dist
 
-# build targets
-CLIENT_TARGET := $(BIN_DIR)/tunnel-client
-SERVER_TARGET := $(BIN_DIR)/tunnel-server
+CLIENT_TARGET := $(BIN_DIR)/funnel
+SERVER_TARGET := $(BIN_DIR)/funnel-server
 
-# cross-compilation targets
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
 .PHONY: all
@@ -59,12 +54,12 @@ build-server: $(SERVER_TARGET)
 $(CLIENT_TARGET): deps
 	@mkdir -p $(BIN_DIR)
 	@echo "building client..."
-	go build $(LDFLAGS) -o $(CLIENT_TARGET) ./cmd/tunnel-client
+	go build $(LDFLAGS) -o $(CLIENT_TARGET) ./cmd/funnel
 
 $(SERVER_TARGET): deps
 	@mkdir -p $(BIN_DIR)
 	@echo "building server..."
-	go build $(LDFLAGS) -o $(SERVER_TARGET) ./cmd/tunnel-server
+	go build $(LDFLAGS) -o $(SERVER_TARGET) ./cmd/funnel-server
 
 .PHONY: run-client
 run-client: build-client
@@ -160,16 +155,16 @@ release: clean
 		$(eval GOARCH := $(word 2,$(subst /, ,$(platform))))\
 		$(eval EXT := $(if $(filter windows,$(GOOS)),.exe,))\
 		echo "building $(GOOS)/$(GOARCH)..." && \
-		GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(DIST_DIR)/tunnel-client-$(GOOS)-$(GOARCH)$(EXT) ./cmd/tunnel-client && \
-		GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(DIST_DIR)/tunnel-server-$(GOOS)-$(GOARCH)$(EXT) ./cmd/tunnel-server;\
+		GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(DIST_DIR)/funnel-$(GOOS)-$(GOARCH)$(EXT) ./cmd/funnel && \
+		GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(DIST_DIR)/funnel-server-$(GOOS)-$(GOARCH)$(EXT) ./cmd/funnel-server;\
 	)
 	@echo "release binaries built in $(DIST_DIR)/"
 
 .PHONY: install
 install: build
 	@echo "installing binaries..."
-	go install $(LDFLAGS) ./cmd/tunnel-client
-	go install $(LDFLAGS) ./cmd/tunnel-server
+	go install $(LDFLAGS) ./cmd/funnel
+	go install $(LDFLAGS) ./cmd/funnel-server
 
 .PHONY: dev-setup
 dev-setup:
@@ -178,7 +173,6 @@ dev-setup:
 	$(MAKE) deps-install
 	@echo "development environment setup complete"
 
-# legacy targets for backward compatibility
 .PHONY: build-old
 build-old:
 	@echo "legacy build target - use 'make build' instead"

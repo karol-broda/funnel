@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/karol-broda/go-tunnel-proxy/shared"
+	"github.com/karol-broda/funnel/shared"
 )
 
 func TestClientConnectionHandling(t *testing.T) {

@@ -4,11 +4,12 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
-	"github.com/karol-broda/go-tunnel-proxy/client"
-	"github.com/karol-broda/go-tunnel-proxy/shared"
-	"github.com/karol-broda/go-tunnel-proxy/version"
+	"github.com/karol-broda/funnel/client"
+	"github.com/karol-broda/funnel/shared"
+	"github.com/karol-broda/funnel/version"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +23,14 @@ var rootCmd = &cobra.Command{
 	Use:   filepath.Base(os.Args[0]),
 	Short: "a tunnel client for creating secure tunnels",
 	Long:  `a tunnel client that creates secure tunnels to expose local services through a remote server`,
-	Run:   runClient,
+}
+
+var httpCmd = &cobra.Command{
+	Use:   "http [address:port | port]",
+	Short: "create an HTTP tunnel",
+	Long:  `create an HTTP tunnel to expose a local HTTP service through a remote server`,
+	Args:  cobra.ExactArgs(1),
+	Run:   runHTTPClient,
 }
 
 var versionCmd = &cobra.Command{
@@ -34,13 +42,14 @@ var versionCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "http://localhost:8080", "tunnel server url")
-	rootCmd.PersistentFlags().StringVarP(&local, "local", "l", "localhost:3000", "local address to tunnel")
-	rootCmd.PersistentFlags().StringVarP(&id, "id", "i", "", "tunnel id (subdomain)")
+	httpCmd.Flags().StringVarP(&server, "server", "s", "http://localhost:8080", "tunnel server url")
+	httpCmd.Flags().StringVarP(&id, "id", "i", "", "tunnel id (subdomain)")
+
+	rootCmd.AddCommand(httpCmd)
 	rootCmd.AddCommand(versionCmd)
 }
 
-func runClient(cmd *cobra.Command, args []string) {
+func runHTTPClient(cmd *cobra.Command, args []string) {
 	shared.InitializeLogging(shared.DefaultLogConfig())
 
 	logger := shared.GetLogger("client")
@@ -48,8 +57,20 @@ func runClient(cmd *cobra.Command, args []string) {
 	logger.Info().
 		Str("version", version.GetVersion()).
 		Str("server", server).
-		Str("local", local).
 		Msg("tunnel client starting up")
+
+	localArg := args[0]
+	if localArg == "" {
+		logger.Fatal().Msg("local address or port cannot be empty")
+	}
+
+	if strings.Contains(localArg, ":") {
+		local = localArg
+		logger.Info().Str("local_address", local).Msg("using provided address:port")
+	} else {
+		local = "localhost:" + localArg
+		logger.Info().Str("port", localArg).Str("constructed_local", local).Msg("constructed local address from port")
+	}
 
 	if id == "" {
 		id = shared.MustGenerateNanoID()
@@ -60,9 +81,6 @@ func runClient(cmd *cobra.Command, args []string) {
 
 	if server == "" {
 		logger.Fatal().Msg("server URL cannot be empty")
-	}
-	if local == "" {
-		logger.Fatal().Msg("local address cannot be empty")
 	}
 
 	c := &client.Client{

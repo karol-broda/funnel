@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/karol-broda/go-tunnel-proxy/shared"
+	"github.com/karol-broda/funnel/shared"
 )
 
 type TunnelRouter struct {

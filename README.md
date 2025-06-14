@@ -1,6 +1,6 @@
 **disclaimer: ❗** this tunneling solution is intended for development and testing purposes. while functional, it may not include all security features required for production environments. use at your own discretion and implement additional security measures as needed for production deployments.
 
-# tunneling 🚇
+# funnel 🕳️
 
 ![go](https://img.shields.io/badge/Go-%2300ADD8.svg?style=for-the-badge&logo=go&logoColor=white)
 ![version](https://img.shields.io/badge/version-0.0.1a-blue.svg?style=for-the-badge)
@@ -22,8 +22,8 @@ a lightweight, high-performance tunneling solution that creates secure connectio
 
 1. clone the repository:
    ```bash
-   git clone https://github.com/karol-broda/go-tunnel-proxy.git
-   cd go-tunnel-proxy
+   git clone https://github.com/karol-broda/funnel.git
+   cd funnel
    ```
 
 2. set up the development environment:
@@ -43,39 +43,46 @@ a lightweight, high-performance tunneling solution that creates secure connectio
 both binaries support version information:
 
 ```bash
-./bin/tunnel-client -version
-./bin/tunnel-server -version
+./bin/funnel version
+./bin/funnel-server version
 
 # or using make
 make version
 ```
 
-### running the tunnel server 🖥️
+### running the funnel server 🖥️
 
-start the tunnel server to accept incoming tunnel connections:
+start the funnel server to accept incoming tunnel connections:
 
 ```bash
-./bin/tunnel-server
+./bin/funnel-server
 ```
 
 by default, the server listens on port `8080`. you can specify a different port:
 
 ```bash
-./bin/tunnel-server -port 9000
+./bin/funnel-server -port 9000
 ```
 
-### running the tunnel client 📱
+### running the funnel client 📱
 
-connect your local service to the tunnel server:
+connect your local service to the funnel server using the new syntax:
 
 ```bash
-./bin/tunnel-client -server http://localhost:8080 -local localhost:3000
+# using just a port (will connect to localhost:3000)
+./bin/funnel http 3000 --server http://localhost:8080
+
+# using full address:port
+./bin/funnel http localhost:3000 --server http://localhost:8080
+
+# using a different address
+./bin/funnel http 0.0.0.0:8080 --server http://localhost:8080
 ```
 
 the client will automatically generate a tunnel id. you can also specify a custom tunnel id:
 
 ```bash
-./bin/tunnel-client -server http://localhost:8080 -local localhost:3000 -id my-custom-tunnel
+./bin/funnel http 3000 --server http://localhost:8080 --id my-custom-tunnel
 ```
 
 ## example usage 🎯
@@ -85,15 +92,15 @@ the client will automatically generate a tunnel id. you can also specify a custo
    python3 -m http.server 3000
    ```
 
-2. **start the tunnel server:**
+2. **start the funnel server:**
    ```bash
    make run-server
-   # or directly: ./bin/tunnel-server -port 8080
+   # or directly: ./bin/funnel-server -port 8080
    ```
 
-3. **connect the tunnel client:**
+3. **connect the funnel client:**
    ```bash
-   ./bin/tunnel-client -server http://localhost:8080 -local localhost:3000 -id demo
+   ./bin/funnel http 3000 --server http://localhost:8080 --id demo
    ```
 
 4. **access your service:**
@@ -136,8 +143,8 @@ make deps-install  # slower, downloads everything
 make tidy  # ← fixes go.mod files, resolves ide errors
 
 # fresh project setup or ci/cd
-git clone https://github.com/karol-broda/go-tunnel-proxy
-cd go-tunnel-proxy
+git clone https://github.com/karol-broda/funnel
+cd funnel
 make deps-install  # ← complete setup, ready to build
 
 # regular maintenance
@@ -172,12 +179,12 @@ binaries are created in the `dist/` directory.
 
 ## architecture 🏗️
 
-the tunneling system consists of three main components:
+the funnel system consists of three main components:
 
 ```
 ┌─────────────────┐    websocket     ┌─────────────────┐    http/https    ┌─────────────────┐
 │                 │ ◄──────────────► │                 │ ◄──────────────► │                 │
-│  tunnel client  │                  │  tunnel server  │                  │  remote client  │
+│  funnel client  │                  │  funnel server  │                  │  remote client  │
 │                 │                  │                 │                  │                 │
 └─────────────────┘                  └─────────────────┘                  └─────────────────┘
          │                                     │                                     │
@@ -198,13 +205,13 @@ the tunneling system consists of three main components:
 
 **server options:**
 - `-port`: server port (default: 8080)
-- `-version`: show version information
+- `version`: show version information
 
 **client options:**
-- `-server`: tunnel server url (default: http://localhost:8080)
-- `-local`: local address to tunnel (default: localhost:3000)
-- `-id`: custom tunnel id (auto-generated if not provided)
-- `-version`: show version information
+- `http [address:port | port]`: local address to tunnel (positional argument)
+- `--server`: funnel server url (default: http://localhost:8080)
+- `--id`: custom tunnel id (auto-generated if not provided)
+- `version`: show version information
 
 ## contributing 🤝
 

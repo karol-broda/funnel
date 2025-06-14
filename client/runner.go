@@ -3,7 +3,7 @@ package client
 import (
 	"time"
 
-	"github.com/karol-broda/go-tunnel-proxy/shared"
+	"github.com/karol-broda/funnel/shared"
 )
 
 func (c *Client) runWithReconnection() {

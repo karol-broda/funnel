@@ -8,9 +8,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/karol-broda/go-tunnel-proxy/server"
-	"github.com/karol-broda/go-tunnel-proxy/shared"
-	"github.com/karol-broda/go-tunnel-proxy/version"
+	"github.com/karol-broda/funnel/server"
+	"github.com/karol-broda/funnel/shared"
+	"github.com/karol-broda/funnel/version"
 	"github.com/spf13/cobra"
 )
 

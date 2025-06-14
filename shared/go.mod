@@ -1,4 +1,4 @@
-module github.com/karol-broda/go-tunnel-proxy/shared
+module github.com/karol-broda/funnel/shared
 
 go 1.21
 

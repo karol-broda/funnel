@@ -1,3 +1,3 @@
-module github.com/karol-broda/go-tunnel-proxy/version
+module github.com/karol-broda/funnel/version
 
 go 1.21
