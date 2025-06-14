@@ -112,6 +112,9 @@ func (t *Tunnel) readMessages() {
 			logger := shared.GetTunnelLogger("server.tunnel", t.ID)
 			logger.Error().Msgf("recovered in readmessages: %v", r)
 		}
+		if t.incomingMessages != nil {
+			close(t.incomingMessages)
+		}
 		t.closeConnection()
 	}()
 
@@ -182,43 +185,35 @@ func (t *Tunnel) writeMessages() {
 		return
 	}
 
-	for {
-		select {
-		case msg := <-t.outgoingMessages:
-			if msg == nil {
-				logger.Debug().Msg("received nil message, writer stopping")
-				return
-			}
+	for msg := range t.outgoingMessages {
+		writeStart := time.Now()
+		if t.conn == nil {
+			logger.Error().Msg("tunnel connection became nil during write")
+			return
+		}
+		err := t.conn.WriteJSON(msg)
+		writeDuration := time.Since(writeStart)
 
-			writeStart := time.Now()
-			if t.conn == nil {
-				logger.Error().Msg("tunnel connection became nil during write")
-				return
-			}
-			err := t.conn.WriteJSON(msg)
-			writeDuration := time.Since(writeStart)
-
-			if err != nil {
-				logger.Error().Err(err).
-					Str("message_type", msg.Type).
-					Str("request_id", msg.RequestID).
-					Dur("write_duration", writeDuration).
-					Msg("websocket write failed")
-				t.closeConnection()
-				return
-			}
-
-			t.messagesSent++
-			messageSize := int64(len(msg.Body))
-			t.bytesSent += messageSize
-
-			logger.Debug().
+		if err != nil {
+			logger.Error().Err(err).
 				Str("message_type", msg.Type).
 				Str("request_id", msg.RequestID).
-				Int64("message_size", messageSize).
 				Dur("write_duration", writeDuration).
-				Msg("message sent to client")
+				Msg("websocket write failed")
+			t.closeConnection()
+			return
 		}
+
+		t.messagesSent++
+		messageSize := int64(len(msg.Body))
+		t.bytesSent += messageSize
+
+		logger.Debug().
+			Str("message_type", msg.Type).
+			Str("request_id", msg.RequestID).
+			Int64("message_size", messageSize).
+			Dur("write_duration", writeDuration).
+			Msg("message sent to client")
 	}
 }
 
@@ -283,33 +278,25 @@ func (t *Tunnel) routeMessages() {
 	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
 	logger.Debug().Msg("starting message router goroutine")
 
-	for {
-		select {
-		case msg := <-t.incomingMessages:
-			if msg == nil {
-				logger.Debug().Msg("received nil message, router stopping")
-				return
-			}
-
-			switch msg.Type {
-			case "response":
-				t.ResponseMu.RLock()
-				if respChan, ok := t.ResponseChannels[msg.RequestID]; ok {
-					select {
-					case respChan <- msg:
-					default:
-						// Non-blocking send
-					}
+	for msg := range t.incomingMessages {
+		switch msg.Type {
+		case "response":
+			t.ResponseMu.RLock()
+			if respChan, ok := t.ResponseChannels[msg.RequestID]; ok {
+				select {
+				case respChan <- msg:
+				default:
+					// Non-blocking send
 				}
-				t.ResponseMu.RUnlock()
-			case "ping":
-				t.SendMessage(&shared.Message{Type: "pong"})
-			default:
-				logger.Debug().
-					Str("message_type", msg.Type).
-					Str("request_id", msg.RequestID).
-					Msg("unhandled message type in router")
 			}
+			t.ResponseMu.RUnlock()
+		case "ping":
+			t.SendMessage(&shared.Message{Type: "pong"})
+		default:
+			logger.Debug().
+				Str("message_type", msg.Type).
+				Str("request_id", msg.RequestID).
+				Msg("unhandled message type in router")
 		}
 	}
 }
