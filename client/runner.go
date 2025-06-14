@@ -2,7 +2,8 @@ package client
 
 import (
 	"time"
-	"tunneling/shared"
+
+	"github.com/karol-broda/go-tunnel-proxy/shared"
 )
 
 func (c *Client) runWithReconnection() {

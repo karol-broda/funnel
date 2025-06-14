@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"tunneling/shared"
+	"github.com/karol-broda/go-tunnel-proxy/shared"
 )
 
 func (c *Client) handleRequests() {

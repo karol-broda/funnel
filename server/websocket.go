@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"tunneling/shared"
+	"github.com/karol-broda/go-tunnel-proxy/shared"
 )
 
 func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -87,14 +87,20 @@ func (s *Server) setupWebSocketConnection(tunnel *Tunnel) {
 	logger := shared.GetTunnelLogger("server.websocket", tunnel.ID)
 
 	readDeadline := 300 * time.Second
-	tunnel.Conn.SetReadDeadline(time.Now().Add(readDeadline))
+	if err := tunnel.Conn.SetReadDeadline(time.Now().Add(readDeadline)); err != nil {
+		logger.Error().Err(err).Msg("failed to set initial read deadline")
+		return
+	}
 
 	logger.Debug().
 		Dur("read_deadline", readDeadline).
 		Msg("websocket read deadline configured")
 
 	tunnel.Conn.SetPongHandler(func(string) error {
-		tunnel.Conn.SetReadDeadline(time.Now().Add(readDeadline))
+		if err := tunnel.Conn.SetReadDeadline(time.Now().Add(readDeadline)); err != nil {
+			logger.Error().Err(err).Msg("failed to extend read deadline on pong")
+			return err
+		}
 		logger.Debug().Msg("pong received, read deadline extended")
 		return nil
 	})

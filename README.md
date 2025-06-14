@@ -3,6 +3,7 @@
 # tunneling 🚇
 
 ![go](https://img.shields.io/badge/Go-%2300ADD8.svg?style=for-the-badge&logo=go&logoColor=white)
+![version](https://img.shields.io/badge/version-0.0.1a-blue.svg?style=for-the-badge)
 
 a lightweight, high-performance tunneling solution implemented in go, designed to expose local services to the internet through secure websocket connections. this tool allows developers to share local development servers, test webhooks, and demonstrate applications without complex network configuration.
 
@@ -12,15 +13,22 @@ a lightweight, high-performance tunneling solution that creates secure connectio
 
 ## getting started 🚀
 
+### prerequisites
+
+- go 1.21 or later
+- make (for build automation)
+
+### installation
+
 1. clone the repository:
    ```bash
-   git clone https://github.com/your-username/tunneling.git
-   cd tunneling
+   git clone https://github.com/karol-broda/go-tunnel-proxy.git
+   cd go-tunnel-proxy
    ```
 
-2. install dependencies:
+2. set up the development environment:
    ```bash
-   go mod tidy
+   make dev-setup
    ```
 
 3. build both client and server:
@@ -30,18 +38,30 @@ a lightweight, high-performance tunneling solution that creates secure connectio
 
 ## usage 💻
 
+### checking version information 📋
+
+both binaries support version information:
+
+```bash
+./bin/tunnel-client -version
+./bin/tunnel-server -version
+
+# or using make
+make version
+```
+
 ### running the tunnel server 🖥️
 
 start the tunnel server to accept incoming tunnel connections:
 
 ```bash
-./tunnel-server
+./bin/tunnel-server
 ```
 
 by default, the server listens on port `8080`. you can specify a different port:
 
 ```bash
-./tunnel-server -port 9000
+./bin/tunnel-server -port 9000
 ```
 
 ### running the tunnel client 📱
@@ -49,13 +69,13 @@ by default, the server listens on port `8080`. you can specify a different port:
 connect your local service to the tunnel server:
 
 ```bash
-./tunnel-client -server http://localhost:8080 -local localhost:3000
+./bin/tunnel-client -server http://localhost:8080 -local localhost:3000
 ```
 
 the client will automatically generate a tunnel id. you can also specify a custom tunnel id:
 
 ```bash
-./tunnel-client -server http://localhost:8080 -local localhost:3000 -id my-custom-tunnel
+./bin/tunnel-client -server http://localhost:8080 -local localhost:3000 -id my-custom-tunnel
 ```
 
 ## example usage 🎯
@@ -67,18 +87,88 @@ the client will automatically generate a tunnel id. you can also specify a custo
 
 2. **start the tunnel server:**
    ```bash
-   ./tunnel-server -port 8080
+   make run-server
+   # or directly: ./bin/tunnel-server -port 8080
    ```
 
 3. **connect the tunnel client:**
    ```bash
-   ./tunnel-client -server http://localhost:8080 -local localhost:3000 -id demo
+   ./bin/tunnel-client -server http://localhost:8080 -local localhost:3000 -id demo
    ```
 
 4. **access your service:**
    ```bash
    curl http://demo.localhost:8080
    ```
+
+## development 🔧
+
+### dependency management
+
+the project uses go workspaces with automatic module discovery. here are the key dependency management commands:
+
+#### `make tidy` vs `make deps-install`
+
+**`make tidy`** - dependency cleanup and fixes:
+- 🧹 cleans up `go.mod` files (adds missing, removes unused dependencies)
+- 📝 updates dependency declarations across all modules
+- 🔄 synchronizes the go workspace
+- ✅ fixes ide linting errors like "package not in go.mod file"
+
+```bash
+make tidy  # fast, just updates go.mod files
+```
+
+**`make deps-install`** - complete dependency setup:
+- 🧹 everything `make tidy` does (runs tidy first)
+- ⬇️ downloads all dependencies to local cache
+- 📦 prepares for offline development
+- 🚀 complete setup for fresh installations
+
+```bash
+make deps-install  # slower, downloads everything
+```
+
+#### when to use which command:
+
+```bash
+# you added a new import to your code
+make tidy  # ← fixes go.mod files, resolves ide errors
+
+# fresh project setup or ci/cd
+git clone https://github.com/karol-broda/go-tunnel-proxy
+cd go-tunnel-proxy
+make deps-install  # ← complete setup, ready to build
+
+# regular maintenance
+make tidy  # ← fast dependency cleanup
+
+# preparing for offline work
+make deps-install  # ← downloads all dependencies locally
+```
+
+#### other useful commands:
+
+```bash
+make list-modules   # show all discovered modules
+make dev-setup      # complete development environment setup
+make help          # show all available commands
+```
+
+### building for different platforms
+
+create release binaries for multiple platforms:
+
+```bash
+make release
+```
+
+this builds binaries for:
+- linux/amd64, linux/arm64
+- darwin/amd64, darwin/arm64
+- windows/amd64
+
+binaries are created in the `dist/` directory.
 
 ## architecture 🏗️
 
@@ -108,11 +198,13 @@ the tunneling system consists of three main components:
 
 **server options:**
 - `-port`: server port (default: 8080)
+- `-version`: show version information
 
 **client options:**
 - `-server`: tunnel server url (default: http://localhost:8080)
 - `-local`: local address to tunnel (default: localhost:3000)
 - `-id`: custom tunnel id (auto-generated if not provided)
+- `-version`: show version information
 
 ## contributing 🤝
 
@@ -120,10 +212,12 @@ contributions are welcome! please follow these steps:
 
 1. fork the repository
 2. create a new branch: `git checkout -b feature/your-feature-name`
-3. make changes and test: `make build`
-4. commit your changes: `git commit -m "add your feature description"`
-5. push to your fork: `git push origin feature/your-feature-name`
-6. create a pull request
+3. set up development environment: `make dev-setup`
+4. make changes and test: `make build && make test`
+5. format and lint: `make fmt && make lint`
+6. commit your changes: `git commit -m "add your feature description"`
+7. push to your fork: `git push origin feature/your-feature-name`
+8. create a pull request
 
 ## license 📄
 

@@ -1,11 +1,8 @@
-module tunneling
+module github.com/karol-broda/go-tunnel-proxy/shared
 
 go 1.21
 
-require (
-	github.com/gorilla/websocket v1.5.3
-	github.com/rs/zerolog v1.34.0
-)
+require github.com/rs/zerolog v1.34.0
 
 require (
 	github.com/mattn/go-colorable v0.1.13 // indirect

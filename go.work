@@ -1,0 +1,10 @@
+go 1.21
+
+use (
+	./client
+	./cmd/tunnel-client
+	./cmd/tunnel-server
+	./server
+	./shared
+	./version
+)

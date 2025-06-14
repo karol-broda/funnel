@@ -6,22 +6,29 @@ import (
 	"os/signal"
 	"syscall"
 
-	"tunneling/client"
-	"tunneling/shared"
+	"github.com/karol-broda/go-tunnel-proxy/client"
+	"github.com/karol-broda/go-tunnel-proxy/shared"
+	"github.com/karol-broda/go-tunnel-proxy/version"
 )
 
 func main() {
 	server := flag.String("server", "http://localhost:8080", "tunnel server url")
 	local := flag.String("local", "localhost:3000", "local address to tunnel")
 	id := flag.String("id", "", "tunnel id (subdomain)")
+	showVersion := flag.Bool("version", false, "show version information")
 	flag.Parse()
+
+	if *showVersion {
+		version.PrintVersionInfo("tunnel-client")
+		return
+	}
 
 	shared.InitializeLogging(shared.DefaultLogConfig())
 
 	logger := shared.GetLogger("client")
 
 	logger.Info().
-		Str("version", "1.0.0").
+		Str("version", version.GetVersion()).
 		Str("server", *server).
 		Str("local", *local).
 		Msg("tunnel client starting up")

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"sync"
 
-	"tunneling/shared"
+	"github.com/karol-broda/go-tunnel-proxy/shared"
 
 	"github.com/gorilla/websocket"
 )

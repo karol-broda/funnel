@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"time"
 
-	"tunneling/shared"
+	"github.com/karol-broda/go-tunnel-proxy/shared"
 
 	"github.com/gorilla/websocket"
 )

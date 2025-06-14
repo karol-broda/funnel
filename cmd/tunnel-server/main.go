@@ -8,20 +8,27 @@ import (
 	"syscall"
 	"time"
 
-	"tunneling/server"
-	"tunneling/shared"
+	"github.com/karol-broda/go-tunnel-proxy/server"
+	"github.com/karol-broda/go-tunnel-proxy/shared"
+	"github.com/karol-broda/go-tunnel-proxy/version"
 )
 
 func main() {
 	port := flag.String("port", "8080", "server port")
+	showVersion := flag.Bool("version", false, "show version information")
 	flag.Parse()
+
+	if *showVersion {
+		version.PrintVersionInfo("tunnel-server")
+		return
+	}
 
 	shared.InitializeLogging(shared.DefaultLogConfig())
 
 	logger := shared.GetLogger("server")
 
 	logger.Info().
-		Str("version", "1.0.0").
+		Str("version", version.GetVersion()).
 		Str("port", *port).
 		Msg("tunnel server starting up")
 

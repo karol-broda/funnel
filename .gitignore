@@ -1,38 +1,29 @@
-# Binaries for programs and plugins
+# binaries
+bin/
+dist/
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
 
-# Test binary, built with `go test -c`
+# test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# output of the go coverage tool
 *.out
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# dependency directories
+vendor/
 
-# Go workspace file
-go.work
-
-# Built binaries
-client_main
-server_main
-/client_main
-/server_main
-tunneling-client
-tunneling-server
-
-# IDE and editor files
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS generated files
+# OS files
 .DS_Store
 .DS_Store?
 ._*
@@ -41,23 +32,20 @@ tunneling-server
 ehthumbs.db
 Thumbs.db
 
-# Logs
+# logs
 *.log
-logs/
 
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# Temporary files
+# temporary files
 *.tmp
 *.temp
 
-# Build artifacts
-build/
-dist/
-bin/
+# Built binaries
+client_main
+server_main
+/client_main
+/server_main
+tunneling-client
+tunneling-server
 
 # Coverage reports
 coverage.out
