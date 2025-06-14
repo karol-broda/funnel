@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -39,28 +40,49 @@ func (c *Client) handleRequests() {
 
 		logger.Debug().Dur("message_read_time", readDuration).Str("message_type", msg.Type).Msg("received message from server")
 
-		if msg.Type != "request" {
-			logger.Debug().Str("message_type", msg.Type).Msg("ignoring non-request message")
-			continue
+		switch msg.Type {
+		case "request":
+			requestCount++
+			logger.Info().
+				Int("request_count", requestCount).
+				Str("request_id", msg.RequestID).
+				Str("method", msg.Method).
+				Str("path", msg.Path).
+				Int("body_size", len(msg.Body)).
+				Msg("received request from server")
+
+			go func(m shared.Message) {
+				c.processRequest(httpClient, m)
+			}(msg)
+		case "request_cancel":
+			logger.Info().Str("request_id", msg.RequestID).Msg("received request cancellation")
+			c.ongoingRequestsMu.Lock()
+			if cancel, ok := c.ongoingRequests[msg.RequestID]; ok {
+				cancel()
+				delete(c.ongoingRequests, msg.RequestID)
+			}
+			c.ongoingRequestsMu.Unlock()
+		default:
+			logger.Debug().Str("message_type", msg.Type).Msg("ignoring unhandled message type")
 		}
-
-		requestCount++
-		logger.Info().
-			Int("request_count", requestCount).
-			Str("request_id", msg.RequestID).
-			Str("method", msg.Method).
-			Str("path", msg.Path).
-			Int("body_size", len(msg.Body)).
-			Msg("received request from server")
-
-		go func(m shared.Message) {
-			c.processRequest(httpClient, m)
-		}(msg)
 	}
 }
 
 func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
 	logger := shared.GetRequestLogger("client.handler", c.TunnelID, msg.RequestID)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c.ongoingRequestsMu.Lock()
+	c.ongoingRequests[msg.RequestID] = cancel
+	c.ongoingRequestsMu.Unlock()
+
+	defer func() {
+		c.ongoingRequestsMu.Lock()
+		delete(c.ongoingRequests, msg.RequestID)
+		c.ongoingRequestsMu.Unlock()
+	}()
 
 	processStart := time.Now()
 	logger.Debug().
@@ -71,7 +93,7 @@ func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
 		Msg("processing request")
 
 	localURL := fmt.Sprintf("http://%s%s", c.LocalAddr, msg.Path)
-	req, err := http.NewRequest(msg.Method, localURL, bytes.NewReader(msg.Body))
+	req, err := http.NewRequestWithContext(ctx, msg.Method, localURL, bytes.NewReader(msg.Body))
 	if err != nil {
 		logger.Error().Err(err).Str("local_url", localURL).Msg("failed to create request")
 		c.sendError(msg.RequestID, 500)
@@ -91,6 +113,14 @@ func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
 			Str("local_url", localURL).
 			Dur("request_duration", requestDuration).
 			Msg("request to local service failed")
+
+		// check if the request was canceled by the client
+		if ctx.Err() == context.Canceled {
+			logger.Info().Msg("request to local service was canceled")
+			// no need to send an error response, the original connection is gone
+			return
+		}
+
 		c.sendError(msg.RequestID, 502)
 		return
 	}
@@ -217,6 +247,8 @@ func (c *Client) sendResponse(requestID string, status int, headers http.Header,
 		Body:      body,
 	}
 
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if err := c.Conn.WriteJSON(&response); err != nil {
 		sendDuration := time.Since(sendStart)
 		logger.Error().Err(err).
@@ -239,19 +271,21 @@ func (c *Client) sendError(requestID string, status int) {
 
 	logger.Warn().Int("error_status", status).Msg("sending error response")
 
+	errorBody := []byte(http.StatusText(status))
 	response := shared.Message{
 		Type:      "response",
+		TunnelID:  c.TunnelID,
 		RequestID: requestID,
 		Status:    status,
 		Headers: map[string][]string{
-			"Content-Type": {"text/plain"},
+			"Content-Type":   {"text/plain"},
+			"Content-Length": {fmt.Sprintf("%d", len(errorBody))},
 		},
-		Body: []byte(http.StatusText(status)),
+		Body: errorBody,
 	}
-
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if err := c.Conn.WriteJSON(&response); err != nil {
 		logger.Error().Err(err).Int("error_status", status).Msg("failed to send error response")
-	} else {
-		logger.Debug().Int("error_status", status).Msg("error response sent successfully")
 	}
 }

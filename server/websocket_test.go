@@ -128,7 +128,7 @@ func TestWebSocketTunnelIDConflict(t *testing.T) {
 
 	// add a tunnel first
 	existingTunnelID := "existing123"
-	server.AddTunnel(existingTunnelID, nil)
+	server.AddTunnel(existingTunnelID, nil, nil)
 	defer server.RemoveTunnel(existingTunnelID)
 
 	// try to create another tunnel with the same ID

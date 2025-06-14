@@ -86,11 +86,7 @@ func runHTTPClient(cmd *cobra.Command, args []string) {
 		logger.Fatal().Msg("server URL cannot be empty")
 	}
 
-	c := &client.Client{
-		ServerURL: server,
-		LocalAddr: local,
-		TunnelID:  id,
-	}
+	c := client.NewClient(server, local, id)
 
 	logger.Info().Msg("starting tunnel client")
 	logger.Info().Str("server", c.ServerURL).Msg("server url")

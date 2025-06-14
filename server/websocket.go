@@ -67,37 +67,23 @@ func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		Str("remote_addr", r.RemoteAddr).
 		Msg("websocket upgrade successful")
 
-	tunnel := s.AddTunnel(tunnelID, conn)
+	tunnel := s.AddTunnel(tunnelID, conn, nil)
 	tunnelLogger.Info().Msg("tunnel connected via websocket")
 
 	defer func() {
 		s.RemoveTunnel(tunnelID)
-		conn.Close()
-		tunnelLogger.Info().Msg("tunnel disconnected")
+		tunnelLogger.Info().Msg("tunnel disconnected and cleaned up")
 	}()
 
 	s.setupWebSocketConnection(tunnel)
-
-	connectionStart := time.Now()
-	tunnelLogger.Debug().Msg("starting connection monitoring loop")
-
-	for {
-		if !s.TunnelExists(tunnelID) {
-			connectionDuration := time.Since(connectionStart)
-			tunnelLogger.Info().
-				Dur("connection_duration", connectionDuration).
-				Msg("tunnel connection ended")
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
+	tunnel.Run()
 }
 
 func (s *Server) setupWebSocketConnection(tunnel *Tunnel) {
 	logger := shared.GetTunnelLogger("server.websocket", tunnel.ID)
 
 	readDeadline := 300 * time.Second
-	if err := tunnel.Conn.SetReadDeadline(time.Now().Add(readDeadline)); err != nil {
+	if err := tunnel.conn.SetReadDeadline(time.Now().Add(readDeadline)); err != nil {
 		logger.Error().Err(err).Msg("failed to set initial read deadline")
 		return
 	}
@@ -106,8 +92,8 @@ func (s *Server) setupWebSocketConnection(tunnel *Tunnel) {
 		Dur("read_deadline", readDeadline).
 		Msg("websocket read deadline configured")
 
-	tunnel.Conn.SetPongHandler(func(string) error {
-		if err := tunnel.Conn.SetReadDeadline(time.Now().Add(readDeadline)); err != nil {
+	tunnel.conn.SetPongHandler(func(string) error {
+		if err := tunnel.conn.SetReadDeadline(time.Now().Add(readDeadline)); err != nil {
 			logger.Error().Err(err).Msg("failed to extend read deadline on pong")
 			return err
 		}

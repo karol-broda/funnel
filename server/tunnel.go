@@ -11,18 +11,18 @@ import (
 )
 
 type Tunnel struct {
-	ID   string
-	Conn *websocket.Conn
-
-	ReadMu  sync.Mutex
-	WriteMu sync.Mutex
+	ID               string
+	conn             *websocket.Conn
+	incomingMessages chan *shared.Message
+	outgoingMessages chan *shared.Message
+	server           *Server
+	closeOnce        sync.Once
+	runOnce          sync.Once
+	removed          bool
+	removedMu        sync.Mutex
 
 	ResponseChannels map[string]chan *shared.Message
 	ResponseMu       sync.RWMutex
-
-	incomingMessages chan *shared.Message
-	outgoingMessages chan *shared.Message
-	stopRouter       chan struct{}
 
 	createdAt        time.Time
 	messagesReceived int64
@@ -38,16 +38,16 @@ func (s *Server) GetTunnel(id string) (*Tunnel, bool) {
 	return tunnel, exists
 }
 
-func (s *Server) AddTunnel(id string, conn *websocket.Conn) *Tunnel {
+func (s *Server) AddTunnel(id string, conn *websocket.Conn, wg *sync.WaitGroup) *Tunnel {
 	logger := shared.GetTunnelLogger("server.tunnel", id)
 
 	tunnel := &Tunnel{
 		ID:               id,
-		Conn:             conn,
+		conn:             conn,
 		ResponseChannels: make(map[string]chan *shared.Message),
 		incomingMessages: make(chan *shared.Message, 100),
 		outgoingMessages: make(chan *shared.Message, 100),
-		stopRouter:       make(chan struct{}),
+		server:           s,
 		createdAt:        time.Now(),
 	}
 
@@ -62,16 +62,10 @@ func (s *Server) AddTunnel(id string, conn *websocket.Conn) *Tunnel {
 		Int("outgoing_buffer_size", cap(tunnel.outgoingMessages)).
 		Msg("tunnel added to server")
 
-	go tunnel.readMessages()
-	go tunnel.writeMessages()
-	go tunnel.routeMessages()
-
 	return tunnel
 }
 
 func (s *Server) RemoveTunnel(id string) {
-	logger := shared.GetTunnelLogger("server.tunnel", id)
-
 	s.TunnelsMu.Lock()
 	tunnel, exists := s.Tunnels[id]
 	delete(s.Tunnels, id)
@@ -79,16 +73,18 @@ func (s *Server) RemoveTunnel(id string) {
 	s.TunnelsMu.Unlock()
 
 	if exists {
-		lifetime := time.Since(tunnel.createdAt)
+		tunnel.removedMu.Lock()
+		tunnel.removed = true
+		tunnel.removedMu.Unlock()
 
-		close(tunnel.stopRouter)
-		close(tunnel.incomingMessages)
-		close(tunnel.outgoingMessages)
+		tunnel.closeConnection()
 
 		if s.router != nil {
 			s.router.InvalidateCache(id)
 		}
 
+		logger := shared.GetTunnelLogger("server.tunnel", id)
+		lifetime := time.Since(tunnel.createdAt)
 		logger.Info().
 			Int("remaining_tunnels", remainingTunnels).
 			Dur("tunnel_lifetime", lifetime).
@@ -98,6 +94,7 @@ func (s *Server) RemoveTunnel(id string) {
 			Int64("bytes_sent", tunnel.bytesSent).
 			Msg("tunnel removed from server")
 	} else {
+		logger := shared.GetTunnelLogger("server.tunnel", id)
 		logger.Warn().Msg("attempted to remove non-existent tunnel")
 	}
 }
@@ -110,83 +107,83 @@ func (s *Server) TunnelExists(id string) bool {
 }
 
 func (t *Tunnel) readMessages() {
-	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
+	defer func() {
+		if r := recover(); r != nil {
+			logger := shared.GetTunnelLogger("server.tunnel", t.ID)
+			logger.Error().Msgf("recovered in readmessages: %v", r)
+		}
+		t.closeConnection()
+	}()
 
+	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
 	logger.Debug().Msg("starting message reader goroutine")
 
-	if t.Conn == nil {
+	if t.conn == nil {
 		logger.Error().Msg("tunnel connection is nil, cannot read messages")
 		return
 	}
 
 	for {
-		select {
-		case <-t.stopRouter:
-			logger.Debug().Msg("message reader stopping")
+		var msg shared.Message
+
+		readStart := time.Now()
+		if t.conn == nil {
+			logger.Error().Msg("tunnel connection became nil during read")
 			return
-		default:
-			var msg shared.Message
+		}
+		err := t.conn.ReadJSON(&msg)
+		readDuration := time.Since(readStart)
 
-			readStart := time.Now()
-			t.ReadMu.Lock()
-			if t.Conn == nil {
-				logger.Error().Msg("tunnel connection became nil during read")
-				t.ReadMu.Unlock()
-				return
-			}
-			err := t.Conn.ReadJSON(&msg)
-			t.ReadMu.Unlock()
-			readDuration := time.Since(readStart)
-
-			if err != nil {
-				logger.Error().Err(err).
-					Dur("read_duration", readDuration).
-					Int64("total_messages_received", t.messagesReceived).
-					Msg("websocket read failed")
-				return
-			}
-
-			t.messagesReceived++
-			messageSize := int64(len(msg.Body))
-			t.bytesReceived += messageSize
-
-			logger.Debug().
-				Str("message_type", msg.Type).
-				Str("request_id", msg.RequestID).
-				Int64("message_size", messageSize).
+		if err != nil {
+			logger.Error().Err(err).
 				Dur("read_duration", readDuration).
-				Msg("message received from client")
+				Int64("total_messages_received", t.messagesReceived).
+				Msg("websocket read failed")
+			t.closeConnection()
+			return
+		}
 
-			select {
-			case t.incomingMessages <- &msg:
-			case <-t.stopRouter:
-				logger.Debug().Msg("message reader stopping during message send")
-				return
-			default:
-				logger.Warn().
-					Str("message_type", msg.Type).
-					Int("queue_capacity", cap(t.incomingMessages)).
-					Msg("message channel full, dropping message")
-			}
+		t.messagesReceived++
+		messageSize := int64(len(msg.Body))
+		t.bytesReceived += messageSize
+
+		logger.Debug().
+			Str("message_type", msg.Type).
+			Str("request_id", msg.RequestID).
+			Int64("message_size", messageSize).
+			Dur("read_duration", readDuration).
+			Msg("message received from client")
+
+		select {
+		case t.incomingMessages <- &msg:
+		default:
+			logger.Warn().
+				Str("message_type", msg.Type).
+				Int("queue_capacity", cap(t.incomingMessages)).
+				Msg("message channel full, dropping message")
 		}
 	}
 }
 
 func (t *Tunnel) writeMessages() {
-	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
+	defer func() {
+		if r := recover(); r != nil {
+			logger := shared.GetTunnelLogger("server.tunnel", t.ID)
+			logger.Error().Msgf("recovered in writemessages: %v", r)
+		}
+		t.closeConnection()
+	}()
 
+	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
 	logger.Debug().Msg("starting message writer goroutine")
 
-	if t.Conn == nil {
+	if t.conn == nil {
 		logger.Error().Msg("tunnel connection is nil, cannot write messages")
 		return
 	}
 
 	for {
 		select {
-		case <-t.stopRouter:
-			logger.Debug().Msg("message writer stopping")
-			return
 		case msg := <-t.outgoingMessages:
 			if msg == nil {
 				logger.Debug().Msg("received nil message, writer stopping")
@@ -194,14 +191,11 @@ func (t *Tunnel) writeMessages() {
 			}
 
 			writeStart := time.Now()
-			t.WriteMu.Lock()
-			if t.Conn == nil {
+			if t.conn == nil {
 				logger.Error().Msg("tunnel connection became nil during write")
-				t.WriteMu.Unlock()
 				return
 			}
-			err := t.Conn.WriteJSON(msg)
-			t.WriteMu.Unlock()
+			err := t.conn.WriteJSON(msg)
 			writeDuration := time.Since(writeStart)
 
 			if err != nil {
@@ -210,6 +204,7 @@ func (t *Tunnel) writeMessages() {
 					Str("request_id", msg.RequestID).
 					Dur("write_duration", writeDuration).
 					Msg("websocket write failed")
+				t.closeConnection()
 				return
 			}
 
@@ -228,118 +223,190 @@ func (t *Tunnel) writeMessages() {
 }
 
 func (t *Tunnel) SendMessage(msg *shared.Message) error {
+	if t.conn == nil {
+		return fmt.Errorf("tunnel connection is nil")
+	}
+
+	if t.outgoingMessages == nil {
+		return fmt.Errorf("tunnel is closed, dropping message")
+	}
+
 	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
+	if msg.TunnelID != t.ID {
+		logger.Error().
+			Str("expected_tunnel_id", t.ID).
+			Str("message_tunnel_id", msg.TunnelID).
+			Str("request_id", msg.RequestID).
+			Msg("message dropped: tunnel id mismatch")
+		return fmt.Errorf("message dropped: tunnel id mismatch")
+	}
 
 	select {
 	case t.outgoingMessages <- msg:
 		logger.Debug().
 			Str("message_type", msg.Type).
 			Str("request_id", msg.RequestID).
+			Int("queue_len", len(t.outgoingMessages)).
 			Msg("message queued for sending")
 		return nil
 	default:
-		queueSize := len(t.outgoingMessages)
-		queueCapacity := cap(t.outgoingMessages)
 		logger.Error().
-			Int("queue_size", queueSize).
-			Int("queue_capacity", queueCapacity).
 			Str("message_type", msg.Type).
 			Str("request_id", msg.RequestID).
-			Msg("outgoing message queue full")
+			Int("queue_capacity", cap(t.outgoingMessages)).
+			Msg("outgoing message queue full, dropping message")
 		return fmt.Errorf("outgoing message queue full")
 	}
 }
 
 func (t *Tunnel) routeMessages() {
-	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
-
-	logger.Debug().Msg("starting message router goroutine")
-
 	defer func() {
-		t.ResponseMu.Lock()
-		channelCount := len(t.ResponseChannels)
+		if r := recover(); r != nil {
+			logger := shared.GetTunnelLogger("server.tunnel", t.ID)
+			logger.Error().Msgf("recovered in routemessages: %v", r)
+		}
+		channelCount := 0
+		t.ResponseMu.RLock()
 		for _, ch := range t.ResponseChannels {
 			close(ch)
+			channelCount++
 		}
-		t.ResponseChannels = make(map[string]chan *shared.Message)
-		t.ResponseMu.Unlock()
+		t.ResponseMu.RUnlock()
 		if channelCount > 0 {
+			logger := shared.GetTunnelLogger("server.tunnel", t.ID)
 			logger.Warn().Int("closed_channels", channelCount).Msg("cleaned up pending response channels")
 		}
+		logger := shared.GetTunnelLogger("server.tunnel", t.ID)
 		logger.Debug().Msg("message router stopped")
 	}()
 
+	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
+	logger.Debug().Msg("starting message router goroutine")
+
 	for {
 		select {
-		case <-t.stopRouter:
-			logger.Debug().Msg("message router stopping")
-			return
 		case msg := <-t.incomingMessages:
 			if msg == nil {
 				logger.Debug().Msg("received nil message, router stopping")
 				return
 			}
 
-			if msg.Type == "response" && msg.RequestID != "" {
-				reqLogger := shared.GetRequestLogger("server.tunnel", t.ID, msg.RequestID)
-
-				routeStart := time.Now()
+			switch msg.Type {
+			case "response":
 				t.ResponseMu.RLock()
-				if ch, exists := t.ResponseChannels[msg.RequestID]; exists {
+				if respChan, ok := t.ResponseChannels[msg.RequestID]; ok {
 					select {
-					case ch <- msg:
-						routeDuration := time.Since(routeStart)
-						reqLogger.Debug().
-							Dur("route_duration", routeDuration).
-							Int("status_code", msg.Status).
-							Int("response_size", len(msg.Body)).
-							Msg("response routed to waiting request")
+					case respChan <- msg:
 					default:
-						reqLogger.Warn().Msg("response channel full or closed")
+						// Non-blocking send
 					}
-				} else {
-					reqLogger.Warn().
-						Int("active_channels", len(t.ResponseChannels)).
-						Msg("no response channel found for request")
 				}
 				t.ResponseMu.RUnlock()
-			} else {
+			case "ping":
+				t.SendMessage(&shared.Message{Type: "pong"})
+			default:
 				logger.Debug().
 					Str("message_type", msg.Type).
 					Str("request_id", msg.RequestID).
-					Msg("ignoring non-response message")
+					Msg("unhandled message type in router")
 			}
 		}
 	}
 }
 
 func (t *Tunnel) registerResponseChannel(requestID string) chan *shared.Message {
-	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
-
-	ch := make(chan *shared.Message, 1)
+	respChan := make(chan *shared.Message, 1)
 	t.ResponseMu.Lock()
-	t.ResponseChannels[requestID] = ch
-	channelCount := len(t.ResponseChannels)
+	t.ResponseChannels[requestID] = respChan
 	t.ResponseMu.Unlock()
-
+	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
 	logger.Debug().
 		Str("request_id", requestID).
-		Int("active_channels", channelCount).
 		Msg("response channel registered")
-
-	return ch
+	return respChan
 }
 
 func (t *Tunnel) unregisterResponseChannel(requestID string) {
-	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
-
 	t.ResponseMu.Lock()
-	delete(t.ResponseChannels, requestID)
-	channelCount := len(t.ResponseChannels)
+	if ch, ok := t.ResponseChannels[requestID]; ok {
+		close(ch)
+		delete(t.ResponseChannels, requestID)
+	}
 	t.ResponseMu.Unlock()
-
+	logger := shared.GetRequestLogger("server.tunnel", t.ID, requestID)
 	logger.Debug().
 		Str("request_id", requestID).
-		Int("remaining_channels", channelCount).
 		Msg("response channel unregistered")
+}
+
+func (t *Tunnel) Run() {
+	t.runOnce.Do(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger := shared.GetTunnelLogger("server.tunnel", t.ID)
+				logger.Error().Msgf("recovered in run: %v", r)
+			}
+			t.closeConnection()
+			t.removedMu.Lock()
+			if !t.removed && t.server != nil {
+				t.removed = true
+				t.removedMu.Unlock()
+				t.server.RemoveTunnel(t.ID)
+			} else {
+				t.removedMu.Unlock()
+			}
+		}()
+
+		logger := shared.GetTunnelLogger("server.tunnel", t.ID)
+		logger.Debug().Msg("tunnel is now running")
+
+		if t.conn == nil {
+			logger.Warn().Msg("tunnel has a nil connection, not starting goroutines")
+			return
+		}
+
+		done := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(3)
+
+		go func() {
+			defer wg.Done()
+			t.readMessages()
+		}()
+
+		go func() {
+			defer wg.Done()
+			t.writeMessages()
+		}()
+
+		go func() {
+			defer wg.Done()
+			t.routeMessages()
+		}()
+
+		// Wait for all goroutines to complete
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+
+		// Block until all goroutines are done
+		<-done
+		logger.Debug().Msg("tunnel has stopped")
+	})
+}
+
+func (t *Tunnel) closeConnection() {
+	t.closeOnce.Do(func() {
+		if t.conn != nil {
+			t.conn.Close()
+			t.conn = nil
+		}
+		if t.outgoingMessages != nil {
+			close(t.outgoingMessages)
+			t.outgoingMessages = nil
+		}
+		logger := shared.GetTunnelLogger("server.tunnel", t.ID)
+		logger.Debug().Msg("tunnel has stopped")
+	})
 }

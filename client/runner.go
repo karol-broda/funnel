@@ -1,6 +1,8 @@
 package client
 
 import (
+	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/karol-broda/funnel/shared"
@@ -40,7 +42,14 @@ func (c *Client) runWithReconnection() {
 
 		reconnectAttempts = 0
 		logger.Info().Msg("connected successfully")
-		logger.Info().Str("public_url", "http://"+c.TunnelID+".<server-domain>").Msg("tunnel is available")
+
+		u, err := url.Parse(c.ServerURL)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to parse server url for public url display")
+		} else {
+			publicURL := fmt.Sprintf("http://%s.%s", c.TunnelID, u.Host)
+			logger.Info().Str("public_url", publicURL).Msg("tunnel is available")
+		}
 
 		connectionStart := time.Now()
 		c.handleRequests()

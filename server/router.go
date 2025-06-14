@@ -31,7 +31,8 @@ func NewTunnelRouter(server *Server) *TunnelRouter {
 		server: server,
 		bufferPool: sync.Pool{
 			New: func() interface{} {
-				return make([]byte, 1024)
+				b := make([]byte, 1024)
+				return &b
 			},
 		},
 	}
@@ -201,6 +202,7 @@ func (tr *TunnelRouter) handleTunnelRequest(w http.ResponseWriter, r *http.Reque
 
 	msg := &shared.Message{
 		Type:      "request",
+		TunnelID:  tunnel.ID,
 		RequestID: requestID,
 		Method:    r.Method,
 		Path:      r.URL.String(),
@@ -254,14 +256,21 @@ func (tr *TunnelRouter) handleTunnelRequest(w http.ResponseWriter, r *http.Reque
 			http.Error(w, "tunnel connection lost", http.StatusBadGateway)
 		}
 	case <-time.After(timeout):
-		waitDuration := time.Since(waitStart)
 		processingDuration := time.Since(requestStart)
 		logger.Error().
 			Dur("timeout_duration", timeout).
-			Dur("wait_duration", waitDuration).
+			Dur("wait_duration", time.Since(waitStart)).
 			Dur("total_processing_time", processingDuration).
 			Msg("request timeout waiting for tunnel response")
-		http.Error(w, "request timeout", http.StatusGatewayTimeout)
+		http.Error(w, "request timed out", http.StatusGatewayTimeout)
+
+	case <-r.Context().Done():
+		processingDuration := time.Since(requestStart)
+		logger.Warn().
+			Dur("wait_duration", time.Since(waitStart)).
+			Dur("total_processing_time", processingDuration).
+			Msg("client closed connection")
+		http.Error(w, "client closed connection", 499)
 	}
 }
 
@@ -378,31 +387,26 @@ func (tr *TunnelRouter) readBody(r *http.Request) ([]byte, error) {
 		return nil, nil
 	}
 
-	if r.ContentLength > 0 && r.ContentLength <= 1024 {
+	if r.ContentLength > 0 && r.ContentLength < 1024 {
 		logger.Debug().
 			Int64("content_length", r.ContentLength).
 			Msg("using buffer pool for small body")
 
 		bufPtr := tr.bufferPool.Get().(*[]byte)
 		buf := *bufPtr
-		defer tr.bufferPool.Put(bufPtr)
+		defer func() {
+			for i := range buf {
+				buf[i] = 0
+			}
+			tr.bufferPool.Put(bufPtr)
+		}()
 
 		n, err := io.ReadFull(r.Body, buf[:r.ContentLength])
-		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			logger.Error().Err(err).
-				Int64("content_length", r.ContentLength).
-				Int("bytes_read", n).
-				Msg("error reading body with buffer pool")
+		if err != nil {
+			logger.Error().Err(err).Int("bytes_read", n).Msg("failed to read small body")
 			return nil, err
 		}
-
-		result := make([]byte, n)
-		copy(result, buf[:n])
-
-		logger.Debug().
-			Int("bytes_read", n).
-			Msg("body read successfully with buffer pool")
-		return result, nil
+		return buf[:n], nil
 	}
 
 	logger.Debug().

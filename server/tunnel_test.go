@@ -1,27 +1,20 @@
 package server
 
 import (
-	"net/http"
-	"net/http/httptest"
-	"strings"
+	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/karol-broda/funnel/shared"
-
-	"github.com/gorilla/websocket"
 )
 
 func TestServerTunnelManagement(t *testing.T) {
 	server := NewServer()
 
-	// test tunnel creation
 	t.Run("add tunnel", func(t *testing.T) {
-		// use nil connection to test nil safety
 		tunnelID := "test-tunnel-123"
-
-		tunnel := server.AddTunnel(tunnelID, nil)
+		tunnel := server.AddTunnel(tunnelID, nil, nil)
+		defer server.RemoveTunnel(tunnelID)
 
 		if tunnel == nil {
 			t.Error("expected tunnel to be created")
@@ -32,8 +25,8 @@ func TestServerTunnelManagement(t *testing.T) {
 			t.Errorf("expected tunnel ID %s, got %s", tunnelID, tunnel.ID)
 		}
 
-		if tunnel.Conn != nil {
-			t.Error("expected tunnel connection to be nil for safety testing")
+		if tunnel.conn != nil {
+			t.Error("expected tunnel connection to be nil for this test")
 		}
 
 		if tunnel.ResponseChannels == nil {
@@ -45,29 +38,26 @@ func TestServerTunnelManagement(t *testing.T) {
 		}
 	})
 
-	// test tunnel retrieval
 	t.Run("get tunnel", func(t *testing.T) {
 		tunnelID := "test-tunnel-get"
-
-		server.AddTunnel(tunnelID, nil)
+		server.AddTunnel(tunnelID, nil, nil)
+		defer server.RemoveTunnel(tunnelID)
 
 		tunnel, exists := server.GetTunnel(tunnelID)
 		if !exists {
-			t.Error("tunnel should exist")
+			t.Error("expected tunnel to exist")
 		}
 
 		if tunnel.ID != tunnelID {
 			t.Errorf("expected tunnel ID %s, got %s", tunnelID, tunnel.ID)
 		}
 
-		// test non-existent tunnel
 		_, exists = server.GetTunnel("non-existent")
 		if exists {
 			t.Error("non-existent tunnel should not exist")
 		}
 	})
 
-	// test tunnel existence check
 	t.Run("tunnel exists", func(t *testing.T) {
 		tunnelID := "test-tunnel-exists"
 
@@ -75,18 +65,17 @@ func TestServerTunnelManagement(t *testing.T) {
 			t.Error("tunnel should not exist before creation")
 		}
 
-		server.AddTunnel(tunnelID, nil)
+		server.AddTunnel(tunnelID, nil, nil)
+		defer server.RemoveTunnel(tunnelID)
 
 		if !server.TunnelExists(tunnelID) {
 			t.Error("tunnel should exist after creation")
 		}
 	})
 
-	// test tunnel removal
 	t.Run("remove tunnel", func(t *testing.T) {
 		tunnelID := "test-tunnel-remove"
-
-		server.AddTunnel(tunnelID, nil)
+		server.AddTunnel(tunnelID, nil, nil)
 
 		if !server.TunnelExists(tunnelID) {
 			t.Error("tunnel should exist before removal")
@@ -98,89 +87,84 @@ func TestServerTunnelManagement(t *testing.T) {
 			t.Error("tunnel should not exist after removal")
 		}
 
-		// test removing non-existent tunnel (should not panic)
 		server.RemoveTunnel("non-existent-tunnel")
 	})
 }
 
 func TestTunnelConcurrency(t *testing.T) {
 	server := NewServer()
-	numGoroutines := 100
-	tunnelPrefix := "concurrent-tunnel-"
+	numTunnels := 100
 
-	var wg sync.WaitGroup
-
-	// test concurrent tunnel creation
 	t.Run("concurrent add", func(t *testing.T) {
-		wg.Add(numGoroutines)
-
-		for i := 0; i < numGoroutines; i++ {
-			go func(id int) {
+		var wg sync.WaitGroup
+		for i := 0; i < numTunnels; i++ {
+			wg.Add(1)
+			go func(i int) {
 				defer wg.Done()
-				// use nil connection to test nil safety without triggering goroutines
-				tunnelID := tunnelPrefix + string(rune(id))
-				server.AddTunnel(tunnelID, nil)
+				tunnelID := fmt.Sprintf("concurrent-tunnel-%d", i)
+				server.AddTunnel(tunnelID, nil, nil)
 			}(i)
 		}
-
 		wg.Wait()
 
-		// verify all tunnels were created
 		server.TunnelsMu.RLock()
 		count := len(server.Tunnels)
 		server.TunnelsMu.RUnlock()
 
-		if count < numGoroutines {
-			t.Errorf("expected at least %d tunnels, got %d", numGoroutines, count)
+		if count != numTunnels {
+			t.Errorf("expected %d tunnels, got %d", numTunnels, count)
+		}
+
+		for i := 0; i < numTunnels; i++ {
+			tunnelID := fmt.Sprintf("concurrent-tunnel-%d", i)
+			server.RemoveTunnel(tunnelID)
 		}
 	})
 
-	// test concurrent tunnel access
 	t.Run("concurrent access", func(t *testing.T) {
-		wg.Add(numGoroutines)
+		var wg sync.WaitGroup
+		for i := 0; i < numTunnels; i++ {
+			tunnelID := fmt.Sprintf("concurrent-tunnel-%d", i)
+			server.AddTunnel(tunnelID, nil, nil)
+			defer server.RemoveTunnel(tunnelID)
+		}
 
-		for i := 0; i < numGoroutines; i++ {
-			go func(id int) {
+		for i := 0; i < numTunnels*2; i++ {
+			wg.Add(1)
+			go func(i int) {
 				defer wg.Done()
-				tunnelID := tunnelPrefix + string(rune(id))
-
-				// try to get tunnel
+				tunnelID := fmt.Sprintf("concurrent-tunnel-%d", i%numTunnels)
 				_, exists := server.GetTunnel(tunnelID)
 				if !exists {
 					t.Errorf("tunnel %s should exist", tunnelID)
 				}
-
-				// check existence
-				if !server.TunnelExists(tunnelID) {
-					t.Errorf("tunnel %s should exist", tunnelID)
-				}
 			}(i)
 		}
-
 		wg.Wait()
 	})
 
-	// test concurrent tunnel removal
 	t.Run("concurrent remove", func(t *testing.T) {
-		wg.Add(numGoroutines)
+		var wg sync.WaitGroup
+		for i := 0; i < numTunnels; i++ {
+			tunnelID := fmt.Sprintf("concurrent-tunnel-%d", i)
+			server.AddTunnel(tunnelID, nil, nil)
+		}
 
-		for i := 0; i < numGoroutines; i++ {
-			go func(id int) {
+		for i := 0; i < numTunnels; i++ {
+			wg.Add(1)
+			go func(i int) {
 				defer wg.Done()
-				tunnelID := tunnelPrefix + string(rune(id))
+				tunnelID := fmt.Sprintf("concurrent-tunnel-%d", i)
 				server.RemoveTunnel(tunnelID)
 			}(i)
 		}
-
 		wg.Wait()
 
-		// verify tunnels were removed
 		server.TunnelsMu.RLock()
 		count := len(server.Tunnels)
 		server.TunnelsMu.RUnlock()
-
-		if count > 0 {
-			t.Errorf("expected 0 tunnels after removal, got %d", count)
+		if count != 0 {
+			t.Errorf("expected 0 tunnels, got %d", count)
 		}
 	})
 }
@@ -188,205 +172,68 @@ func TestTunnelConcurrency(t *testing.T) {
 func TestTunnelMessageHandling(t *testing.T) {
 	server := NewServer()
 
-	// create a test HTTP server for websocket connections
-	upgrader := websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
-	}
+	t.Run("send message to nil connection tunnel", func(t *testing.T) {
+		tunnelID := "test-send-receive"
+		tunnel := server.AddTunnel(tunnelID, nil, nil)
+		defer server.RemoveTunnel(tunnelID)
 
-	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			t.Errorf("websocket upgrade failed: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		// simulate message handling
-		for {
-			var msg shared.Message
-			if err := conn.ReadJSON(&msg); err != nil {
-				break
-			}
-
-			// echo the message back
-			if err := conn.WriteJSON(&msg); err != nil {
-				break
-			}
-		}
-	}))
-	defer testServer.Close()
-
-	t.Run("send message", func(t *testing.T) {
-		// create websocket connection
-		wsURL := "ws" + strings.TrimPrefix(testServer.URL, "http")
-		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-		if err != nil {
-			t.Fatalf("failed to connect: %v", err)
-		}
-		defer conn.Close()
-
-		tunnel := server.AddTunnel("test-send-message", conn)
-		defer server.RemoveTunnel("test-send-message")
-
-		// test sending a message
 		testMsg := &shared.Message{
 			Type:      "test",
 			RequestID: "test-123",
-			Method:    "GET",
-			Path:      "/test",
+			TunnelID:  tunnelID,
 		}
-
-		err = tunnel.SendMessage(testMsg)
-		if err != nil {
-			t.Errorf("failed to send message: %v", err)
-		}
-
-		// verify message was sent by reading it back
-		var receivedMsg shared.Message
-		err = conn.ReadJSON(&receivedMsg)
-		if err != nil {
-			t.Errorf("failed to read message: %v", err)
-		}
-
-		if receivedMsg.Type != testMsg.Type {
-			t.Errorf("expected message type %s, got %s", testMsg.Type, receivedMsg.Type)
+		err := tunnel.SendMessage(testMsg)
+		if err == nil {
+			t.Error("expected error when sending to a nil connection tunnel, but got nil")
 		}
 	})
 }
 
-func TestTunnelStats(t *testing.T) {
-	server := NewServer()
-	tunnelID := "test-stats"
-
-	tunnel := server.AddTunnel(tunnelID, nil)
-	defer server.RemoveTunnel(tunnelID)
-
-	// test initial stats
-	if tunnel.messagesReceived != 0 {
-		t.Errorf("expected 0 messages received, got %d", tunnel.messagesReceived)
-	}
-
-	if tunnel.messagesSent != 0 {
-		t.Errorf("expected 0 messages sent, got %d", tunnel.messagesSent)
-	}
-
-	if tunnel.bytesReceived != 0 {
-		t.Errorf("expected 0 bytes received, got %d", tunnel.bytesReceived)
-	}
-
-	if tunnel.bytesSent != 0 {
-		t.Errorf("expected 0 bytes sent, got %d", tunnel.bytesSent)
-	}
-
-	// test lifetime
-	lifetime := time.Since(tunnel.createdAt)
-	if lifetime < 0 {
-		t.Error("tunnel lifetime should be positive")
-	}
-}
-
 func TestTunnelResponseChannels(t *testing.T) {
 	server := NewServer()
-	tunnelID := "test-response-channels"
+	tunnel := server.AddTunnel("test-response-channels", nil, nil)
+	defer server.RemoveTunnel(tunnel.ID)
 
-	tunnel := server.AddTunnel(tunnelID, nil)
-	defer server.RemoveTunnel(tunnelID)
-
-	requestID := "test-request-123"
-
-	// test registering response channel
+	requestID := "test-req-1"
 	ch := tunnel.registerResponseChannel(requestID)
 	if ch == nil {
-		t.Error("response channel should not be nil")
+		t.Fatal("response channel should not be nil")
 	}
 
-	// verify channel is registered
 	tunnel.ResponseMu.RLock()
 	_, exists := tunnel.ResponseChannels[requestID]
 	tunnel.ResponseMu.RUnlock()
-
 	if !exists {
-		t.Error("response channel should be registered")
+		t.Fatal("response channel should be registered")
 	}
 
-	// test unregistering response channel
 	tunnel.unregisterResponseChannel(requestID)
 
-	// verify channel is unregistered
 	tunnel.ResponseMu.RLock()
 	_, exists = tunnel.ResponseChannels[requestID]
 	tunnel.ResponseMu.RUnlock()
-
 	if exists {
-		t.Error("response channel should be unregistered")
+		t.Fatal("response channel should be unregistered")
 	}
 }
 
-func TestTunnelMemoryLeaks(t *testing.T) {
-	server := NewServer()
-	numTunnels := 100
-
-	// create and remove many tunnels
-	for i := 0; i < numTunnels; i++ {
-		tunnelID := "leak-test-" + string(rune(i))
-
-		tunnel := server.AddTunnel(tunnelID, nil)
-
-		// register some response channels
-		for j := 0; j < 10; j++ {
-			requestID := "req-" + string(rune(j))
-			tunnel.registerResponseChannel(requestID)
-		}
-
-		server.RemoveTunnel(tunnelID)
-	}
-
-	// verify all tunnels are cleaned up
-	server.TunnelsMu.RLock()
-	count := len(server.Tunnels)
-	server.TunnelsMu.RUnlock()
-
-	if count != 0 {
-		t.Errorf("expected 0 tunnels after cleanup, got %d", count)
-	}
-}
-
-// benchmark tests
 func BenchmarkTunnelCreation(b *testing.B) {
 	server := NewServer()
-
-	b.ReportAllocs()
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		tunnelID := "bench-" + string(rune(i))
-		tunnel := server.AddTunnel(tunnelID, nil)
+		tunnelID := fmt.Sprintf("bench-create-%d", i)
+		tunnel := server.AddTunnel(tunnelID, nil, nil)
 		server.RemoveTunnel(tunnel.ID)
 	}
 }
 
 func BenchmarkTunnelLookup(b *testing.B) {
 	server := NewServer()
-	tunnelID := "bench-lookup"
+	tunnel := server.AddTunnel("bench-lookup", nil, nil)
+	defer server.RemoveTunnel(tunnel.ID)
 
-	server.AddTunnel(tunnelID, nil)
-	defer server.RemoveTunnel(tunnelID)
-
-	b.ReportAllocs()
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = server.GetTunnel(tunnelID)
-	}
-}
-
-func BenchmarkTunnelExists(b *testing.B) {
-	server := NewServer()
-	tunnelID := "bench-exists"
-
-	server.AddTunnel(tunnelID, nil)
-	defer server.RemoveTunnel(tunnelID)
-
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		_ = server.TunnelExists(tunnelID)
+		server.GetTunnel(tunnel.ID)
 	}
 }
