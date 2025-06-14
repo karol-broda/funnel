@@ -58,3 +58,5 @@ coverage.html
 # Debug files
 debug
 *.debug 
+
+/tmp
