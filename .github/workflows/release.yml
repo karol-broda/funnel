@@ -13,6 +13,13 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+  packages: write
+  pull-requests: read
+  issues: read
+  actions: read
+
 env:
   GO_VERSION: '1.21'
   CACHE_VERSION: v1
