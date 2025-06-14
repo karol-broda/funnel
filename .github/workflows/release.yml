@@ -106,9 +106,33 @@ jobs:
         echo "✅ tests passed successfully"
 
   build-release:
-    name: 🏗️ build release binaries
+    name: 🏗️ build release (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     needs: [validate]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            name: "linux amd64"
+            emoji: "🐧"
+          - goos: linux
+            goarch: arm64
+            name: "linux arm64"
+            emoji: "🐧"
+          - goos: darwin
+            goarch: amd64
+            name: "macos intel"
+            emoji: "🍎"
+          - goos: darwin
+            goarch: arm64
+            name: "macos apple silicon"
+            emoji: "🍎"
+          - goos: windows
+            goarch: amd64
+            name: "windows amd64"
+            emoji: "🪟"
     steps:
     - name: 📥 checkout repository
       uses: actions/checkout@v4
@@ -116,102 +140,106 @@ jobs:
         fetch-depth: 0
 
     - name: 🔧 setup go environment
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ env.GO_VERSION }}
-        cache: false
-
-    - name: 📦 cache dependencies
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.work.sum') }}
-        restore-keys: |
-          ${{ env.CACHE_VERSION }}-${{ runner.os }}-go-
 
     - name: 📋 download dependencies
       run: make deps
 
     - name: 🔨 build release binaries
       env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
         VERSION: ${{ needs.validate.outputs.version }}
       run: |
-        echo "🏗️ building release binaries for all platforms..."
+        EXT=""
+        if [ "$GOOS" = "windows" ]; then
+          EXT=".exe"
+        fi
+        
+        BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        GIT_COMMIT=${GITHUB_SHA::7}
+        GIT_TAG=$VERSION
+        
+        echo "🏗️ building release binaries for ${{ matrix.emoji }} ${{ matrix.name }}..."
         echo "  version: $VERSION"
-        echo "  build date: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-        echo "  git commit: ${GITHUB_SHA::7}"
+        echo "  build date: $BUILD_DATE"
+        echo "  git commit: $GIT_COMMIT"
         
-        # override version in makefile
-        export PROJECT_NAME=funnel
-        export BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-        export GIT_COMMIT=${GITHUB_SHA::7}
-        export GIT_TAG=$VERSION
+        mkdir -p dist
         
-        # use makefile release target
-        make release
+        # build client
+        echo "📦 building funnel client..."
+        GOOS=$GOOS GOARCH=$GOARCH go build \
+          -ldflags "-X github.com/karol-broda/funnel/version.Version=$VERSION \
+                    -X github.com/karol-broda/funnel/version.BuildDate=$BUILD_DATE \
+                    -X github.com/karol-broda/funnel/version.GitCommit=$GIT_COMMIT \
+                    -X github.com/karol-broda/funnel/version.GitTag=$GIT_TAG \
+                    -s -w" \
+          -o dist/funnel-$GOOS-$GOARCH$EXT \
+          ./cmd/funnel
         
-        echo "✅ all binaries built successfully"
+        # build server
+        echo "📦 building funnel server..."
+        GOOS=$GOOS GOARCH=$GOARCH go build \
+          -ldflags "-X github.com/karol-broda/funnel/version.Version=$VERSION \
+                    -X github.com/karol-broda/funnel/version.BuildDate=$BUILD_DATE \
+                    -X github.com/karol-broda/funnel/version.GitCommit=$GIT_COMMIT \
+                    -X github.com/karol-broda/funnel/version.GitTag=$GIT_TAG \
+                    -s -w" \
+          -o dist/funnel-server-$GOOS-$GOARCH$EXT \
+          ./cmd/server
+        
+        echo "✅ build completed successfully"
         echo "📊 binary information:"
-        ls -lh dist/
+        ls -lh dist/funnel*-$GOOS-$GOARCH$EXT
 
-    - name: 📦 create release archives
+    - name: 📦 create release archive
       env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
         VERSION: ${{ needs.validate.outputs.version }}
       run: |
-        echo "📦 creating release archives..."
+        EXT=""
+        if [ "$GOOS" = "windows" ]; then
+          EXT=".exe"
+        fi
         
-        # platforms from makefile
-        PLATFORMS="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64"
+        ARCHIVE_NAME="funnel-$VERSION-$GOOS-$GOARCH"
         
-        for platform in $PLATFORMS; do
-          GOOS=$(echo $platform | cut -d'/' -f1)
-          GOARCH=$(echo $platform | cut -d'/' -f2)
-          
-          EXT=""
-          if [ "$GOOS" = "windows" ]; then
-            EXT=".exe"
-          fi
-          
-          ARCHIVE_NAME="funnel-$VERSION-$GOOS-$GOARCH"
-          
-          echo "📦 creating archive: $ARCHIVE_NAME"
-          
-          mkdir -p "$ARCHIVE_NAME"
-          cp dist/funnel-$GOOS-$GOARCH$EXT "$ARCHIVE_NAME/funnel$EXT"
-          cp dist/funnel-server-$GOOS-$GOARCH$EXT "$ARCHIVE_NAME/funnel-server$EXT"
-          cp README.md "$ARCHIVE_NAME/"
-          cp LICENSE.md "$ARCHIVE_NAME/"
-          
-          # create checksums
-          cd "$ARCHIVE_NAME"
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum * > SHA256SUMS
-          else
-            shasum -a 256 * > SHA256SUMS
-          fi
-          cd ..
-          
-          # create archive
-          if [ "$GOOS" = "windows" ]; then
-            zip -r "$ARCHIVE_NAME.zip" "$ARCHIVE_NAME"
-          else
-            tar -czf "$ARCHIVE_NAME.tar.gz" "$ARCHIVE_NAME"
-          fi
-          
-          # cleanup temp directory
-          rm -rf "$ARCHIVE_NAME"
-        done
+        echo "📦 creating release archive: $ARCHIVE_NAME"
         
-        echo "✅ all archives created successfully"
-        ls -lh funnel-$VERSION-*
+        mkdir -p "$ARCHIVE_NAME"
+        cp dist/funnel-$GOOS-$GOARCH$EXT "$ARCHIVE_NAME/funnel$EXT"
+        cp dist/funnel-server-$GOOS-$GOARCH$EXT "$ARCHIVE_NAME/funnel-server$EXT"
+        cp README.md "$ARCHIVE_NAME/"
+        cp LICENSE.md "$ARCHIVE_NAME/"
+        
+        # create checksums
+        cd "$ARCHIVE_NAME"
+        if command -v sha256sum >/dev/null 2>&1; then
+          sha256sum * > SHA256SUMS
+        else
+          shasum -a 256 * > SHA256SUMS
+        fi
+        cd ..
+        
+        # create archive
+        if [ "$GOOS" = "windows" ]; then
+          zip -r "$ARCHIVE_NAME.zip" "$ARCHIVE_NAME"
+        else
+          tar -czf "$ARCHIVE_NAME.tar.gz" "$ARCHIVE_NAME"
+        fi
+        
+        echo "✅ archive created successfully"
+        ls -lh "$ARCHIVE_NAME".*
 
     - name: 📤 upload release artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: release-archives
-        path: funnel-${{ needs.validate.outputs.version }}-*
+        name: funnel-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: funnel-${{ needs.validate.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}.*
         retention-days: 90
 
   create-release:
