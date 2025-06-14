@@ -1,4 +1,4 @@
-name: CI
+name: 🚀 CI Pipeline
 
 on:
   push:
@@ -9,126 +9,179 @@ on:
 
 env:
   GO_VERSION: '1.21'
+  CACHE_VERSION: v1
 
 jobs:
-  lint:
-    name: Lint
+  quality:
+    name: 🔍 code quality
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ env.GO_VERSION }}
-
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.work.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
-    - name: Download dependencies
-      run: make deps
-
-    - name: Check formatting
-      run: |
-        make fmt
-        if [ -n "$(git status --porcelain)" ]; then
-          echo "code is not formatted properly"
-          git diff
-          exit 1
-        fi
-
-    - name: Run linter
-      run: make lint
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    needs: [lint]
-    steps:
-    - name: Checkout code
+    - name: 📥 checkout repository
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: Set up Go
+    - name: 🔧 setup go environment
       uses: actions/setup-go@v4
       with:
         go-version: ${{ env.GO_VERSION }}
+        cache: false
 
-    - name: Cache Go modules
+    - name: 📦 cache dependencies
       uses: actions/cache@v3
       with:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.work.sum') }}
+        key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.work.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-
+          ${{ env.CACHE_VERSION }}-${{ runner.os }}-go-
 
-    - name: Download dependencies
+    - name: 📋 download dependencies
       run: make deps
 
-    - name: Run tests
-      run: make test
-
-    - name: Generate test coverage
+    - name: 🎨 check code formatting
       run: |
-        echo "running coverage across all modules..."
+        echo "🔍 Checking code formatting..."
+        make fmt
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "❌ Code is not formatted properly"
+          echo "📋 Here are the formatting issues:"
+          git diff
+          exit 1
+        fi
+        echo "✅ Code formatting is correct"
+
+    - name: 🔎 run linter
+      run: |
+        echo "🔍 Running linter checks..."
+        make lint
+        echo "✅ Linting completed successfully"
+
+    - name: 🛡️ security scan
+      uses: securego/gosec@master
+      with:
+        args: '-fmt sarif -out gosec.sarif ./...'
+      continue-on-error: true
+
+    - name: 📊 upload security scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: gosec.sarif
+      continue-on-error: true
+
+  test:
+    name: 🧪 Test Suite
+    runs-on: ubuntu-latest
+    needs: [quality]
+    steps:
+    - name: 📥 checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: 🔧 setup go environment
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: false
+
+    - name: 📦 cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.work.sum') }}
+        restore-keys: |
+          ${{ env.CACHE_VERSION }}-${{ runner.os }}-go-
+
+    - name: 📋 download dependencies
+      run: make deps
+
+    - name: 🏃 run tests
+      run: |
+        echo "🧪 Running test suite..."
+        make test
+        echo "✅ Tests completed successfully"
+
+    - name: 📊 generate coverage report
+      run: |
+        echo "📊 Generating coverage reports for all modules..."
+        coverage_files=""
+        
         for dir in $(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do
-          echo "generating coverage for module in $dir..."
-          (cd $dir && go test -v -coverprofile="coverage.out" ./... && echo "coverage generated for $dir" && rm -f coverage.out)
+          module_name=$(basename "$dir")
+          echo "🔍 Processing module: $module_name (in $dir)"
+          
+          (cd "$dir" && go test -v -coverprofile="coverage-${module_name}.out" ./...)
+          
+          if [ -f "$dir/coverage-${module_name}.out" ]; then
+            echo "✅ Coverage generated for $module_name"
+            coverage_files="$coverage_files $dir/coverage-${module_name}.out"
+          fi
         done
+        
+        echo "📋 Coverage files generated: $coverage_files"
+
+    - name: 📈 upload coverage reports
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: coverage-reports
+        path: "**/coverage-*.out"
+        retention-days: 30
 
   build:
-    name: Build (Cross Platform)
+    name: 🏗️ Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [quality, test]
     strategy:
+      fail-fast: false
       matrix:
         include:
           - goos: linux
             goarch: amd64
+            name: "🐧 Linux AMD64"
           - goos: linux
             goarch: arm64
+            name: "🐧 Linux ARM64"
           - goos: darwin
             goarch: amd64
+            name: "🍎 macOS Intel"
           - goos: darwin
             goarch: arm64
+            name: "🍎 macOS Apple Silicon"
           - goos: windows
             goarch: amd64
+            name: "🪟 Windows AMD64"
     steps:
-    - name: Checkout code
+    - name: 📥 checkout repository
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: Set up Go
+    - name: 🔧 setup go environment
       uses: actions/setup-go@v4
       with:
         go-version: ${{ env.GO_VERSION }}
+        cache: false
 
-    - name: Cache Go modules
+    - name: 📦 cache dependencies
       uses: actions/cache@v3
       with:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.work.sum') }}
+        key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-go-${{ hashFiles('**/go.sum', '**/go.work.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-
+          ${{ env.CACHE_VERSION }}-${{ runner.os }}-go-
 
-    - name: Download dependencies
+    - name: 📋 download dependencies
       run: make deps
 
-    - name: Build binaries
+    - name: 🔨 build binaries for ${{ matrix.name }}
       env:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
@@ -138,49 +191,62 @@ jobs:
           EXT=".exe"
         fi
         
-        echo "building tunnel-client for $GOOS/$GOARCH..."
+        BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        GIT_COMMIT=${GITHUB_SHA::7}
+        GIT_TAG=${GITHUB_REF#refs/tags/}
+        VERSION="0.0.1a"
+        
+        echo "🏗️ Building tunnel-client for ${{ matrix.name }}..."
         GOOS=$GOOS GOARCH=$GOARCH go build \
-          -ldflags "-X github.com/karol-broda/go-tunnel-proxy/version.Version=0.0.1a \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.BuildDate=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.GitCommit=${GITHUB_SHA::7} \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.GitTag=${GITHUB_REF#refs/tags/} \
+          -ldflags "-X github.com/karol-broda/go-tunnel-proxy/version.Version=$VERSION \
+                    -X github.com/karol-broda/go-tunnel-proxy/version.BuildDate=$BUILD_DATE \
+                    -X github.com/karol-broda/go-tunnel-proxy/version.GitCommit=$GIT_COMMIT \
+                    -X github.com/karol-broda/go-tunnel-proxy/version.GitTag=$GIT_TAG \
                     -s -w" \
           -o tunnel-client-$GOOS-$GOARCH$EXT \
           ./cmd/tunnel-client
         
-        echo "building tunnel-server for $GOOS/$GOARCH..."
+        echo "🏗️ Building tunnel-server for ${{ matrix.name }}..."
         GOOS=$GOOS GOARCH=$GOARCH go build \
-          -ldflags "-X github.com/karol-broda/go-tunnel-proxy/version.Version=0.0.1a \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.BuildDate=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.GitCommit=${GITHUB_SHA::7} \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.GitTag=${GITHUB_REF#refs/tags/} \
+          -ldflags "-X github.com/karol-broda/go-tunnel-proxy/version.Version=$VERSION \
+                    -X github.com/karol-broda/go-tunnel-proxy/version.BuildDate=$BUILD_DATE \
+                    -X github.com/karol-broda/go-tunnel-proxy/version.GitCommit=$GIT_COMMIT \
+                    -X github.com/karol-broda/go-tunnel-proxy/version.GitTag=$GIT_TAG \
                     -s -w" \
           -o tunnel-server-$GOOS-$GOARCH$EXT \
           ./cmd/tunnel-server
         
-        echo "build completed successfully for $GOOS/$GOARCH"
+        echo "✅ Build completed successfully for ${{ matrix.name }}"
+        
+        if [ -f "tunnel-client-$GOOS-$GOARCH$EXT" ] && [ -f "tunnel-server-$GOOS-$GOARCH$EXT" ]; then
+          echo "📦 Binary sizes:"
+          ls -lh tunnel-*-$GOOS-$GOARCH$EXT
+        else
+          echo "❌ Build verification failed"
+          exit 1
+        fi
+        
         rm -f tunnel-client-$GOOS-$GOARCH$EXT tunnel-server-$GOOS-$GOARCH$EXT
 
-  security:
-    name: Security Scan
+  build-summary:
+    name: 📋 Build Summary
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [build]
+    if: always()
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ env.GO_VERSION }}
-
-    - name: Run Gosec Security Scanner
-      uses: securego/gosec@master
-      with:
-        args: '-fmt sarif -out gosec.sarif ./...'
-      continue-on-error: true
-
-    - name: Security scan completed
-      run: echo "security scan completed successfully"
-
- 
+    - name: 📊 build results summary
+      run: |
+        echo "## 🏗️ Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| 🐧 Linux AMD64 | ${{ needs.build.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| 🐧 Linux ARM64 | ${{ needs.build.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| 🍎 macOS Intel | ${{ needs.build.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| 🍎 macOS Apple Silicon | ${{ needs.build.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| 🪟 Windows AMD64 | ${{ needs.build.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 Pipeline Results" >> $GITHUB_STEP_SUMMARY
+        echo "- 🔍 Code Quality: ${{ needs.quality.result == 'success' && '✅ Passed' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- 🧪 Tests: ${{ needs.test.result == 'success' && '✅ Passed' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- 🏗️ Builds: ${{ needs.build.result == 'success' && '✅ All Successful' || '❌ Some Failed' }}" >> $GITHUB_STEP_SUMMARY 
