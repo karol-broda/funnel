@@ -1,6 +1,6 @@
 module github.com/karol-broda/funnel/shared
 
-go 1.21
+go 1.24.4
 
 require github.com/rs/zerolog v1.34.0
 

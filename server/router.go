@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/karol-broda/funnel/shared"
 )
 
@@ -46,7 +47,12 @@ func NewTunnelRouter(server *Server) *TunnelRouter {
 
 func (tr *TunnelRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	requestStart := time.Now()
-	requestID := fmt.Sprintf("%d", time.Now().UnixNano())
+	requestUUID, err := uuid.NewV7()
+	if err != nil {
+		requestUUID = uuid.New()
+	}
+	requestID := requestUUID.String()
+
 	logger := shared.GetLogger("server.router")
 
 	atomic.AddInt64(&tr.requests, 1)

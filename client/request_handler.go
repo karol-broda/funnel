@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/karol-broda/funnel/shared"
 )
 
@@ -17,14 +18,28 @@ func (c *Client) handleRequests() {
 
 	logger.Info().Msg("starting request handler loop")
 
+	transport := &http.Transport{
+		MaxIdleConns:        10,
+		MaxIdleConnsPerHost: 5,
+		IdleConnTimeout:     30 * time.Second,
+		MaxConnsPerHost:     10,
+	}
+
 	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout:   30 * time.Second,
+		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
 
-	logger.Debug().Dur("http_timeout", httpClient.Timeout).Msg("http client configured")
+	logger.Debug().
+		Dur("http_timeout", httpClient.Timeout).
+		Int("max_conns_per_host", 10).
+		Int("max_idle_conns", 10).
+		Msg("http client configured")
+
+	c.setupHeartbeat()
 
 	requestCount := 0
 	for {
@@ -68,10 +83,56 @@ func (c *Client) handleRequests() {
 	}
 }
 
+func (c *Client) setupHeartbeat() {
+	logger := shared.GetTunnelLogger("client.handler", c.TunnelID)
+
+	c.Conn.SetPongHandler(func(string) error {
+		c.updateLastPong()
+		logger.Debug().Msg("pong received from server")
+		return nil
+	})
+
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			if c.Conn == nil {
+				logger.Debug().Msg("connection is nil, stopping ping routine")
+				return
+			}
+
+			lastPong := c.getLastPong()
+			if time.Since(lastPong) > 90*time.Second {
+				logger.Warn().
+					Dur("time_since_last_pong", time.Since(lastPong)).
+					Msg("no pong received recently, connection may be stale")
+			}
+
+			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				logger.Error().Err(err).Msg("failed to send ping")
+				return
+			}
+			logger.Debug().Msg("ping sent to server")
+		}
+	}()
+
+	logger.Debug().Msg("heartbeat mechanism setup completed")
+}
+
 func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
 	logger := shared.GetRequestLogger("client.handler", c.TunnelID, msg.RequestID)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	select {
+	case c.requestSemaphore <- struct{}{}:
+		defer func() { <-c.requestSemaphore }()
+	default:
+		logger.Warn().Msg("too many concurrent requests, rejecting")
+		c.sendError(msg.RequestID, 503)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 
 	c.ongoingRequestsMu.Lock()
@@ -90,6 +151,7 @@ func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
 		Str("path", msg.Path).
 		Int("header_count", len(msg.Headers)).
 		Int("body_size", len(msg.Body)).
+		Int("concurrent_requests", len(c.requestSemaphore)).
 		Msg("processing request")
 
 	localURL := fmt.Sprintf("http://%s%s", c.LocalAddr, msg.Path)
@@ -114,10 +176,13 @@ func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
 			Dur("request_duration", requestDuration).
 			Msg("request to local service failed")
 
-		// check if the request was canceled by the client
 		if ctx.Err() == context.Canceled {
 			logger.Info().Msg("request to local service was canceled")
-			// no need to send an error response, the original connection is gone
+			return
+		}
+		if ctx.Err() == context.DeadlineExceeded {
+			logger.Warn().Msg("request to local service timed out")
+			c.sendError(msg.RequestID, 504)
 			return
 		}
 
@@ -204,7 +269,6 @@ func (c *Client) setRequestHeaders(req *http.Request, headers map[string][]strin
 }
 
 func (c *Client) shouldSkipHeader(headerName string) bool {
-	// convert to lowercase for case-insensitive comparison
 	lower := strings.ToLower(headerName)
 
 	switch lower {
@@ -225,12 +289,6 @@ func (c *Client) shouldSkipHeader(headerName string) bool {
 	case "transfer-encoding":
 		return true
 	}
-
-	// forward all other headers, including:
-	// - X-Forwarded-* headers (important for upstream services to know about original request)
-	// - X-Real-IP (real client IP)
-	// - Standard HTTP headers
-	// - Custom application headers
 
 	return false
 }

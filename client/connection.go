@@ -34,15 +34,17 @@ func (c *Client) connect() error {
 	logger.Debug().Str("websocket_url", wsURL).Msg("constructed websocket URL")
 
 	dialer := websocket.Dialer{
-		HandshakeTimeout: 10 * time.Second,
-		ReadBufferSize:   1024 * 64,
-		WriteBufferSize:  1024 * 64,
+		HandshakeTimeout:  15 * time.Second,
+		ReadBufferSize:    1024 * 64,
+		WriteBufferSize:   1024 * 64,
+		EnableCompression: true,
 	}
 
 	logger.Debug().
 		Dur("handshake_timeout", dialer.HandshakeTimeout).
 		Int("read_buffer_size", dialer.ReadBufferSize).
 		Int("write_buffer_size", dialer.WriteBufferSize).
+		Bool("compression_enabled", dialer.EnableCompression).
 		Msg("websocket dialer configured")
 
 	dialStart := time.Now()
@@ -59,6 +61,9 @@ func (c *Client) connect() error {
 		}
 		return err
 	}
+
+	conn.SetReadDeadline(time.Now().Add(300 * time.Second))
+	conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 
 	connectDuration := time.Since(connectStart)
 	logger.Info().
