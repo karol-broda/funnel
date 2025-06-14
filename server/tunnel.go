@@ -114,6 +114,11 @@ func (t *Tunnel) readMessages() {
 
 	logger.Debug().Msg("starting message reader goroutine")
 
+	if t.Conn == nil {
+		logger.Error().Msg("tunnel connection is nil, cannot read messages")
+		return
+	}
+
 	for {
 		select {
 		case <-t.stopRouter:
@@ -124,6 +129,11 @@ func (t *Tunnel) readMessages() {
 
 			readStart := time.Now()
 			t.ReadMu.Lock()
+			if t.Conn == nil {
+				logger.Error().Msg("tunnel connection became nil during read")
+				t.ReadMu.Unlock()
+				return
+			}
 			err := t.Conn.ReadJSON(&msg)
 			t.ReadMu.Unlock()
 			readDuration := time.Since(readStart)
@@ -167,6 +177,11 @@ func (t *Tunnel) writeMessages() {
 
 	logger.Debug().Msg("starting message writer goroutine")
 
+	if t.Conn == nil {
+		logger.Error().Msg("tunnel connection is nil, cannot write messages")
+		return
+	}
+
 	for {
 		select {
 		case <-t.stopRouter:
@@ -180,6 +195,11 @@ func (t *Tunnel) writeMessages() {
 
 			writeStart := time.Now()
 			t.WriteMu.Lock()
+			if t.Conn == nil {
+				logger.Error().Msg("tunnel connection became nil during write")
+				t.WriteMu.Unlock()
+				return
+			}
 			err := t.Conn.WriteJSON(msg)
 			t.WriteMu.Unlock()
 			writeDuration := time.Since(writeStart)

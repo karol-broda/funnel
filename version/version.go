@@ -6,17 +6,12 @@ import (
 )
 
 var (
-	// Version is set at build time
-	Version = "0.0.1a"
-	// BuildDate is set at build time
+	Version   = "0.0.1a"
 	BuildDate = "unknown"
-	// GitCommit is set at build time
 	GitCommit = "unknown"
-	// GitTag is set at build time
-	GitTag = "unknown"
+	GitTag    = "unknown"
 )
 
-// BuildInfo represents build information
 type BuildInfo struct {
 	Version   string
 	BuildDate string
@@ -25,7 +20,6 @@ type BuildInfo struct {
 	GoVersion string
 }
 
-// GetBuildInfo returns the current build information
 func GetBuildInfo() BuildInfo {
 	return BuildInfo{
 		Version:   Version,
@@ -36,12 +30,10 @@ func GetBuildInfo() BuildInfo {
 	}
 }
 
-// GetVersion returns the current version
 func GetVersion() string {
 	return Version
 }
 
-// GetFullVersion returns a full version string with build info
 func GetFullVersion() string {
 	info := GetBuildInfo()
 	if info.GitCommit != "unknown" && len(info.GitCommit) > 7 {
@@ -55,7 +47,6 @@ func GetFullVersion() string {
 	return fmt.Sprintf("%s (%s)", info.Version, info.GitCommit)
 }
 
-// PrintVersionInfo prints detailed version information
 func PrintVersionInfo(appName string) {
 	info := GetBuildInfo()
 	fmt.Printf("%s version %s\n", appName, info.Version)

@@ -80,7 +80,7 @@ test:
 	@echo "discovering modules..."
 	@for dir in $$(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do \
 		echo "testing module in $$dir..."; \
-		(cd $$dir && go test -v ./...); \
+		(cd $$dir && go test ./...); \
 	done
 	@echo "all modules tested successfully"
 

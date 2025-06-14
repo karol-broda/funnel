@@ -12,7 +12,7 @@ const defaultSize = 8
 
 func getMask(alphabetSize int) int {
 	for i := 1; i <= 8; i++ {
-		mask := (2 << uint(i)) - 1
+		mask := (1 << uint(i)) - 1
 		if mask >= alphabetSize-1 {
 			return mask
 		}
@@ -34,8 +34,6 @@ func GenerateNanoIDWithAlphabet(alphabet string, size int) (string, error) {
 		return "", errors.New("size must be positive integer")
 	}
 
-	logger.Debug().Int("alphabet_length", len(alphabet)).Int("id_size", size).Msg("generating nano ID with custom alphabet")
-
 	mask := getMask(len(chars))
 	ceilArg := 1.6 * float64(mask*size) / float64(len(alphabet))
 	step := int(math.Ceil(ceilArg))
@@ -55,7 +53,6 @@ func GenerateNanoIDWithAlphabet(alphabet string, size int) (string, error) {
 				j++
 				if j == size {
 					generatedID := string(id[:size])
-					logger.Debug().Str("generated_id", generatedID).Msg("successfully generated nano ID")
 					return generatedID, nil
 				}
 			}
@@ -81,8 +78,6 @@ func GenerateNanoID(length ...int) (string, error) {
 		return "", errors.New("unexpected parameter")
 	}
 
-	logger.Debug().Int("id_length", size).Msg("generating standard nano ID")
-
 	bytes := make([]byte, size)
 	_, err := rand.Read(bytes)
 	if err != nil {
@@ -96,7 +91,6 @@ func GenerateNanoID(length ...int) (string, error) {
 	}
 
 	generatedID := string(id[:size])
-	logger.Debug().Str("generated_id", generatedID).Msg("successfully generated standard nano ID")
 	return generatedID, nil
 }
 
@@ -105,7 +99,7 @@ func MustGenerateNanoID(length ...int) string {
 
 	id, err := GenerateNanoID(length...)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("critical failure in ID generation - panicking")
+		logger.Error().Err(err).Msg("critical failure in ID generation - panicking")
 		panic(err)
 	}
 	return id

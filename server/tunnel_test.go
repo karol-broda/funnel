@@ -18,11 +18,10 @@ func TestServerTunnelManagement(t *testing.T) {
 
 	// test tunnel creation
 	t.Run("add tunnel", func(t *testing.T) {
-		// create a mock websocket connection
-		mockConn := &websocket.Conn{}
+		// use nil connection to test nil safety
 		tunnelID := "test-tunnel-123"
 
-		tunnel := server.AddTunnel(tunnelID, mockConn)
+		tunnel := server.AddTunnel(tunnelID, nil)
 
 		if tunnel == nil {
 			t.Error("expected tunnel to be created")
@@ -33,8 +32,8 @@ func TestServerTunnelManagement(t *testing.T) {
 			t.Errorf("expected tunnel ID %s, got %s", tunnelID, tunnel.ID)
 		}
 
-		if tunnel.Conn != mockConn {
-			t.Error("tunnel connection mismatch")
+		if tunnel.Conn != nil {
+			t.Error("expected tunnel connection to be nil for safety testing")
 		}
 
 		if tunnel.ResponseChannels == nil {
@@ -48,10 +47,9 @@ func TestServerTunnelManagement(t *testing.T) {
 
 	// test tunnel retrieval
 	t.Run("get tunnel", func(t *testing.T) {
-		mockConn := &websocket.Conn{}
 		tunnelID := "test-tunnel-get"
 
-		server.AddTunnel(tunnelID, mockConn)
+		server.AddTunnel(tunnelID, nil)
 
 		tunnel, exists := server.GetTunnel(tunnelID)
 		if !exists {
@@ -71,14 +69,13 @@ func TestServerTunnelManagement(t *testing.T) {
 
 	// test tunnel existence check
 	t.Run("tunnel exists", func(t *testing.T) {
-		mockConn := &websocket.Conn{}
 		tunnelID := "test-tunnel-exists"
 
 		if server.TunnelExists(tunnelID) {
 			t.Error("tunnel should not exist before creation")
 		}
 
-		server.AddTunnel(tunnelID, mockConn)
+		server.AddTunnel(tunnelID, nil)
 
 		if !server.TunnelExists(tunnelID) {
 			t.Error("tunnel should exist after creation")
@@ -87,10 +84,9 @@ func TestServerTunnelManagement(t *testing.T) {
 
 	// test tunnel removal
 	t.Run("remove tunnel", func(t *testing.T) {
-		mockConn := &websocket.Conn{}
 		tunnelID := "test-tunnel-remove"
 
-		server.AddTunnel(tunnelID, mockConn)
+		server.AddTunnel(tunnelID, nil)
 
 		if !server.TunnelExists(tunnelID) {
 			t.Error("tunnel should exist before removal")
@@ -121,9 +117,9 @@ func TestTunnelConcurrency(t *testing.T) {
 		for i := 0; i < numGoroutines; i++ {
 			go func(id int) {
 				defer wg.Done()
-				mockConn := &websocket.Conn{}
+				// use nil connection to test nil safety without triggering goroutines
 				tunnelID := tunnelPrefix + string(rune(id))
-				server.AddTunnel(tunnelID, mockConn)
+				server.AddTunnel(tunnelID, nil)
 			}(i)
 		}
 
@@ -262,10 +258,9 @@ func TestTunnelMessageHandling(t *testing.T) {
 
 func TestTunnelStats(t *testing.T) {
 	server := NewServer()
-	mockConn := &websocket.Conn{}
 	tunnelID := "test-stats"
 
-	tunnel := server.AddTunnel(tunnelID, mockConn)
+	tunnel := server.AddTunnel(tunnelID, nil)
 	defer server.RemoveTunnel(tunnelID)
 
 	// test initial stats
@@ -294,10 +289,9 @@ func TestTunnelStats(t *testing.T) {
 
 func TestTunnelResponseChannels(t *testing.T) {
 	server := NewServer()
-	mockConn := &websocket.Conn{}
 	tunnelID := "test-response-channels"
 
-	tunnel := server.AddTunnel(tunnelID, mockConn)
+	tunnel := server.AddTunnel(tunnelID, nil)
 	defer server.RemoveTunnel(tunnelID)
 
 	requestID := "test-request-123"
@@ -336,10 +330,9 @@ func TestTunnelMemoryLeaks(t *testing.T) {
 
 	// create and remove many tunnels
 	for i := 0; i < numTunnels; i++ {
-		mockConn := &websocket.Conn{}
 		tunnelID := "leak-test-" + string(rune(i))
 
-		tunnel := server.AddTunnel(tunnelID, mockConn)
+		tunnel := server.AddTunnel(tunnelID, nil)
 
 		// register some response channels
 		for j := 0; j < 10; j++ {
@@ -363,22 +356,20 @@ func TestTunnelMemoryLeaks(t *testing.T) {
 // benchmark tests
 func BenchmarkTunnelCreation(b *testing.B) {
 	server := NewServer()
-	mockConn := &websocket.Conn{}
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		tunnelID := "bench-" + string(rune(i))
-		tunnel := server.AddTunnel(tunnelID, mockConn)
+		tunnel := server.AddTunnel(tunnelID, nil)
 		server.RemoveTunnel(tunnel.ID)
 	}
 }
 
 func BenchmarkTunnelLookup(b *testing.B) {
 	server := NewServer()
-	mockConn := &websocket.Conn{}
 	tunnelID := "bench-lookup"
 
-	server.AddTunnel(tunnelID, mockConn)
+	server.AddTunnel(tunnelID, nil)
 	defer server.RemoveTunnel(tunnelID)
 
 	b.ReportAllocs()
@@ -389,10 +380,9 @@ func BenchmarkTunnelLookup(b *testing.B) {
 
 func BenchmarkTunnelExists(b *testing.B) {
 	server := NewServer()
-	mockConn := &websocket.Conn{}
 	tunnelID := "bench-exists"
 
-	server.AddTunnel(tunnelID, mockConn)
+	server.AddTunnel(tunnelID, nil)
 	defer server.RemoveTunnel(tunnelID)
 
 	b.ReportAllocs()

@@ -59,14 +59,10 @@ func TestClientConnectionHandling(t *testing.T) {
 				return
 			}
 
-			// for valid URLs, we expect URL parsing to work
-			// but connection will fail since there's no server
 			if err != nil {
-				// check if it's a URL parsing error vs connection error
 				if _, parseErr := url.Parse(tt.serverURL); parseErr != nil {
 					t.Errorf("URL parsing failed: %v", parseErr)
 				}
-				// connection errors are expected when no server is running
 			}
 		})
 	}
