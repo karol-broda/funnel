@@ -1,56 +1,74 @@
 package main
 
 import (
-	"flag"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/karol-broda/go-tunnel-proxy/client"
 	"github.com/karol-broda/go-tunnel-proxy/shared"
 	"github.com/karol-broda/go-tunnel-proxy/version"
+	"github.com/spf13/cobra"
 )
 
-func main() {
-	server := flag.String("server", "http://localhost:8080", "tunnel server url")
-	local := flag.String("local", "localhost:3000", "local address to tunnel")
-	id := flag.String("id", "", "tunnel id (subdomain)")
-	showVersion := flag.Bool("version", false, "show version information")
-	flag.Parse()
+var (
+	server string
+	local  string
+	id     string
+)
 
-	if *showVersion {
+var rootCmd = &cobra.Command{
+	Use:   filepath.Base(os.Args[0]),
+	Short: "a tunnel client for creating secure tunnels",
+	Long:  `a tunnel client that creates secure tunnels to expose local services through a remote server`,
+	Run:   runClient,
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "print version information",
+	Run: func(cmd *cobra.Command, args []string) {
 		version.PrintVersionInfo("tunnel-client")
-		return
-	}
+	},
+}
 
+func init() {
+	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "http://localhost:8080", "tunnel server url")
+	rootCmd.PersistentFlags().StringVarP(&local, "local", "l", "localhost:3000", "local address to tunnel")
+	rootCmd.PersistentFlags().StringVarP(&id, "id", "i", "", "tunnel id (subdomain)")
+	rootCmd.AddCommand(versionCmd)
+}
+
+func runClient(cmd *cobra.Command, args []string) {
 	shared.InitializeLogging(shared.DefaultLogConfig())
 
 	logger := shared.GetLogger("client")
 
 	logger.Info().
 		Str("version", version.GetVersion()).
-		Str("server", *server).
-		Str("local", *local).
+		Str("server", server).
+		Str("local", local).
 		Msg("tunnel client starting up")
 
-	if id == nil || *id == "" {
-		*id = shared.MustGenerateNanoID()
-		logger.Info().Str("generated_id", *id).Msg("generated tunnel ID")
+	if id == "" {
+		id = shared.MustGenerateNanoID()
+		logger.Info().Str("generated_id", id).Msg("generated tunnel ID")
 	} else {
-		logger.Info().Str("provided_id", *id).Msg("using provided tunnel ID")
+		logger.Info().Str("provided_id", id).Msg("using provided tunnel ID")
 	}
 
-	if *server == "" {
+	if server == "" {
 		logger.Fatal().Msg("server URL cannot be empty")
 	}
-	if *local == "" {
+	if local == "" {
 		logger.Fatal().Msg("local address cannot be empty")
 	}
 
 	c := &client.Client{
-		ServerURL: *server,
-		LocalAddr: *local,
-		TunnelID:  *id,
+		ServerURL: server,
+		LocalAddr: local,
+		TunnelID:  id,
 	}
 
 	logger.Info().Msg("starting tunnel client")
@@ -70,4 +88,10 @@ func main() {
 
 	logger.Info().Msg("client configuration validated, starting tunnel")
 	c.Run()
+}
+
+func main() {
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
