@@ -196,37 +196,37 @@ jobs:
         GIT_TAG=${GITHUB_REF#refs/tags/}
         VERSION="0.0.1a"
         
-        echo "🏗️ Building tunnel-client for ${{ matrix.name }}..."
+        echo "🏗️ Building funnel client for ${{ matrix.name }}..."
         GOOS=$GOOS GOARCH=$GOARCH go build \
-          -ldflags "-X github.com/karol-broda/go-tunnel-proxy/version.Version=$VERSION \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.BuildDate=$BUILD_DATE \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.GitCommit=$GIT_COMMIT \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.GitTag=$GIT_TAG \
+          -ldflags "-X github.com/karol-broda/funnel/version.Version=$VERSION \
+                    -X github.com/karol-broda/funnel/version.BuildDate=$BUILD_DATE \
+                    -X github.com/karol-broda/funnel/version.GitCommit=$GIT_COMMIT \
+                    -X github.com/karol-broda/funnel/version.GitTag=$GIT_TAG \
                     -s -w" \
-          -o tunnel-client-$GOOS-$GOARCH$EXT \
-          ./cmd/tunnel-client
+          -o funnel-$GOOS-$GOARCH$EXT \
+          ./cmd/funnel
         
-        echo "🏗️ Building tunnel-server for ${{ matrix.name }}..."
+        echo "🏗️ Building funnel server for ${{ matrix.name }}..."
         GOOS=$GOOS GOARCH=$GOARCH go build \
-          -ldflags "-X github.com/karol-broda/go-tunnel-proxy/version.Version=$VERSION \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.BuildDate=$BUILD_DATE \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.GitCommit=$GIT_COMMIT \
-                    -X github.com/karol-broda/go-tunnel-proxy/version.GitTag=$GIT_TAG \
+          -ldflags "-X github.com/karol-broda/funnel/version.Version=$VERSION \
+                    -X github.com/karol-broda/funnel/version.BuildDate=$BUILD_DATE \
+                    -X github.com/karol-broda/funnel/version.GitCommit=$GIT_COMMIT \
+                    -X github.com/karol-broda/funnel/version.GitTag=$GIT_TAG \
                     -s -w" \
-          -o tunnel-server-$GOOS-$GOARCH$EXT \
-          ./cmd/tunnel-server
+          -o funnel-server-$GOOS-$GOARCH$EXT \
+          ./cmd/server
         
         echo "✅ Build completed successfully for ${{ matrix.name }}"
         
-        if [ -f "tunnel-client-$GOOS-$GOARCH$EXT" ] && [ -f "tunnel-server-$GOOS-$GOARCH$EXT" ]; then
+        if [ -f "funnel-$GOOS-$GOARCH$EXT" ] && [ -f "funnel-server-$GOOS-$GOARCH$EXT" ]; then
           echo "📦 Binary sizes:"
-          ls -lh tunnel-*-$GOOS-$GOARCH$EXT
+          ls -lh funnel*-$GOOS-$GOARCH$EXT
         else
           echo "❌ Build verification failed"
           exit 1
         fi
         
-        rm -f tunnel-client-$GOOS-$GOARCH$EXT tunnel-server-$GOOS-$GOARCH$EXT
+        rm -f funnel-$GOOS-$GOARCH$EXT funnel-server-$GOOS-$GOARCH$EXT
 
   build-summary:
     name: 📋 Build Summary

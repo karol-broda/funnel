@@ -14,8 +14,11 @@ LDFLAGS := -ldflags "\
 BIN_DIR := bin
 DIST_DIR := dist
 
-CLIENT_TARGET := $(BIN_DIR)/funnel
-SERVER_TARGET := $(BIN_DIR)/funnel-server
+CLIENT_NAME := funnel
+SERVER_NAME := funnel-server
+
+CLIENT_TARGET := $(BIN_DIR)/$(CLIENT_NAME)
+SERVER_TARGET := $(BIN_DIR)/$(SERVER_NAME)
 
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
@@ -59,7 +62,7 @@ $(CLIENT_TARGET): deps
 $(SERVER_TARGET): deps
 	@mkdir -p $(BIN_DIR)
 	@echo "building server..."
-	go build $(LDFLAGS) -o $(SERVER_TARGET) ./cmd/funnel-server
+	go build $(LDFLAGS) -o $(SERVER_TARGET) ./cmd/server
 
 .PHONY: run-client
 run-client: build-client
@@ -155,8 +158,8 @@ release: clean
 		$(eval GOARCH := $(word 2,$(subst /, ,$(platform))))\
 		$(eval EXT := $(if $(filter windows,$(GOOS)),.exe,))\
 		echo "building $(GOOS)/$(GOARCH)..." && \
-		GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(DIST_DIR)/funnel-$(GOOS)-$(GOARCH)$(EXT) ./cmd/funnel && \
-		GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(DIST_DIR)/funnel-server-$(GOOS)-$(GOARCH)$(EXT) ./cmd/funnel-server;\
+		GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(DIST_DIR)/$(CLIENT_NAME)-$(GOOS)-$(GOARCH)$(EXT) ./cmd/funnel && \
+		GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(DIST_DIR)/$(SERVER_NAME)-$(GOOS)-$(GOARCH)$(EXT) ./cmd/server;\
 	)
 	@echo "release binaries built in $(DIST_DIR)/"
 
@@ -164,7 +167,7 @@ release: clean
 install: build
 	@echo "installing binaries..."
 	go install $(LDFLAGS) ./cmd/funnel
-	go install $(LDFLAGS) ./cmd/funnel-server
+	go install $(LDFLAGS) ./cmd/server
 
 .PHONY: dev-setup
 dev-setup:
