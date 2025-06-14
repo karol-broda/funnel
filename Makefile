@@ -34,6 +34,9 @@ help:
 	@echo "  run-client     - run client with default settings"
 	@echo "  run-server     - run server with default settings"
 	@echo "  test           - run all tests"
+	@echo "  test-verbose   - run all tests with verbose output"
+	@echo "  test-coverage  - run all tests with coverage"
+	@echo "  test-race      - run all tests with race detection"
 	@echo "  clean          - clean build artifacts"
 	@echo "  deps           - download dependencies"
 	@echo "  tidy           - recursively tidy all module dependencies"
@@ -76,10 +79,72 @@ run-server: build-server
 test:
 	@echo "running tests..."
 	@echo "discovering modules..."
-	@for dir in $$(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do \
+	@failed=0; \
+	for dir in $$(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do \
 		echo "testing module in $$dir..."; \
-		(cd $$dir && go test ./...); \
-	done
+		if ! (cd $$dir && go test ./...); then \
+			echo "tests failed in $$dir"; \
+			failed=1; \
+		fi; \
+	done; \
+	if [ $$failed -eq 1 ]; then \
+		echo "some tests failed"; \
+		exit 1; \
+	fi
+	@echo "all modules tested successfully"
+
+.PHONY: test-verbose
+test-verbose:
+	@echo "running tests with verbose output..."
+	@echo "discovering modules..."
+	@failed=0; \
+	for dir in $$(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do \
+		echo "testing module in $$dir..."; \
+		if ! (cd $$dir && go test -v ./...); then \
+			echo "tests failed in $$dir"; \
+			failed=1; \
+		fi; \
+	done; \
+	if [ $$failed -eq 1 ]; then \
+		echo "some tests failed"; \
+		exit 1; \
+	fi
+	@echo "all modules tested successfully"
+
+.PHONY: test-coverage
+test-coverage:
+	@echo "running tests with coverage..."
+	@echo "discovering modules..."
+	@failed=0; \
+	for dir in $$(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do \
+		echo "testing module in $$dir with coverage..."; \
+		if ! (cd $$dir && go test -cover ./...); then \
+			echo "tests failed in $$dir"; \
+			failed=1; \
+		fi; \
+	done; \
+	if [ $$failed -eq 1 ]; then \
+		echo "some tests failed"; \
+		exit 1; \
+	fi
+	@echo "all modules tested successfully"
+
+.PHONY: test-race
+test-race:
+	@echo "running tests with race detection..."
+	@echo "discovering modules..."
+	@failed=0; \
+	for dir in $$(find . -name "go.mod" -not -path "./go.work*" -exec dirname {} \; | sort); do \
+		echo "testing module in $$dir with race detection..."; \
+		if ! (cd $$dir && go test -race ./...); then \
+			echo "tests failed in $$dir"; \
+			failed=1; \
+		fi; \
+	done; \
+	if [ $$failed -eq 1 ]; then \
+		echo "some tests failed"; \
+		exit 1; \
+	fi
 	@echo "all modules tested successfully"
 
 .PHONY: clean

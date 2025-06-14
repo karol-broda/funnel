@@ -73,9 +73,12 @@ func runHTTPClient(cmd *cobra.Command, args []string) {
 	}
 
 	if id == "" {
-		id = shared.MustGenerateNanoID()
-		logger.Info().Str("generated_id", id).Msg("generated tunnel ID")
+		id = shared.MustGenerateDomainSafeID()
+		logger.Info().Str("generated_id", id).Msg("generated domain-safe tunnel ID")
 	} else {
+		if err := shared.ValidateTunnelID(id); err != nil {
+			logger.Fatal().Err(err).Str("provided_id", id).Msg("invalid tunnel ID provided")
+		}
 		logger.Info().Str("provided_id", id).Msg("using provided tunnel ID")
 	}
 

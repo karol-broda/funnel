@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -196,12 +197,14 @@ func (tr *TunnelRouter) handleTunnelRequest(w http.ResponseWriter, r *http.Reque
 		Dur("body_read_time", bodyReadDuration).
 		Msg("request body read successfully")
 
+	headers := tr.prepareForwardingHeaders(r)
+
 	msg := &shared.Message{
 		Type:      "request",
 		RequestID: requestID,
 		Method:    r.Method,
 		Path:      r.URL.String(),
-		Headers:   r.Header,
+		Headers:   headers,
 		Body:      body,
 	}
 
@@ -260,6 +263,104 @@ func (tr *TunnelRouter) handleTunnelRequest(w http.ResponseWriter, r *http.Reque
 			Msg("request timeout waiting for tunnel response")
 		http.Error(w, "request timeout", http.StatusGatewayTimeout)
 	}
+}
+
+func (tr *TunnelRouter) prepareForwardingHeaders(r *http.Request) map[string][]string {
+	logger := shared.GetLogger("server.router")
+
+	headers := make(map[string][]string)
+	for k, v := range r.Header {
+		headers[k] = make([]string, len(v))
+		copy(headers[k], v)
+	}
+
+	clientIP := tr.getClientIP(r)
+
+	currentIP := r.RemoteAddr
+	if colonIndex := strings.LastIndex(currentIP, ":"); colonIndex != -1 {
+		currentIP = currentIP[:colonIndex]
+	}
+	if strings.HasPrefix(currentIP, "[") && strings.HasSuffix(currentIP, "]") {
+		currentIP = currentIP[1 : len(currentIP)-1]
+	}
+
+	if existingForwardedFor := headers["X-Forwarded-For"]; len(existingForwardedFor) > 0 {
+		headers["X-Forwarded-For"] = []string{existingForwardedFor[0] + ", " + currentIP}
+	} else {
+		headers["X-Forwarded-For"] = []string{currentIP}
+	}
+
+	if r.Host != "" {
+		headers["X-Forwarded-Host"] = []string{r.Host}
+	}
+
+	proto := "http"
+	if r.TLS != nil {
+		proto = "https"
+	}
+	if existingProto := r.Header.Get("X-Forwarded-Proto"); existingProto != "" {
+		proto = existingProto
+	}
+	headers["X-Forwarded-Proto"] = []string{proto}
+
+	headers["X-Real-IP"] = []string{clientIP}
+
+	if r.Header.Get("X-Forwarded-Server") == "" {
+		headers["X-Forwarded-Server"] = []string{r.Host}
+	}
+
+	logger.Debug().
+		Str("client_ip", clientIP).
+		Str("forwarded_host", r.Host).
+		Str("forwarded_proto", proto).
+		Str("forwarded_for", headers["X-Forwarded-For"][0]).
+		Msg("prepared forwarding headers")
+
+	return headers
+}
+
+func (tr *TunnelRouter) getClientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if commaIndex := strings.Index(xff, ","); commaIndex != -1 {
+			return strings.TrimSpace(xff[:commaIndex])
+		}
+		return strings.TrimSpace(xff)
+	}
+
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+
+	if xf := r.Header.Get("X-Forwarded"); xf != "" {
+		if forIndex := strings.Index(xf, "for="); forIndex != -1 {
+			start := forIndex + 4
+			end := strings.Index(xf[start:], ";")
+			if end == -1 {
+				end = len(xf)
+			} else {
+				end += start
+			}
+			return strings.TrimSpace(xf[start:end])
+		}
+	}
+
+	ip := r.RemoteAddr
+
+	if strings.HasPrefix(ip, "[") {
+		endBracket := strings.Index(ip, "]")
+		if endBracket != -1 {
+			return ip[1:endBracket]
+		}
+	}
+
+	if colonIndex := strings.LastIndex(ip, ":"); colonIndex != -1 {
+		if strings.Count(ip, ":") > 1 {
+			return ip
+		}
+		return ip[:colonIndex]
+	}
+
+	return ip
 }
 
 func (tr *TunnelRouter) readBody(r *http.Request) ([]byte, error) {

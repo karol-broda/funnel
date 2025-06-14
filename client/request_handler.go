@@ -129,26 +129,80 @@ func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
 func (c *Client) setRequestHeaders(req *http.Request, headers map[string][]string) {
 	logger := shared.GetTunnelLogger("client.handler", c.TunnelID)
 
-	filteredHeaders := 0
 	totalHeaders := 0
+	forwardedHeaders := 0
+	hostHeaderSet := false
 
 	for k, v := range headers {
 		totalHeaders += len(v)
-		if strings.HasPrefix(k, "X-") || k == "Host" || k == "Connection" {
-			filteredHeaders += len(v)
-			logger.Debug().Str("header", k).Msg("filtering out header")
+
+		if k == "Host" {
+			if !hostHeaderSet {
+				req.Host = c.LocalAddr
+				hostHeaderSet = true
+				logger.Debug().
+					Str("original_host", v[0]).
+					Str("local_host", req.Host).
+					Msg("host header updated for local service")
+			}
 			continue
 		}
+
+		if c.shouldSkipHeader(k) {
+			logger.Debug().Str("header", k).Msg("skipping connection-specific header")
+			continue
+		}
+
 		for _, val := range v {
 			req.Header.Add(k, val)
+			forwardedHeaders++
 		}
+	}
+
+	if !hostHeaderSet {
+		req.Host = c.LocalAddr
+		logger.Debug().
+			Str("local_host", req.Host).
+			Msg("host header set to local service address")
 	}
 
 	logger.Debug().
 		Int("total_headers", totalHeaders).
-		Int("filtered_headers", filteredHeaders).
-		Int("forwarded_headers", totalHeaders-filteredHeaders).
+		Int("forwarded_headers", forwardedHeaders).
+		Int("skipped_headers", totalHeaders-forwardedHeaders).
 		Msg("processed request headers")
+}
+
+func (c *Client) shouldSkipHeader(headerName string) bool {
+	// convert to lowercase for case-insensitive comparison
+	lower := strings.ToLower(headerName)
+
+	switch lower {
+	case "connection":
+		return true
+	case "upgrade":
+		return true
+	case "proxy-connection":
+		return true
+	case "proxy-authenticate":
+		return true
+	case "proxy-authorization":
+		return true
+	case "te":
+		return true
+	case "trailer":
+		return true
+	case "transfer-encoding":
+		return true
+	}
+
+	// forward all other headers, including:
+	// - X-Forwarded-* headers (important for upstream services to know about original request)
+	// - X-Real-IP (real client IP)
+	// - Standard HTTP headers
+	// - Custom application headers
+
+	return false
 }
 
 func (c *Client) sendResponse(requestID string, status int, headers http.Header, body []byte) {

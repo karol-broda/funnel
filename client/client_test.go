@@ -139,42 +139,55 @@ func TestClientHeaderFiltering(t *testing.T) {
 	}
 
 	tests := []struct {
-		name             string
-		inputHeaders     map[string][]string
-		expectedFiltered []string
-		expectedKept     []string
+		name            string
+		inputHeaders    map[string][]string
+		expectedSkipped []string
+		expectedKept    []string
 	}{
 		{
-			name: "filter x-headers",
+			name: "forward x-headers and proxy headers",
 			inputHeaders: map[string][]string{
 				"X-Real-IP":       {"192.168.1.1"},
 				"X-Forwarded-For": {"10.0.0.1"},
 				"Content-Type":    {"application/json"},
 				"Accept":          {"*/*"},
 			},
-			expectedFiltered: []string{"X-Real-IP", "X-Forwarded-For"},
-			expectedKept:     []string{"Content-Type", "Accept"},
+			expectedSkipped: []string{},
+			expectedKept:    []string{"X-Real-IP", "X-Forwarded-For", "Content-Type", "Accept"},
 		},
 		{
-			name: "filter host and connection",
+			name: "skip connection-specific headers",
 			inputHeaders: map[string][]string{
-				"Host":       {"example.com"},
-				"Connection": {"keep-alive"},
-				"User-Agent": {"test-client"},
+				"Connection":   {"keep-alive"},
+				"Upgrade":      {"websocket"},
+				"User-Agent":   {"test-client"},
+				"Content-Type": {"application/json"},
 			},
-			expectedFiltered: []string{"Host", "Connection"},
-			expectedKept:     []string{"User-Agent"},
+			expectedSkipped: []string{"Connection", "Upgrade"},
+			expectedKept:    []string{"User-Agent", "Content-Type"},
 		},
 		{
-			name: "keep standard headers",
+			name: "keep standard headers and forward proxy headers",
 			inputHeaders: map[string][]string{
-				"Content-Type":   {"text/plain"},
-				"Content-Length": {"42"},
-				"Accept":         {"text/html"},
-				"User-Agent":     {"test-browser"},
+				"Content-Type":      {"text/plain"},
+				"Content-Length":    {"42"},
+				"Accept":            {"text/html"},
+				"User-Agent":        {"test-browser"},
+				"X-Forwarded-Host":  {"example.com"},
+				"X-Forwarded-Proto": {"https"},
 			},
-			expectedFiltered: []string{},
-			expectedKept:     []string{"Content-Type", "Content-Length", "Accept", "User-Agent"},
+			expectedSkipped: []string{},
+			expectedKept:    []string{"Content-Type", "Content-Length", "Accept", "User-Agent", "X-Forwarded-Host", "X-Forwarded-Proto"},
+		},
+		{
+			name: "handle host header specially",
+			inputHeaders: map[string][]string{
+				"Host":         {"tunnel.example.com"},
+				"Content-Type": {"application/json"},
+				"Accept":       {"*/*"},
+			},
+			expectedSkipped: []string{}, // Host is handled specially, not skipped
+			expectedKept:    []string{"Content-Type", "Accept"},
 		},
 	}
 
@@ -187,10 +200,9 @@ func TestClientHeaderFiltering(t *testing.T) {
 
 			client.setRequestHeaders(req, tt.inputHeaders)
 
-			// check that filtered headers are not in the request
-			for _, header := range tt.expectedFiltered {
+			for _, header := range tt.expectedSkipped {
 				if values := req.Header.Values(header); len(values) > 0 {
-					t.Errorf("header %s should be filtered but found values: %v", header, values)
+					t.Errorf("header %s should be skipped but found values: %v", header, values)
 				}
 			}
 
@@ -198,6 +210,12 @@ func TestClientHeaderFiltering(t *testing.T) {
 			for _, header := range tt.expectedKept {
 				if values := req.Header.Values(header); len(values) == 0 {
 					t.Errorf("header %s should be kept but not found", header)
+				}
+			}
+
+			if tt.inputHeaders["Host"] != nil {
+				if req.Host != client.LocalAddr {
+					t.Errorf("Host should be set to local address %s, but got %s", client.LocalAddr, req.Host)
 				}
 			}
 		})

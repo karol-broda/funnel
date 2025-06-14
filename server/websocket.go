@@ -25,6 +25,16 @@ func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := shared.ValidateTunnelID(tunnelID); err != nil {
+		logger.Warn().
+			Str("remote_addr", r.RemoteAddr).
+			Str("tunnel_id", tunnelID).
+			Err(err).
+			Msg("websocket upgrade rejected - invalid tunnel id format")
+		http.Error(w, "invalid tunnel id format: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	tunnelLogger := shared.GetTunnelLogger("server.websocket", tunnelID)
 
 	tunnelLogger.Info().
