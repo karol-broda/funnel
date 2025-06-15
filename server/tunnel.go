@@ -255,28 +255,23 @@ func (t *Tunnel) SendMessage(msg *shared.Message) error {
 }
 
 func (t *Tunnel) routeMessages() {
-	defer func() {
-		if r := recover(); r != nil {
-			logger := shared.GetTunnelLogger("server.tunnel", t.ID)
-			logger.Error().Msgf("recovered in routemessages: %v", r)
-		}
-		channelCount := 0
-		t.ResponseMu.RLock()
-		for _, ch := range t.ResponseChannels {
-			close(ch)
-			channelCount++
-		}
-		t.ResponseMu.RUnlock()
-		if channelCount > 0 {
-			logger := shared.GetTunnelLogger("server.tunnel", t.ID)
-			logger.Warn().Int("closed_channels", channelCount).Msg("cleaned up pending response channels")
-		}
-		logger := shared.GetTunnelLogger("server.tunnel", t.ID)
-		logger.Debug().Msg("message router stopped")
-	}()
-
 	logger := shared.GetTunnelLogger("server.tunnel", t.ID)
 	logger.Debug().Msg("starting message router goroutine")
+
+	defer func() {
+		t.ResponseMu.Lock()
+		if len(t.ResponseChannels) > 0 {
+			logger.Warn().
+				Int("closed_channels", len(t.ResponseChannels)).
+				Msg("cleaned up pending response channels")
+			for id, ch := range t.ResponseChannels {
+				close(ch)
+				delete(t.ResponseChannels, id)
+			}
+		}
+		t.ResponseMu.Unlock()
+		logger.Debug().Msg("message router stopped")
+	}()
 
 	for msg := range t.incomingMessages {
 		switch msg.Type {
@@ -286,7 +281,9 @@ func (t *Tunnel) routeMessages() {
 				select {
 				case respChan <- msg:
 				default:
-					// Non-blocking send
+					logger.Warn().
+						Str("request_id", msg.RequestID).
+						Msg("response channel was full, response dropped")
 				}
 			}
 			t.ResponseMu.RUnlock()
@@ -315,15 +312,8 @@ func (t *Tunnel) registerResponseChannel(requestID string) chan *shared.Message 
 
 func (t *Tunnel) unregisterResponseChannel(requestID string) {
 	t.ResponseMu.Lock()
-	if ch, ok := t.ResponseChannels[requestID]; ok {
-		close(ch)
-		delete(t.ResponseChannels, requestID)
-	}
-	t.ResponseMu.Unlock()
-	logger := shared.GetRequestLogger("server.tunnel", t.ID, requestID)
-	logger.Debug().
-		Str("request_id", requestID).
-		Msg("response channel unregistered")
+	defer t.ResponseMu.Unlock()
+	delete(t.ResponseChannels, requestID)
 }
 
 func (t *Tunnel) Run() {
@@ -371,13 +361,11 @@ func (t *Tunnel) Run() {
 			t.routeMessages()
 		}()
 
-		// Wait for all goroutines to complete
 		go func() {
 			wg.Wait()
 			close(done)
 		}()
 
-		// Block until all goroutines are done
 		<-done
 		logger.Debug().Msg("tunnel has stopped")
 	})
@@ -387,13 +375,9 @@ func (t *Tunnel) closeConnection() {
 	t.closeOnce.Do(func() {
 		if t.conn != nil {
 			t.conn.Close()
-			t.conn = nil
 		}
 		if t.outgoingMessages != nil {
 			close(t.outgoingMessages)
-			t.outgoingMessages = nil
 		}
-		logger := shared.GetTunnelLogger("server.tunnel", t.ID)
-		logger.Debug().Msg("tunnel has stopped")
 	})
 }

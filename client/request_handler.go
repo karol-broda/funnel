@@ -3,7 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -13,7 +13,11 @@ import (
 	"github.com/karol-broda/funnel/shared"
 )
 
-func (c *Client) handleRequests() {
+func (c *Client) readPump() {
+	defer func() {
+		c.requestWg.Wait()
+		c.Close()
+	}()
 	logger := shared.GetTunnelLogger("client.handler", c.TunnelID)
 
 	logger.Info().Msg("starting request handler loop")
@@ -43,42 +47,54 @@ func (c *Client) handleRequests() {
 
 	requestCount := 0
 	for {
-		var msg shared.Message
-		readStart := time.Now()
-		err := c.Conn.ReadJSON(&msg)
-		readDuration := time.Since(readStart)
-
-		if err != nil {
-			logger.Error().Err(err).Dur("read_duration", readDuration).Msg("websocket read error")
+		select {
+		case <-c.ctx.Done():
+			logger.Info().Msg("read pump shutting down due to context cancellation")
 			return
-		}
-
-		logger.Debug().Dur("message_read_time", readDuration).Str("message_type", msg.Type).Msg("received message from server")
-
-		switch msg.Type {
-		case "request":
-			requestCount++
-			logger.Info().
-				Int("request_count", requestCount).
-				Str("request_id", msg.RequestID).
-				Str("method", msg.Method).
-				Str("path", msg.Path).
-				Int("body_size", len(msg.Body)).
-				Msg("received request from server")
-
-			go func(m shared.Message) {
-				c.processRequest(httpClient, m)
-			}(msg)
-		case "request_cancel":
-			logger.Info().Str("request_id", msg.RequestID).Msg("received request cancellation")
-			c.ongoingRequestsMu.Lock()
-			if cancel, ok := c.ongoingRequests[msg.RequestID]; ok {
-				cancel()
-				delete(c.ongoingRequests, msg.RequestID)
-			}
-			c.ongoingRequestsMu.Unlock()
 		default:
-			logger.Debug().Str("message_type", msg.Type).Msg("ignoring unhandled message type")
+			var msg shared.Message
+			readStart := time.Now()
+			err := c.Conn.ReadJSON(&msg)
+			readDuration := time.Since(readStart)
+
+			if err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+					logger.Error().Err(err).Dur("read_duration", readDuration).Msg("unexpected websocket read error")
+				} else {
+					logger.Info().Dur("read_duration", readDuration).Msg("websocket connection closed gracefully")
+				}
+				return
+			}
+
+			logger.Debug().Dur("message_read_time", readDuration).Str("message_type", msg.Type).Msg("received message from server")
+
+			switch msg.Type {
+			case "request":
+				requestCount++
+				logger.Info().
+					Int("request_count", requestCount).
+					Str("request_id", msg.RequestID).
+					Str("method", msg.Method).
+					Str("path", msg.Path).
+					Int("body_size", len(msg.Body)).
+					Msg("received request from server")
+
+				c.requestWg.Add(1)
+				go func(m shared.Message) {
+					defer c.requestWg.Done()
+					c.processRequest(httpClient, m)
+				}(msg)
+			case "request_cancel":
+				logger.Info().Str("request_id", msg.RequestID).Msg("received request cancellation")
+				c.ongoingRequestsMu.Lock()
+				if cancel, ok := c.ongoingRequests[msg.RequestID]; ok {
+					cancel()
+					delete(c.ongoingRequests, msg.RequestID)
+				}
+				c.ongoingRequestsMu.Unlock()
+			default:
+				logger.Debug().Str("message_type", msg.Type).Msg("ignoring unhandled message type")
+			}
 		}
 	}
 }
@@ -96,28 +112,76 @@ func (c *Client) setupHeartbeat() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			if c.Conn == nil {
-				logger.Debug().Msg("connection is nil, stopping ping routine")
+		for {
+			select {
+			case <-c.ctx.Done():
+				logger.Debug().Msg("context cancelled, stopping ping routine")
 				return
-			}
+			case <-ticker.C:
+				if c.Conn == nil {
+					logger.Debug().Msg("connection is nil, stopping ping routine")
+					return
+				}
 
-			lastPong := c.getLastPong()
-			if time.Since(lastPong) > 90*time.Second {
-				logger.Warn().
-					Dur("time_since_last_pong", time.Since(lastPong)).
-					Msg("no pong received recently, connection may be stale")
-			}
+				lastPong := c.getLastPong()
+				if time.Since(lastPong) > 90*time.Second {
+					logger.Warn().
+						Dur("time_since_last_pong", time.Since(lastPong)).
+						Msg("no pong received recently, connection may be stale")
+					c.Close()
+					return
+				}
 
+				select {
+				case c.outgoingMessages <- &shared.Message{Type: "ping"}:
+					logger.Debug().Msg("ping message queued")
+				case <-c.ctx.Done():
+					logger.Debug().Msg("context cancelled while queuing ping, stopping ping routine")
+					return
+				default:
+					logger.Warn().Msg("outgoing message channel full, cannot queue ping")
+				}
+			}
+		}
+	}()
+
+	logger.Debug().Msg("heartbeat mechanism setup completed")
+}
+
+func (c *Client) writePump() {
+	defer func() {
+		c.Close()
+	}()
+	logger := shared.GetTunnelLogger("client.handler", c.TunnelID)
+	logger.Info().Msg("starting writer loop")
+
+	for msg := range c.outgoingMessages {
+		if msg.Type == "ping" {
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				logger.Error().Err(err).Msg("failed to send ping")
 				return
 			}
 			logger.Debug().Msg("ping sent to server")
+			continue
 		}
-	}()
 
-	logger.Debug().Msg("heartbeat mechanism setup completed")
+		c.connMu.Lock()
+		err := c.Conn.WriteJSON(msg)
+		c.connMu.Unlock()
+
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to write json message")
+			return
+		}
+
+		if msg.RequestID != "" {
+			logger.Debug().
+				Str("request_id", msg.RequestID).
+				Str("type", msg.Type).
+				Msg("message sent to server")
+		}
+	}
+	logger.Info().Msg("writer loop finished")
 }
 
 func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
@@ -126,13 +190,12 @@ func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
 	select {
 	case c.requestSemaphore <- struct{}{}:
 		defer func() { <-c.requestSemaphore }()
-	default:
-		logger.Warn().Msg("too many concurrent requests, rejecting")
-		c.sendError(msg.RequestID, 503)
+	case <-c.ctx.Done():
+		logger.Warn().Msg("shutting down, not processing new request")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	reqCtx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
 	defer cancel()
 
 	c.ongoingRequestsMu.Lock()
@@ -154,46 +217,40 @@ func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
 		Int("concurrent_requests", len(c.requestSemaphore)).
 		Msg("processing request")
 
-	localURL := fmt.Sprintf("http://%s%s", c.LocalAddr, msg.Path)
-	req, err := http.NewRequestWithContext(ctx, msg.Method, localURL, bytes.NewReader(msg.Body))
+	req, err := http.NewRequestWithContext(reqCtx, msg.Method, "http://"+c.LocalAddr+msg.Path, bytes.NewReader(msg.Body))
 	if err != nil {
-		logger.Error().Err(err).Str("local_url", localURL).Msg("failed to create request")
-		c.sendError(msg.RequestID, 500)
+		logger.Error().Err(err).Msg("failed to create request")
+		if reqCtx.Err() == nil {
+			c.sendError(msg.RequestID, http.StatusInternalServerError, "failed to create request")
+		}
 		return
 	}
 
 	c.setRequestHeaders(req, msg.Headers)
 
-	logger.Debug().Str("local_url", localURL).Msg("forwarding request to local service")
+	logger.Debug().
+		Int("concurrent_requests", len(c.requestSemaphore)).
+		Int("header_count", len(req.Header)).
+		Str("local_url", req.URL.String()).
+		Msg("forwarding request to local service")
 
-	requestStart := time.Now()
+	upstreamResponseTimeStart := time.Now()
 	resp, err := httpClient.Do(req)
-	requestDuration := time.Since(requestStart)
 
 	if err != nil {
-		logger.Error().Err(err).
-			Str("local_url", localURL).
-			Dur("request_duration", requestDuration).
-			Msg("request to local service failed")
-
-		if ctx.Err() == context.Canceled {
-			logger.Info().Msg("request to local service was canceled")
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			logger.Warn().Err(err).Msg("request to local service was canceled or timed out")
 			return
 		}
-		if ctx.Err() == context.DeadlineExceeded {
-			logger.Warn().Msg("request to local service timed out")
-			c.sendError(msg.RequestID, 504)
-			return
-		}
-
-		c.sendError(msg.RequestID, 502)
+		logger.Error().Err(err).Msg("failed to make request to local service")
+		c.sendError(msg.RequestID, http.StatusBadGateway, "local service connection failed")
 		return
 	}
 	defer resp.Body.Close()
 
 	logger.Debug().
 		Int("status_code", resp.StatusCode).
-		Dur("upstream_response_time", requestDuration).
+		Dur("upstream_response_time", time.Since(upstreamResponseTimeStart)).
 		Int64("content_length", resp.ContentLength).
 		Msg("received response from local service")
 
@@ -205,7 +262,7 @@ func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
 		logger.Error().Err(err).
 			Dur("body_read_duration", bodyReadDuration).
 			Msg("failed to read response body")
-		c.sendError(msg.RequestID, 500)
+		c.sendError(msg.RequestID, http.StatusBadGateway, "failed to read response body")
 		return
 	}
 
@@ -214,136 +271,94 @@ func (c *Client) processRequest(httpClient *http.Client, msg shared.Message) {
 		Int("status_code", resp.StatusCode).
 		Int("response_size", len(body)).
 		Dur("total_process_time", totalProcessTime).
-		Dur("upstream_time", requestDuration).
+		Dur("upstream_time", time.Since(upstreamResponseTimeStart)).
 		Dur("body_read_time", bodyReadDuration).
 		Msg("request processed successfully")
 
-	c.sendResponse(msg.RequestID, resp.StatusCode, resp.Header, body)
+	select {
+	case <-c.ctx.Done():
+		logger.Info().Str("request_id", msg.RequestID).Msg("shutting down, not sending response")
+		return
+	default:
+		c.sendResponse(msg.RequestID, resp.StatusCode, resp.Header, body)
+	}
 }
 
 func (c *Client) setRequestHeaders(req *http.Request, headers map[string][]string) {
-	logger := shared.GetTunnelLogger("client.handler", c.TunnelID)
+	req.Header = make(http.Header)
 
-	totalHeaders := 0
-	forwardedHeaders := 0
-	hostHeaderSet := false
-
-	for k, v := range headers {
-		totalHeaders += len(v)
-
-		if k == "Host" {
-			if !hostHeaderSet {
-				req.Host = c.LocalAddr
-				hostHeaderSet = true
-				logger.Debug().
-					Str("original_host", v[0]).
-					Str("local_host", req.Host).
-					Msg("host header updated for local service")
-			}
-			continue
-		}
-
+	for k, values := range headers {
 		if c.shouldSkipHeader(k) {
-			logger.Debug().Str("header", k).Msg("skipping connection-specific header")
 			continue
 		}
-
-		for _, val := range v {
-			req.Header.Add(k, val)
-			forwardedHeaders++
+		if strings.ToLower(k) == "host" {
+			continue
+		}
+		for _, value := range values {
+			req.Header.Add(k, value)
 		}
 	}
-
-	if !hostHeaderSet {
-		req.Host = c.LocalAddr
-		logger.Debug().
-			Str("local_host", req.Host).
-			Msg("host header set to local service address")
-	}
-
-	logger.Debug().
-		Int("total_headers", totalHeaders).
-		Int("forwarded_headers", forwardedHeaders).
-		Int("skipped_headers", totalHeaders-forwardedHeaders).
-		Msg("processed request headers")
+	req.Host = c.LocalAddr
 }
 
 func (c *Client) shouldSkipHeader(headerName string) bool {
 	lower := strings.ToLower(headerName)
-
-	switch lower {
-	case "connection":
-		return true
-	case "upgrade":
-		return true
-	case "proxy-connection":
-		return true
-	case "proxy-authenticate":
-		return true
-	case "proxy-authorization":
-		return true
-	case "te":
-		return true
-	case "trailer":
-		return true
-	case "transfer-encoding":
-		return true
-	}
-
-	return false
+	return lower == "connection" ||
+		lower == "keep-alive" ||
+		lower == "proxy-authenticate" ||
+		lower == "proxy-authorization" ||
+		lower == "te" ||
+		lower == "trailer" ||
+		lower == "transfer-encoding" ||
+		lower == "upgrade" ||
+		lower == "proxy-connection"
 }
 
 func (c *Client) sendResponse(requestID string, status int, headers http.Header, body []byte) {
 	logger := shared.GetRequestLogger("client.handler", c.TunnelID, requestID)
 
-	sendStart := time.Now()
-	response := shared.Message{
+	respHeaders := make(map[string][]string)
+	for k, v := range headers {
+		if !c.shouldSkipHeader(k) {
+			respHeaders[k] = v
+		}
+	}
+
+	respMsg := &shared.Message{
 		Type:      "response",
 		RequestID: requestID,
 		Status:    status,
-		Headers:   headers,
+		Headers:   respHeaders,
 		Body:      body,
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.Conn.WriteJSON(&response); err != nil {
-		sendDuration := time.Since(sendStart)
-		logger.Error().Err(err).
-			Dur("send_duration", sendDuration).
-			Int("response_size", len(body)).
-			Msg("failed to send response")
-	} else {
-		sendDuration := time.Since(sendStart)
+	select {
+	case c.outgoingMessages <- respMsg:
+		sendDuration := time.Since(time.Now())
 		logger.Debug().
-			Dur("send_duration", sendDuration).
 			Int("status_code", status).
+			Int("header_count", len(respHeaders)).
 			Int("response_size", len(body)).
-			Int("header_count", len(headers)).
-			Msg("response sent successfully")
+			Dur("send_duration", sendDuration).
+			Msg("response queued successfully")
+	default:
+		logger.Warn().Msg("outgoing message channel full, dropping response")
 	}
 }
 
-func (c *Client) sendError(requestID string, status int) {
+func (c *Client) sendError(requestID string, statusCode int, error string) {
 	logger := shared.GetRequestLogger("client.handler", c.TunnelID, requestID)
-
-	logger.Warn().Int("error_status", status).Msg("sending error response")
-
-	errorBody := []byte(http.StatusText(status))
-	response := shared.Message{
+	logger.Error().Int("status_code", statusCode).Str("error", error).Msg("sending error response")
+	errMessage := &shared.Message{
 		Type:      "response",
-		TunnelID:  c.TunnelID,
 		RequestID: requestID,
-		Status:    status,
-		Headers: map[string][]string{
-			"Content-Type":   {"text/plain"},
-			"Content-Length": {fmt.Sprintf("%d", len(errorBody))},
-		},
-		Body: errorBody,
+		Status:    statusCode,
+		Headers:   http.Header{"Content-Type": []string{"text/plain"}},
+		Body:      []byte(error),
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := c.Conn.WriteJSON(&response); err != nil {
-		logger.Error().Err(err).Int("error_status", status).Msg("failed to send error response")
+	select {
+	case c.outgoingMessages <- errMessage:
+	default:
+		logger.Warn().Int("status", statusCode).Msg("outgoing message channel full, dropping error response")
 	}
 }

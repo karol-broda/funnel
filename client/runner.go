@@ -1,85 +1,98 @@
 package client
 
 import (
+	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/karol-broda/funnel/shared"
 )
 
-func (c *Client) runWithReconnection() {
-	logger := shared.GetTunnelLogger("client.runner", c.TunnelID)
+const maxReconnectDelay = 30 * time.Second
 
-	logger.Info().Str("local_addr", c.LocalAddr).Str("server_url", c.ServerURL).Msg("starting tunnel client with reconnection logic")
+func Run(tunnelID, serverURL, localAddr string, shutdown <-chan struct{}) {
+	logger := shared.GetTunnelLogger("client.runner", tunnelID)
+	logger.Info().Str("local_addr", localAddr).Str("server_url", serverURL).Msg("starting tunnel client with reconnection logic")
 
 	reconnectAttempts := 0
-	maxReconnectAttempts := 10
-	baseRetryDelay := 5 * time.Second
 
 	for {
-		reconnectAttempts++
-		logger.Info().Int("attempt", reconnectAttempts).Str("server_url", c.ServerURL).Msg("attempting to connect to server")
-
-		err := c.connect()
-		if err != nil {
-			// categorize the error for better diagnostics
-			errorCategory := categorizeConnectionError(err)
-
-			if reconnectAttempts >= maxReconnectAttempts {
-				logger.Error().
-					Err(err).
-					Str("error_category", errorCategory).
-					Int("max_attempts", maxReconnectAttempts).
-					Msg("maximum reconnection attempts reached, backing off")
-				time.Sleep(30 * time.Second)
-				reconnectAttempts = 0
-				continue
-			}
-
-			retryDelay := time.Duration(reconnectAttempts) * baseRetryDelay
-			if retryDelay > 30*time.Second {
-				retryDelay = 30 * time.Second
-			}
-
-			logger.Error().
-				Err(err).
-				Str("error_category", errorCategory).
-				Int("attempt", reconnectAttempts).
-				Dur("retry_in", retryDelay).
-				Msg("connection failed, retrying")
-			time.Sleep(retryDelay)
-			continue
+		select {
+		case <-shutdown:
+			logger.Info().Msg("shutdown signal received, stopping client runner.")
+			return
+		default:
+			// contunue
 		}
 
-		reconnectAttempts = 0
-		logger.Info().Msg("connected successfully")
+		c := New(tunnelID, serverURL, localAddr)
 
-		u, err := url.Parse(c.ServerURL)
+		logger.Info().Int("attempt", reconnectAttempts+1).Msg("attempting to connect to server")
+		err := c.connect(c.ctx)
+
 		if err != nil {
+			errorCategory := categorizeConnectionError(err)
+			logger.Error().Err(err).Str("error_category", errorCategory).Msg("connection failed")
+
+			select {
+			case <-shutdown:
+				continue
+			case <-time.After(getReconnectDelay(reconnectAttempts)):
+				reconnectAttempts++
+				continue
+			}
+		}
+
+		logger.Info().Msg("connected successfully")
+		reconnectAttempts = 0
+
+		if u, err := url.Parse(c.ServerURL); err != nil {
 			logger.Error().Err(err).Msg("failed to parse server url for public url display")
 		} else {
 			publicURL := fmt.Sprintf("http://%s.%s", c.TunnelID, u.Host)
 			logger.Info().Str("public_url", publicURL).Msg("tunnel is available")
 		}
 
-		connectionStart := time.Now()
-		c.handleRequests()
-		connectionDuration := time.Since(connectionStart)
+		var wg sync.WaitGroup
+		wg.Add(2)
 
-		logger.Warn().
-			Dur("connection_duration", connectionDuration).
-			Msg("connection lost, reconnecting")
+		runCtx, cancelRun := context.WithCancel(context.Background())
 
-		// cleanup connection state
-		if c.Conn != nil {
-			c.Conn.Close()
-			c.Conn = nil
+		go func() {
+			defer wg.Done()
+			c.readPump()
+			cancelRun()
+		}()
+
+		go func() {
+			defer wg.Done()
+			c.writePump()
+			cancelRun()
+		}()
+
+		select {
+		case <-shutdown:
+			logger.Info().Msg("shutdown during active connection, closing.")
+			c.Close()
+		case <-runCtx.Done():
+			logger.Warn().Msg("connection lost, will attempt to reconnect.")
 		}
 
-		time.Sleep(2 * time.Second)
+		wg.Wait()
+		c.Close()
 	}
+}
+
+func getReconnectDelay(attempts int) time.Duration {
+	delay := time.Duration(math.Pow(2, float64(attempts))) * time.Second
+	if delay > maxReconnectDelay {
+		return maxReconnectDelay
+	}
+	return delay
 }
 
 func categorizeConnectionError(err error) string {

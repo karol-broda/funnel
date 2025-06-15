@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strings"
@@ -50,7 +51,7 @@ func TestClientConnectionHandling(t *testing.T) {
 				TunnelID:  "test-tunnel",
 			}
 
-			err := client.connect()
+			err := client.connect(context.Background())
 
 			if tt.expectError {
 				if err == nil {
@@ -186,7 +187,7 @@ func TestClientHeaderFiltering(t *testing.T) {
 				"Content-Type": {"application/json"},
 				"Accept":       {"*/*"},
 			},
-			expectedSkipped: []string{}, // Host is handled specially, not skipped
+			expectedSkipped: []string{},
 			expectedKept:    []string{"Content-Type", "Accept"},
 		},
 	}
@@ -206,7 +207,6 @@ func TestClientHeaderFiltering(t *testing.T) {
 				}
 			}
 
-			// check that kept headers are in the request
 			for _, header := range tt.expectedKept {
 				if values := req.Header.Values(header); len(values) == 0 {
 					t.Errorf("header %s should be kept but not found", header)

@@ -178,3 +178,11 @@ func MustGenerateNanoID(length ...int) string {
 	}
 	return id
 }
+
+func GetBaseDomain(domain string) string {
+	parts := strings.Split(domain, ".")
+	if len(parts) > 2 {
+		return strings.Join(parts[len(parts)-2:], ".")
+	}
+	return domain
+}

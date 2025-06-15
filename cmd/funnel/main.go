@@ -37,7 +37,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "print version information",
 	Run: func(cmd *cobra.Command, args []string) {
-		version.PrintVersionInfo("tunnel-client")
+		version.PrintVersionInfo("funnel-client")
 	},
 }
 
@@ -72,39 +72,36 @@ func runHTTPClient(cmd *cobra.Command, args []string) {
 		logger.Info().Str("port", localArg).Str("constructed_local", local).Msg("constructed local address from port")
 	}
 
-	if id == "" {
-		id = shared.MustGenerateDomainSafeID()
-		logger.Info().Str("generated_id", id).Msg("generated domain-safe tunnel ID")
-	} else {
-		if err := shared.ValidateTunnelID(id); err != nil {
-			logger.Fatal().Err(err).Str("provided_id", id).Msg("invalid tunnel ID provided")
-		}
-		logger.Info().Str("provided_id", id).Msg("using provided tunnel ID")
-	}
-
 	if server == "" {
 		logger.Fatal().Msg("server URL cannot be empty")
 	}
 
-	c := client.NewClient(server, local, id)
+	if id == "" {
+		generatedID, err := shared.GenerateDomainSafeID()
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to generate tunnel ID")
+		}
+		id = generatedID
+		logger.Info().Str("generated_id", id).Msg("generated tunnel ID")
+	} else {
+		logger.Info().Str("provided_id", id).Msg("using provided tunnel ID")
+	}
 
-	logger.Info().Msg("starting tunnel client")
-	logger.Info().Str("server", c.ServerURL).Msg("server url")
-	logger.Info().Str("local", c.LocalAddr).Msg("local address")
-	logger.Info().Str("tunnel_id", c.TunnelID).Msg("tunnel id")
+	logger.Info().Msg("client configuration validated, starting tunnel")
 
+	shutdownChan := make(chan struct{})
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		sig := <-sigChan
-		logger.Info().Str("signal", sig.String()).Msg("received shutdown signal")
-		logger.Info().Msg("client shutting down")
-		os.Exit(0)
+		<-sigChan
+		logger.Info().Msg("received shutdown signal, initiating shutdown")
+		close(shutdownChan)
 	}()
 
-	logger.Info().Msg("client configuration validated, starting tunnel")
-	c.Run()
+	client.Run(id, server, local, shutdownChan)
+
+	logger.Info().Msg("client has shut down")
 }
 
 func main() {

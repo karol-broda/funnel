@@ -218,15 +218,22 @@ version:
 release: clean
 	@echo "building release binaries..."
 	@mkdir -p $(DIST_DIR)
-	$(foreach platform,$(PLATFORMS),\
-		$(eval GOOS := $(word 1,$(subst /, ,$(platform))))\
-		$(eval GOARCH := $(word 2,$(subst /, ,$(platform))))\
-		$(eval EXT := $(if $(filter windows,$(GOOS)),.exe,))\
-		echo "building $(GOOS)/$(GOARCH)..." && \
-		GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(DIST_DIR)/$(CLIENT_NAME)-$(GOOS)-$(GOARCH)$(EXT) ./cmd/funnel && \
-		GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(LDFLAGS) -o $(DIST_DIR)/$(SERVER_NAME)-$(GOOS)-$(GOARCH)$(EXT) ./cmd/server;\
-	)
+	$(eval SELECTED_PLATFORMS := $(filter-out release,$(MAKECMDGOALS)))
+	$(eval BUILD_PLATFORMS := $(if $(SELECTED_PLATFORMS),$(SELECTED_PLATFORMS),$(PLATFORMS)))
+	@for platform in $(BUILD_PLATFORMS); do \
+		GOOS=$$(echo $$platform | cut -d/ -f1); \
+		GOARCH=$$(echo $$platform | cut -d/ -f2); \
+		EXT=""; \
+		if [ "$$GOOS" = "windows" ]; then \
+			EXT=".exe"; \
+		fi; \
+		echo "building $$GOOS/$$GOARCH..."; \
+		GOOS=$$GOOS GOARCH=$$GOARCH go build $(LDFLAGS) -o $(DIST_DIR)/$(CLIENT_NAME)-$$GOOS-$$GOARCH$$EXT ./cmd/funnel && \
+		GOOS=$$GOOS GOARCH=$$GOARCH go build $(LDFLAGS) -o $(DIST_DIR)/$(SERVER_NAME)-$$GOOS-$$GOARCH$$EXT ./cmd/server; \
+	done
 	@echo "release binaries built in $(DIST_DIR)/"
+
+$(foreach platform,$(PLATFORMS),$(eval .PHONY: $(platform)))
 
 .PHONY: install
 install: build

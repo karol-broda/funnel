@@ -1,7 +1,7 @@
 package client
 
 import (
-	"fmt"
+	"context"
 	"net/url"
 	"time"
 
@@ -10,35 +10,34 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func (c *Client) connect() error {
+func (c *Client) connect(ctx context.Context) error {
 	logger := shared.GetTunnelLogger("client.connection", c.TunnelID)
+	logger.Debug().Msg("starting connection process")
 
-	connectStart := time.Now()
-	logger.Debug().Str("server_url", c.ServerURL).Msg("starting connection process")
+	connectionStart := time.Now()
 
 	u, err := url.Parse(c.ServerURL)
 	if err != nil {
-		logger.Error().Err(err).Str("server_url", c.ServerURL).Msg("failed to parse server URL")
+		logger.Error().Err(err).Msg("failed to parse server url")
 		return err
 	}
 
 	wsScheme := "ws"
 	if u.Scheme == "https" {
 		wsScheme = "wss"
-		logger.Debug().Msg("using secure websocket connection (wss)")
-	} else {
-		logger.Debug().Msg("using insecure websocket connection (ws)")
 	}
 
-	wsURL := fmt.Sprintf("%s://%s/?id=%s", wsScheme, u.Host, c.TunnelID)
+	u.Scheme = wsScheme
+	u.RawQuery = "id=" + c.TunnelID
+	wsURL := u.String()
+
 	logger.Debug().Str("websocket_url", wsURL).Msg("constructed websocket URL")
 
-	dialer := websocket.Dialer{
-		HandshakeTimeout:  15 * time.Second,
-		ReadBufferSize:    1024 * 64,
-		WriteBufferSize:   1024 * 64,
-		EnableCompression: true,
-	}
+	dialer := *websocket.DefaultDialer
+	dialer.HandshakeTimeout = 15 * time.Second
+	dialer.EnableCompression = true
+	dialer.ReadBufferSize = 65536
+	dialer.WriteBufferSize = 65536
 
 	logger.Debug().
 		Dur("handshake_timeout", dialer.HandshakeTimeout).
@@ -48,7 +47,7 @@ func (c *Client) connect() error {
 		Msg("websocket dialer configured")
 
 	dialStart := time.Now()
-	conn, resp, err := dialer.Dial(wsURL, nil)
+	conn, resp, err := dialer.DialContext(ctx, wsURL, nil)
 	dialDuration := time.Since(dialStart)
 
 	if err != nil {
@@ -62,19 +61,19 @@ func (c *Client) connect() error {
 		return err
 	}
 
-	conn.SetReadDeadline(time.Now().Add(300 * time.Second))
-	conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
-
-	connectDuration := time.Since(connectStart)
+	totalConnectTime := time.Since(connectionStart)
 	logger.Info().
-		Dur("total_connect_time", connectDuration).
 		Dur("dial_time", dialDuration).
+		Dur("total_connect_time", totalConnectTime).
 		Msg("websocket connection established")
 
-	if resp != nil {
-		logger.Debug().Int("http_status", resp.StatusCode).Msg("websocket upgrade successful")
-	}
+	logger.Debug().
+		Int("http_status", resp.StatusCode).
+		Msg("websocket upgrade successful")
 
 	c.Conn = conn
+	c.connMu.Lock()
+	c.lastPong = time.Now()
+	c.connMu.Unlock()
 	return nil
 }

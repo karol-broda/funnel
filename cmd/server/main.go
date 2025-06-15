@@ -1,12 +1,11 @@
 package main
 
 import (
+	"crypto/tls"
+	"fmt"
 	"net/http"
 	"os"
-	"os/signal"
-	"path/filepath"
-	"syscall"
-	"time"
+	"runtime"
 
 	"github.com/karol-broda/funnel/server"
 	"github.com/karol-broda/funnel/shared"
@@ -15,69 +14,124 @@ import (
 )
 
 var (
-	port string
+	port               int
+	tlsPort            int
+	host               string
+	enableTls          bool
+	certDir            string
+	letsEncryptEmail   string
+	dnsProvidersConfig string
 )
 
-var rootCmd = &cobra.Command{
-	Use:   filepath.Base(os.Args[0]),
-	Short: "a tunnel server for proxying connections",
-	Long:  `a tunnel server that allows clients to create tunnels and proxy connections through them`,
-	Run:   runServer,
+func getDefaultCertDir() string {
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "freebsd" {
+		return "/var/lib/funnel/certs"
+	}
+	return "./certs"
 }
 
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "print version information",
-	Run: func(cmd *cobra.Command, args []string) {
-		version.PrintVersionInfo("tunnel-server")
-	},
-}
+func main() {
+	rootCmd := &cobra.Command{
+		Use:   "server",
+		Short: "funnel server",
+		Run:   runServer,
+	}
+	versionCmd := &cobra.Command{
+		Use:   "version",
+		Short: "print version information",
+		Run: func(cmd *cobra.Command, args []string) {
+			version.PrintVersionInfo("tunnel-server")
+		},
+	}
 
-func init() {
-	rootCmd.PersistentFlags().StringVarP(&port, "port", "p", "8080", "server port")
+	rootCmd.PersistentFlags().IntVarP(&port, "port", "p", 8080, "port to listen on for http")
+	rootCmd.PersistentFlags().IntVar(&tlsPort, "tls-port", 8443, "port to listen on for https")
+	rootCmd.PersistentFlags().StringVar(&host, "host", "0.0.0.0", "host to listen on")
+	rootCmd.PersistentFlags().BoolVar(&enableTls, "enable-tls", false, "enable tls with let's encrypt")
+	rootCmd.PersistentFlags().StringVar(&certDir, "cert-dir", getDefaultCertDir(), "directory to store tls certificates")
+	rootCmd.PersistentFlags().StringVar(&letsEncryptEmail, "letsencrypt-email", "", "email address for let's encrypt")
+	rootCmd.PersistentFlags().StringVar(&dnsProvidersConfig, "dns-providers-config", "", "path to dns providers config file")
 	rootCmd.AddCommand(versionCmd)
+
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 func runServer(cmd *cobra.Command, args []string) {
-	shared.InitializeLogging(shared.DefaultLogConfig())
-
-	logger := shared.GetLogger("server")
-
-	logger.Info().
-		Str("version", version.GetVersion()).
-		Str("port", port).
-		Msg("tunnel server starting up")
+	logger := shared.GetLogger("server.main")
 
 	s := server.NewServer()
 	tunnelRouter := server.NewTunnelRouter(s)
 
-	s.SetRouter(tunnelRouter)
+	if enableTls {
+		if letsEncryptEmail == "" || dnsProvidersConfig == "" {
+			logger.Fatal().Msg("--letsencrypt-email and --dns-providers-config must be set when --enable-tls is true")
+		}
 
-	logger.Info().Str("port", port).Msg("tunnel server starting")
-	logger.Info().Str("tunnel_format", "<tunnel-id>.localhost:"+port).Msg("tunnels will be available at")
+		logger.Info().
+			Str("email", letsEncryptEmail).
+			Str("cert_dir", certDir).
+			Str("dns_config", dnsProvidersConfig).
+			Msg("tls is enabled, initializing certificate manager")
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		certManager, err := server.NewCertificateManager(letsEncryptEmail, certDir, dnsProvidersConfig)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to initialize certificate manager")
+		}
 
-	go func() {
-		sig := <-sigChan
-		logger.Info().Str("signal", sig.String()).Msg("received shutdown signal")
+		if err := certManager.PreloadCertificates(); err != nil {
+			logger.Fatal().Err(err).Msg("failed to preload certificates")
+		}
 
-		time.Sleep(2 * time.Second)
-		logger.Info().Msg("server shutting down")
-		os.Exit(0)
-	}()
+		tlsConfig := &tls.Config{
+			GetCertificate: certManager.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
+		}
 
-	serverAddr := ":" + port
-	logger.Info().Str("address", serverAddr).Msg("starting HTTP server")
+		httpsAddr := fmt.Sprintf("%s:%d", host, tlsPort)
+		httpsServer := &http.Server{
+			Addr:      httpsAddr,
+			Handler:   tunnelRouter,
+			TLSConfig: tlsConfig,
+		}
 
-	if err := http.ListenAndServe(serverAddr, tunnelRouter); err != nil {
-		logger.Fatal().Err(err).Str("address", serverAddr).Msg("server failed to start")
+		logger.Info().Str("address", httpsAddr).Msg("starting https server")
+		go func() {
+			if err := httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				logger.Fatal().Err(err).Msg("https server failed")
+			}
+		}()
+
+		httpAddr := fmt.Sprintf("%s:%d", host, port)
+		httpServer := &http.Server{
+			Addr: httpAddr,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "https://"+r.Host+r.URL.String(), http.StatusMovedPermanently)
+			}),
+		}
+		logger.Info().Str("address", httpAddr).Msg("starting http to https redirect server")
+		go func() {
+			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Fatal().Err(err).Msg("http redirect server failed")
+			}
+		}()
+
+	} else {
+		httpAddr := fmt.Sprintf("%s:%d", host, port)
+		httpServer := &http.Server{
+			Addr:    httpAddr,
+			Handler: tunnelRouter,
+		}
+		logger.Info().Str("address", httpAddr).Msg("starting http server")
+		go func() {
+			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Fatal().Err(err).Msg("http server failed")
+			}
+		}()
 	}
-}
 
-func main() {
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+	// wait indefinitely
+	select {}
 }

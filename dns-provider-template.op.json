@@ -1,0 +1,16 @@
+{
+    "$schema": "https://raw.githubusercontent.com/karol-broda/funnel/refs/heads/master/dns-providers.schema.json",
+    "providers": [
+        {
+            "name": "aws",
+            "provider": "route53",
+            "domains": ["op://Funnel/DNS Credentials/domains/0", "op://Funnel/DNS Credentials/domains/1"],
+            "config": {
+              "AWS_ACCESS_KEY_ID": "op://Funnel/DNS credentials/aws access key",
+              "AWS_SECRET_ACCESS_KEY": "op://Funnel/DNS credentials/aws secret access key",
+              "AWS_REGION": "us-east-1",
+              "AWS_HOSTED_ZONE_ID": "op://Funnel/DNS Credentials/hosted zone id"
+            }
+          }
+    ]
+}
