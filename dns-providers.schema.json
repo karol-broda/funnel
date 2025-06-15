@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "funnel tunnel server dns provider configuration",
+  "description": "configuration file for dns providers used for let's encrypt dns-01 challenges.",
+  "type": "object",
+  "properties": {
+    "providers": {
+      "description": "an array of dns provider configurations.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "a unique, friendly name for this provider configuration (e.g., 'aws-production').",
+            "type": "string"
+          },
+          "provider": {
+            "description": "the name of the dns provider (e.g., 'route53', 'cloudflare'). must match a provider supported by the lego library.",
+            "type": "string"
+          },
+          "domains": {
+            "description": "a list of domains (including wildcards) managed by this provider.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(\\*\\.)?([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}$"
+            },
+            "minitems": 1
+          },
+          "config": {
+            "description": "a key-value map of credentials and settings for this provider.",
+            "type": "object",
+            "additionalproperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["name", "provider", "domains", "config"]
+      }
+    }
+  },
+  "required": ["providers"]
+} 
