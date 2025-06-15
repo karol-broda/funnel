@@ -16,15 +16,14 @@
 
 ## 🚀 quick start
 
-<details>
-<summary><strong>📦 installation</strong></summary>
 
 ### one-line install
 ```bash
 curl -LsSf https://raw.githubusercontent.com/karol-broda/funnel/refs/heads/master/scripts/install.sh | sh
 ```
+<details>
+<summary><strong>📦 building from source</strong></summary>
 
-### manual installation
 ```bash
 git clone https://github.com/karol-broda/funnel.git
 cd funnel
@@ -86,11 +85,11 @@ graph LR
     C -.-> B
     B --> A
     
-    style A fill:#e8f4fd
-    style B fill:#fff2e8
-    style C fill:#fff2e8
-    style D fill:#e8f5e8
-    style E fill:#f0f8e8
+    style A fill:#b7bdf8,color:#24273a
+    style B fill:#f5bde6,color:#24273a
+    style C fill:#8bd5ca,color:#24273a
+    style D fill:#a6da95,color:#24273a
+    style E fill:#91d7e3,color:#24273a
 ```
 
 ### how it works
