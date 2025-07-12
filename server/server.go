@@ -40,7 +40,6 @@ func NewServer() *Server {
 		Bool("check_origin_disabled", true).
 		Msg("server initialized")
 
-
 	return server
 }
 
