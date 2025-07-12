@@ -92,12 +92,11 @@ func (s *Server) setupWebSocketConnection(tunnel *Tunnel) {
 		Dur("read_deadline", readDeadline).
 		Msg("websocket read deadline configured")
 
-	tunnel.conn.SetPongHandler(func(string) error {
+	tunnel.conn.SetPingHandler(func(appData string) error {
+		logger.Debug().Msg("ping received, read deadline extended")
 		if err := tunnel.conn.SetReadDeadline(time.Now().Add(readDeadline)); err != nil {
-			logger.Error().Err(err).Msg("failed to extend read deadline on pong")
-			return err
+			logger.Error().Err(err).Msg("failed to extend read deadline on ping")
 		}
-		logger.Debug().Msg("pong received, read deadline extended")
 		return nil
 	})
 

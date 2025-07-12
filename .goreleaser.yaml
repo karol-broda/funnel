@@ -1,0 +1,93 @@
+# This is an example .goreleaser.yml file with some sensible defaults.
+# Make sure to check the documentation at https://goreleaser.com
+
+# The lines below are called `modelines`. See `:help modeline`
+# Feel free to remove those if you don't want/need to use them.
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod tidy
+    # you may remove this if you don't need go generate.
+    # this is failing with `go work: unknown command`, so we disable it for now.
+    # - go work exec -v -- go generate ./...
+
+builds:
+  - id: funnel-nix
+    main: ./cmd/funnel
+    binary: funnel
+    env: &env
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    ldflags: &ldflags
+      - -s -w
+      - -X github.com/karol-broda/funnel/version.Version={{.Version}}
+      - -X github.com/karol-broda/funnel/version.BuildDate={{.Date}}
+      - -X github.com/karol-broda/funnel/version.GitCommit={{.Commit}}
+      - -X github.com/karol-broda/funnel/version.GitTag={{.Tag}}
+  - id: funnel-win
+    main: ./cmd/funnel
+    binary: funnel
+    env: *env
+    goos:
+      - windows
+    ldflags: *ldflags
+  - id: server-nix
+    main: ./cmd/server
+    binary: server
+    env: *env
+    goos:
+      - linux
+      - darwin
+    ldflags: *ldflags
+  - id: server-win
+    main: ./cmd/server
+    binary: server
+    env: *env
+    goos:
+      - windows
+    ldflags: *ldflags
+
+archives:
+  - id: funnel-nix
+    builds: [funnel-nix]
+    formats: [tar.gz]
+    name_template: &name_template >-
+      {{ .ProjectName }}-{{ .Binary }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+  - id: funnel-win
+    builds: [funnel-win]
+    formats: [zip]
+    name_template: *name_template
+  - id: server-nix
+    builds: [server-nix]
+    formats: [tar.gz]
+    name_template: *name_template
+  - id: server-win
+    builds: [server-win]
+    formats: [zip]
+    name_template: *name_template
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).

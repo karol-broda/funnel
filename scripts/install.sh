@@ -62,7 +62,7 @@ list_versions() {
     echo "available versions:"
     
     if command -v jq >/dev/null 2>&1; then
-        echo "${response}" | jq -r '.[].tag_name' | head -20 | sed 's/^/  /'
+        echo "${response}" | jq -r '.[].tag_name // empty' 2>/dev/null | head -20 | sed 's/^/  /'
     else
         echo "${response}" | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4 | head -20 | sed 's/^/  /'
     fi
@@ -165,6 +165,43 @@ check_dependencies() {
     fi
 }
 
+safe_json_extract() {
+    local json_data="$1"
+    local field="$2"
+    local result=""
+    
+    if command -v jq >/dev/null 2>&1; then
+        result=$(echo "${json_data}" | jq -r ".${field} // empty" 2>/dev/null || echo "")
+        
+        if [[ -z "${result}" ]] || [[ "${result}" == "null" ]]; then
+            result=$(echo "${json_data}" | grep -o "\"${field}\":\"[^\"]*\"" | cut -d'"' -f4 | head -1)
+        fi
+    else
+        # fallback to grep-based extraction
+        result=$(echo "${json_data}" | grep -o "\"${field}\":\"[^\"]*\"" | cut -d'"' -f4 | head -1)
+    fi
+    
+    echo "${result}"
+}
+
+safe_extract_download_url() {
+    local json_data="$1"
+    local archive_name="$2"
+    local result=""
+    
+    if command -v jq >/dev/null 2>&1; then
+        result=$(echo "${json_data}" | jq -r ".assets[]? | select(.name == \"${archive_name}\") | .browser_download_url // empty" 2>/dev/null || echo "")
+        
+        if [[ -z "${result}" ]] || [[ "${result}" == "null" ]]; then
+            result=$(echo "${json_data}" | grep -o "\"browser_download_url\":\"[^\"]*${archive_name}\"" | cut -d'"' -f4)
+        fi
+    else
+        result=$(echo "${json_data}" | grep -o "\"browser_download_url\":\"[^\"]*${archive_name}\"" | cut -d'"' -f4)
+    fi
+    
+    echo "${result}"
+}
+
 get_latest_release() {
     if [[ -n "${SPECIFIC_VERSION}" ]]; then
         log_info "fetching release information for version ${SPECIFIC_VERSION}..."
@@ -186,13 +223,8 @@ get_latest_release() {
         exit 1
     fi
     
-    if command -v jq >/dev/null 2>&1; then
-        RELEASE_TAG=$(echo "${response}" | jq -r '.tag_name')
-        RELEASE_NAME=$(echo "${response}" | jq -r '.name')
-    else
-        RELEASE_TAG=$(echo "${response}" | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4 | head -1)
-        RELEASE_NAME=$(echo "${response}" | grep -o '"name":"[^"]*"' | cut -d'"' -f4 | head -1)
-    fi
+    RELEASE_TAG=$(safe_json_extract "${response}" "tag_name")
+    RELEASE_NAME=$(safe_json_extract "${response}" "name")
     
     if [[ -z "${RELEASE_TAG}" ]] || [[ "${RELEASE_TAG}" == "null" ]]; then
         log_error "could not determine release tag"
@@ -210,11 +242,7 @@ get_latest_release() {
     ARCHIVE_NAME="${CLIENT_NAME}-${RELEASE_TAG}-${DETECTED_OS}-${DETECTED_ARCH}.tar.gz"
     ARCHIVE_EXT="tar.gz"
     
-    if command -v jq >/dev/null 2>&1; then
-        DOWNLOAD_URL=$(echo "${response}" | jq -r ".assets[] | select(.name == \"${ARCHIVE_NAME}\") | .browser_download_url")
-    else
-        DOWNLOAD_URL=$(echo "${response}" | grep -o "\"browser_download_url\":\"[^\"]*${ARCHIVE_NAME}\"" | cut -d'"' -f4)
-    fi
+    DOWNLOAD_URL=$(safe_extract_download_url "${response}" "${ARCHIVE_NAME}")
     
     if [[ -z "${DOWNLOAD_URL}" ]] || [[ "${DOWNLOAD_URL}" == "null" ]]; then
         log_error "could not find download URL for ${ARCHIVE_NAME}"
@@ -222,8 +250,8 @@ get_latest_release() {
         
         if command -v jq >/dev/null 2>&1; then
             local available_assets
-            available_assets=$(echo "${response}" | jq -r '.assets[].name' 2>/dev/null || echo "none")
-            if [[ "${available_assets}" != "none" ]]; then
+            available_assets=$(echo "${response}" | jq -r '.assets[]?.name // empty' 2>/dev/null || echo "none")
+            if [[ "${available_assets}" != "none" ]] && [[ -n "${available_assets}" ]]; then
                 log_error "available assets for this release:"
                 echo "${available_assets}" | sed 's/^/  /'
             fi
