@@ -10,8 +10,9 @@ version: 2
 
 before:
   hooks:
-    # You may remove this if you don't use go modules.
-    - go mod tidy
+    # commands for go workspaces.
+    - go work sync
+    - go work tidy
     # you may remove this if you don't need go generate.
     # this is failing with `go work: unknown command`, so we disable it for now.
     # - go work exec -v -- go generate ./...
@@ -56,7 +57,6 @@ builds:
 
 archives:
   - id: funnel-nix
-    builds: [funnel-nix]
     formats: [tar.gz]
     name_template: &name_template >-
       {{ .ProjectName }}-{{ .Binary }}_
@@ -66,15 +66,12 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
   - id: funnel-win
-    builds: [funnel-win]
     formats: [zip]
     name_template: *name_template
   - id: server-nix
-    builds: [server-nix]
     formats: [tar.gz]
     name_template: *name_template
   - id: server-win
-    builds: [server-win]
     formats: [zip]
     name_template: *name_template
 
