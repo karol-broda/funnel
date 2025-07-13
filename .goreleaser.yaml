@@ -18,7 +18,7 @@ version: 2
 #     # - go work exec -v -- go generate ./...
 
 builds:
-  - id: funnel-nix
+  - id: funnel
     main: ./cmd/funnel
     binary: funnel
     env: &env
@@ -32,14 +32,7 @@ builds:
       - -X github.com/karol-broda/funnel/version.BuildDate={{.Date}}
       - -X github.com/karol-broda/funnel/version.GitCommit={{.Commit}}
       - -X github.com/karol-broda/funnel/version.GitTag={{.Tag}}
-  - id: funnel-win
-    main: ./cmd/funnel
-    binary: funnel
-    env: *env
-    goos:
-      - windows
-    ldflags: *ldflags
-  - id: server-nix
+  - id: server
     main: ./cmd/server
     binary: server
     env: *env
@@ -47,16 +40,9 @@ builds:
       - linux
       - darwin
     ldflags: *ldflags
-  - id: server-win
-    main: ./cmd/server
-    binary: server
-    env: *env
-    goos:
-      - windows
-    ldflags: *ldflags
 
 archives:
-  - id: funnel-nix
+  - id: funnel
     formats: [tar.gz]
     name_template: &name_template >-
       {{ .ProjectName }}-{{ .Binary }}_
@@ -65,15 +51,29 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-  - id: funnel-win
-    formats: [zip]
-    name_template: *name_template
-  - id: server-nix
+  - id: server
     formats: [tar.gz]
     name_template: *name_template
-  - id: server-win
-    formats: [zip]
-    name_template: *name_template
+
+dockers:
+  - goos: linux
+    goarch: amd64
+    goarm: ''
+    ids:
+      - server
+    image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/funnel-server:latest"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/funnel-server:{{ .Tag }}"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/funnel-server:v{{ .Major }}"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/funnel-server:v{{ .Major }}.{{ .Minor }}"
+    dockerfile: ./docker/server/Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64,linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
 
 changelog:
   sort: asc
@@ -84,8 +84,3 @@ changelog:
 
 release:
   draft: true
-  footer: >-
-
-    ---
-
-    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
