@@ -16,13 +16,44 @@
 
 ## 🚀 quick start
 
-
-### one-line install
+one line install script:
 ```bash
-curl -LsSf https://raw.githubusercontent.com/karol-broda/funnel/refs/heads/master/scripts/install.sh | sh
+curl -sSfL https://raw.githubusercontent.com/karol-broda/funnel/master/scripts/install.sh | bash
 ```
+
 <details>
-<summary><strong>📦 building from source</strong></summary>
+<summary><strong>📦 installation options</strong></summary>
+
+the recommended way to install `funnel` is with the installer script. it automatically detects your platform, downloads the correct binary, and installs it on your system.
+
+by default, the script installs `funnel` to `$HOME/.local/bin`. this is the recommended method as it does not require `sudo`.
+
+the script provides several flags to customize the installation:
+
+- **global install**: use the `--global` flag to install `funnel` to `/usr/local/bin`, making it available to all users. this requires `sudo`.
+  ```bash
+  curl -sSfL https://.../install.sh | bash -s -- --global
+  ```
+
+- **custom directory**: use `-b` or `--bin-dir` to specify a custom installation directory.
+  ```bash
+  curl -sSfL https://.../install.sh | bash -s -- -b /path/to/your/bin
+  ```
+
+- **specific version**: use `-v` to install a specific version of `funnel`.
+  ```bash
+  curl -sSfL https://.../install.sh | bash -s -- -v v0.0.4
+  ```
+
+- **list versions**: use `-l` to see a list of available versions.
+  ```bash
+  curl -sSfL https://.../install.sh | bash -s -- -l
+  ```
+
+</details>
+
+<details>
+<summary><strong>🔨 building from source</strong></summary>
 
 ```bash
 git clone https://github.com/karol-broda/funnel.git
