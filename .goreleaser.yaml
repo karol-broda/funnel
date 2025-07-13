@@ -71,6 +71,7 @@ dockers:
       - docker/server/entrypoint.sh
     use: buildx
     build_flag_templates:
+      - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
@@ -86,6 +87,7 @@ dockers:
       - docker/server/entrypoint.sh
     use: buildx
     build_flag_templates:
+      - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
