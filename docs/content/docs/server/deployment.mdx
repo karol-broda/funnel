@@ -1,0 +1,82 @@
+---
+title: deployment
+icon: PackageIcon
+---
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+
+This guide will walk you through deploying the funnel server using Docker.
+
+## prerequisites
+
+- Docker installed on your machine.
+- A domain name for your server.
+- DNS provider credentials for automatic TLS certificate generation (optional but recommended).
+
+## docker deployment
+
+The recommended way to deploy the server is using the official Docker image.
+
+<Steps>
+
+<Step>
+### create a volume for certificates
+
+The server needs to persist TLS certificates. Create a Docker volume to store them.
+
+```bash
+docker volume create funnel-certs
+```
+</Step>
+
+<Step>
+### run the docker container
+
+You can run the server using the `docker run` command. You need to provide your domain name and DNS provider configuration.
+
+```bash {{ 'domain' : 'your-domain.com' }}
+docker run -d --name funnel-server \\
+  -p 80:8080 \\
+  -p 443:8443 \\
+  -v funnel-certs:/var/lib/funnel/certs \\
+  -e FUNNEL_DOMAIN={{ 'domain' }} \\
+  -e FUNNEL_DNS_PROVIDER=<your-dns-provider> \\
+  -e FUNNEL_DNS_PROVIDER_CONFIG_FILE=<your-provider-config-file> \\
+  --restart always \\
+  ghcr.io/karol-broda/funnel-server:latest
+```
+
+Replace the following placeholders:
+- `your-domain.com`: Your domain name.
+- `<your-dns-provider>`: Your DNS provider (e.g., `cloudflare`, `gcp`, `aws`). For a list of supported providers, see the [official documentation](https://go-acme.github.io/lego/dns/index.html#dns-providers).
+- `<your-provider-config-file>`: Path to your DNS provider's credentials file.
+
+</Step>
+<Step>
+### verify the deployment
+
+Check the logs to ensure the server started correctly.
+
+```bash
+docker logs -f funnel-server
+```
+
+You should see logs indicating that the server is listening on the configured ports and that the TLS certificates have been generated successfully.
+
+</Step>
+</Steps>
+
+## configuration
+
+The server can be configured using environment variables. Here are some of the most common ones:
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `FUNNEL_HOST` | The host to listen on. | `0.0.0.0` |
+| `FUNNEL_PORT` | The port for HTTP traffic. | `8080` |
+| `FUNNEL_TLS_PORT` | The port for HTTPS/TLS traffic. | `8443` |
+| `FUNNEL_DOMAIN` | Your domain name (required for TLS). | `""` |
+| `FUNNEL_DNS_PROVIDER` | The DNS provider for automatic TLS. For a list of supported providers, see the [official documentation](https://go-acme.github.io/lego/dns/index.html#dns-providers). | `""` |
+| `FUNNEL_DNS_PROVIDER_CONFIG_FILE` | Path to the DNS provider config file. | `""` |
+
+For a complete list of configuration options, please refer to the [Server CLI Reference](/docs/reference/server-cli). 

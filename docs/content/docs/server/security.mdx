@@ -1,0 +1,49 @@
+---
+title: security
+icon: ShieldCheckIcon
+---
+# server security
+
+Securing your funnel server is crucial to protect your services and data. This guide covers the essential security practices for your deployment.
+
+## tls encryption
+
+All traffic to the funnel server should be encrypted using TLS. The server has built-in support for automatic TLS certificate generation from Let's Encrypt.
+
+### enabling tls
+
+To enable automatic TLS, you need to:
+1.  **Provide a domain name**: Set the `FUNNEL_DOMAIN` environment variable.
+2.  **Configure a DNS provider**: Set the `FUNNEL_DNS_PROVIDER` and `FUNNEL_DNS_PROVIDER_CONFIG_FILE` environment variables.
+
+The server will then automatically obtain and renew TLS certificates for your domain. For more details on the DNS provider configuration, see the [Deployment](/docs/server/deployment) guide.
+
+### certificate management
+
+- **On-Demand Generation**: Certificates are generated automatically on the first request for a new domain.
+- **Wildcard Support**: The server can generate wildcard certificates (e.g., `*.your-domain.com`).
+- **Automatic Renewal**: Certificates are renewed automatically before they expire.
+
+## restricting access
+
+By default, anyone who knows your server's address can connect a client and expose services. You can restrict access in a few ways:
+
+### 1. firewall rules
+
+Use a firewall to restrict which IP addresses can connect to the server's control port (the port used by the funnel client). This is the most straightforward way to limit access.
+
+### 2. authentication tokens (coming soon)
+
+We are working on adding support for authentication tokens to allow only authorized clients to connect. This feature will be available in a future release.
+
+## secure by default
+
+The funnel server is designed with security in mind:
+
+- **Secure TLS Ciphers**: The server uses a modern and secure set of TLS cipher suites.
+- **No Unencrypted Traffic**: When TLS is enabled, the server will not accept unencrypted traffic on the TLS port.
+- **Principle of Least Privilege**: The Docker container runs as a non-root user.
+
+## security updates
+
+It is important to keep your funnel server up to date to ensure you have the latest security patches. We announce new releases on our GitHub page. 

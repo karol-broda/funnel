@@ -1,0 +1,81 @@
+---
+title: server cli & tls
+icon: TerminalWindowIcon
+description: a reference for all `funnel-server` command-line flags and how to configure tls.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+the `funnel-server` is the binary that runs on your public-facing server. it manages client connections and proxies traffic.
+
+## `funnel-server`
+
+this command starts the server.
+
+```bash
+./bin/funnel-server [flags]
+```
+
+### flags
+
+| flag                     | shorthand | default                   | description                                                              |
+| :----------------------- | :-------- | :------------------------ | :----------------------------------------------------------------------- |
+| `--port`                 | `-p`      | `8080`                    | the port to listen on for http traffic.                                  |
+| `--host`                 |           | `0.0.0.0`                 | the host interface to bind to.                                           |
+| `--enable-tls`           |           | `false`                   | enable automatic tls via let's encrypt.                                  |
+| `--tls-port`             |           | `8443`                    | the port to listen on for https traffic.                                 |
+| `--letsencrypt-email`    |           |                           | the email address for your let's encrypt account. (required for tls)     |
+| `--cert-dir`             |           | `/var/lib/funnel/certs`   | directory to store tls certificates.                                     |
+| `--dns-providers-config` |           |                           | path to the dns providers config file. (required for tls)                |
+| `--help`                 | `-h`      |                           | show help for the command.                                               |
+
+## `funnel-server version`
+
+prints the version of the funnel server.
+
+```bash
+./bin/funnel-server version
+```
+
+---
+
+## tls configuration
+
+funnel can automatically provision and renew tls certificates from let's encrypt using the dns-01 challenge. this allows you to have secure, `https` tunnels out of the box.
+
+<Callout title="dns-01 challenge" intent="info">
+  the dns-01 challenge requires the server to have api access to your dns provider to create temporary txt records. funnel uses the popular `lego` library to support a wide range of dns providers.
+</Callout>
+
+### steps to enable tls
+
+1.  **create a dns provider configuration file.**
+    this file tells funnel how to authenticate with your dns provider's api. it's a json file that you will pass to the `--dns-providers-config` flag.
+
+    see the [`lego` dns provider documentation](https://go-acme.github.io/lego/dns/) for a list of all supported providers and the required configuration for each.
+
+    here is an example for cloudflare:
+    ```json title="dns-providers.json"
+    {
+      "providers": [
+        {
+          "name": "cloudflare",
+          "env": {
+            "CF_API_TOKEN": "your-cloudflare-api-token"
+          }
+        }
+      ]
+    }
+    ```
+
+2.  **start the server with tls flags enabled.**
+    you must provide your email and the path to your config file.
+
+    ```bash
+    ./bin/funnel-server \
+      --enable-tls \
+      --letsencrypt-email your-email@example.com \
+      --dns-providers-config ./dns-providers.json
+    ```
+
+when the server starts, it will begin provisioning certificates for the tunnels as they connect. the first connection to a new host may take a few moments while the certificate is being issued. 

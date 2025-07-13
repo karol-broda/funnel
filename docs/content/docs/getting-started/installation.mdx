@@ -1,0 +1,58 @@
+---
+title: installation
+icon: DownloadSimpleIcon
+description: how to install the funnel client and server.
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+you can get started with funnel by either using a one-line install script for the client, or by building from source for both the client and server.
+
+## client installation
+
+### one-line install (linux/macos)
+
+the easiest way to install the `funnel` client is with the following script. it will detect your os and architecture, and install the correct binary to `/usr/local/bin`.
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/karol-broda/funnel/master/scripts/install.sh | sh
+```
+
+### building from source
+
+if you prefer to build from source, you'll need to have [go](https://go.dev/doc/install) installed.
+
+```bash
+# 1. clone the repository
+git clone https://github.com/karol-broda/funnel.git
+cd funnel
+
+# 2. build the client
+make build-client
+
+# 3. (optional) install it to your path
+sudo mv ./bin/funnel /usr/local/bin/funnel
+```
+
+## server installation
+
+the server must be built from source.
+
+<Callout title="prerequisites">
+  you'll need [go](https://go.dev/doc/install) installed on the machine that will run the server.
+</Callout>
+
+```bash
+# 1. clone the repository
+git clone https://github.com/karol-broda/funnel.git
+cd funnel
+
+# 2. build the server
+make build-server
+
+# 3. the binary will be at ./bin/funnel-server
+./bin/funnel-server --version
+```
+
+once you have the server binary, you can run it directly. see the [server cli reference](/docs/reference/server-cli) for configuration options. 

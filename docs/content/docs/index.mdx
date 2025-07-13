@@ -1,0 +1,50 @@
+---
+title: introduction
+icon: HouseIcon
+description: expose local services to the internet through websocket connections
+---
+
+<div align="center">
+
+<h1> 🕳️ **funnel** </h1>
+
+*a tunneling solution built with go*
+
+---
+
+**expose local services to the internet through websocket connections**
+
+*perfect for development, testing, and demonstration purposes*
+
+</div>
+
+> **⚠️ disclaimer:** this tunneling solution is intended for development and testing purposes. while functional, it may not include all security features required for production environments. use at your own discretion and implement additional security measures as needed for production deployments.
+
+funnel is a powerful and lightweight tunneling solution that allows you to securely expose your local development services to the internet. it works by creating a persistent websocket connection between a client on your machine and a remote server, which then proxies public traffic to your local service.
+
+## key features
+
+- **http tunneling**: expose any local http service with a single command.
+- **secure connections**: supports tls with let's encrypt for secure, end-to-end encrypted tunnels.
+- **custom subdomains**: use your own memorable tunnel ids. if you don't provide one, a random one will be generated for you.
+- **automatic reconnection**: the client will automatically attempt to reconnect to the server if the connection is lost, with an exponential backoff strategy.
+- **cross-platform**: a single binary for linux, macos, and windows on both `amd64` and `arm64` architectures.
+
+## how it works
+
+the architecture is simple but robust:
+
+1.  the **funnel client** starts on your local machine and establishes a websocket connection to the **funnel server**.
+2.  the **funnel server** registers a unique public url for your tunnel (e.g., `your-id.your-server.com`).
+3.  when a request comes into the public url, the server proxies it through the websocket to the client.
+4.  the client then forwards the request to your local service (e.g., a web server on `localhost:3000`).
+5.  the response from your local service is sent back through the same pipeline to the original requester.
+
+## self-hosting
+
+You can run your own funnel server for full control over your tunnels. This is recommended for production use cases or when you need a custom domain.
+
+- **[Server Deployment](/docs/server/deployment)**: Learn how to deploy the funnel server using Docker.
+- **[Server Security](/docs/server/security)**: Best practices for securing your self-hosted server.
+
+ready to get started? head over to the [installation](/docs/getting-started/installation) guide.

@@ -1,0 +1,9 @@
+{
+  "title": "documentation",
+  "pages": [
+    "---getting started---",
+    "getting-started",
+    "---core concepts---",
+    "core-concepts"
+  ]
+} 
