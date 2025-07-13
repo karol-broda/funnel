@@ -66,4 +66,4 @@ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # default command to run when the container starts.
 # the entrypoint script will prepend "/usr/local/bin/funnel-server" to these arguments.
-CMD ["--host", "${FUNNEL_HOST}", "--port", "${FUNNEL_PORT}", "--tls-port", "${FUNNEL_TLS_PORT}"] 
+CMD ["/usr/local/bin/funnel-server", "--host", "0.0.0.0", "--port", "8080"] 
