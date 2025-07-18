@@ -1,9 +1,8 @@
 'use client';
 import { useTheme } from 'next-themes';
-import { useEffect, useState, useId, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 export default function Mermaid({ chart }: { chart: string }) {
-  const id = useId();
   const [isClient, setIsClient] = useState(false);
   const { resolvedTheme } = useTheme();
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +110,7 @@ export default function Mermaid({ chart }: { chart: string }) {
         };
 
         // initialize mermaid
-        mermaid.initialize(themeConfig);
+        mermaid.initialize(themeConfig as Record<string, unknown>);
 
         // clear the container
         if (containerRef.current) {
