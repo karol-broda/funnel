@@ -41,7 +41,14 @@ export default function Layout({ children }: { children: ReactNode }) {
         <meta name="color-scheme" content="dark light" />
       </head>
       <body>
-        <RootProvider>{children}</RootProvider>
+        <RootProvider
+          theme={{
+            defaultTheme: "dark",
+            storageKey: "theme",
+          }}
+        >
+          {children}
+        </RootProvider>
       </body>
     </html>
   );
