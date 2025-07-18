@@ -12,6 +12,14 @@ import Link from "next/link";
 import Mermaid from "@/components/mdx/mermaid";
 import Aurora from "@/components/ui/aurora";
 import InstallScript from "@/components/home/install-script";
+import { createMetadata } from "@/lib/seo";
+
+export const metadata = createMetadata(
+  "funnel",
+  "expose local services to the internet through websocket connections. perfect for development, testing, and demonstration purposes.",
+  undefined,
+  "/"
+);
 
 const architecture = `
 graph LR
@@ -155,7 +163,7 @@ export default function HomePage() {
             />
             <FeatureCard
               icon={<LightningIcon className="h-6 w-6" weight="bold" />}
-              title="never gives up"
+              title="never gives you up, never lets you down"
               description={
                 "connection dropped? funnel reconnects like that ex who won't take a hint. but useful."
               }

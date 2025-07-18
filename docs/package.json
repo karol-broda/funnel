@@ -6,7 +6,9 @@
     "build": "next build",
     "dev": "next dev --turbo",
     "start": "next start",
-    "postinstall": "fumadocs-mdx"
+    "postinstall": "fumadocs-mdx",
+    "types": "tsc --noEmit",
+    "lint": "next lint"
   },
   "dependencies": {
     "@catppuccin/palette": "1.7.1",
