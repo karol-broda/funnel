@@ -1,36 +1,38 @@
-import { Metadata } from 'next';
+import { Metadata } from "next";
 
 export const siteConfig = {
-  name: 'funnel',
-  description: 'A tunneling solution built with Go. Expose local services to the internet through websocket connections. Perfect for development, testing, and demonstration purposes.',
-  url: 'https://funnel.karolbroda.com',
-  ogImage: '/og?title=funnel&description=A%20tunneling%20solution%20built%20with%20Go',
+  name: "funnel",
+  description:
+    "A tunneling solution built with Go. Expose local services to the internet through websocket connections. Perfect for development, testing, and demonstration purposes.",
+  url: "https://funnel.karolbroda.com",
+  ogImage:
+    "/og?title=funnel&description=A%20tunneling%20solution%20built%20with%20Go",
   keywords: [
-    'tunneling',
-    'ngrok alternative',
-    'localhost tunnel',
-    'websocket tunnel',
-    'development tools',
-    'local development',
-    'expose localhost',
-    'http tunnel',
-    'secure tunnel',
-    'go tunneling',
-    'reverse proxy',
-    'port forwarding',
-    'developer tools',
-    'local server',
-    'webhook testing',
-    'local https',
-    'tunnel service',
-    'self-hosted tunnel'
+    "tunneling",
+    "ngrok alternative",
+    "localhost tunnel",
+    "websocket tunnel",
+    "development tools",
+    "local development",
+    "expose localhost",
+    "http tunnel",
+    "secure tunnel",
+    "go tunneling",
+    "reverse proxy",
+    "port forwarding",
+    "developer tools",
+    "local server",
+    "webhook testing",
+    "local https",
+    "tunnel service",
+    "self-hosted tunnel",
   ],
-  creator: 'Karol Broda',
-  githubUrl: 'https://github.com/karol-broda/funnel',
-  twitterHandle: '@karolbroda',
-  license: 'MIT',
-  version: '1.0.0',
-  category: 'Developer Tools',
+  creator: "Karol Broda",
+  githubUrl: "https://github.com/karol-broda/funnel",
+  twitterHandle: "@karolbroda",
+  license: "MIT",
+  version: "1.0.0",
+  category: "Developer Tools",
 };
 
 export function createMetadata(
@@ -39,9 +41,14 @@ export function createMetadata(
   image?: string,
   path?: string
 ): Metadata {
-  const metaTitle = title === siteConfig.name ? title : `${title} | ${siteConfig.name}`;
+  const metaTitle =
+    title === siteConfig.name ? title : `${title} | ${siteConfig.name}`;
   const metaDescription = description || siteConfig.description;
-  const metaImage = image || `/og?title=${encodeURIComponent(metaTitle)}&description=${encodeURIComponent(metaDescription)}`;
+  const metaImage =
+    image ||
+    `/og?title=${encodeURIComponent(
+      metaTitle
+    )}&description=${encodeURIComponent(metaDescription)}`;
   const canonicalUrl = path ? `${siteConfig.url}${path}` : siteConfig.url;
 
   return {
@@ -56,8 +63,8 @@ export function createMetadata(
       canonical: canonicalUrl,
     },
     openGraph: {
-      type: 'website',
-      locale: 'en_US',
+      type: "website",
+      locale: "en_US",
       url: canonicalUrl,
       title: metaTitle,
       description: metaDescription,
@@ -72,11 +79,11 @@ export function createMetadata(
       ],
     },
     twitter: {
-      card: 'summary_large_image',
+      card: "summary_large_image",
       title: metaTitle,
       description: metaDescription,
       images: [metaImage],
-      creator: '@karolbroda',
+      creator: "@karolbroda",
     },
     robots: {
       index: true,
@@ -84,19 +91,19 @@ export function createMetadata(
       googleBot: {
         index: true,
         follow: true,
-        'max-video-preview': -1,
-        'max-image-preview': 'large',
-        'max-snippet': -1,
+        "max-video-preview": -1,
+        "max-image-preview": "large",
+        "max-snippet": -1,
       },
     },
     verification: {
-      google: process.env.GOOGLE_SITE_VERIFICATION,
+      google: "vKc0JFsriogcH7LEL0Ke9B7xd6j4TdAtIrool1A_Sck",
     },
   };
 }
 
 export function generateStructuredData(
-  type: 'website' | 'article' | 'software',
+  type: "website" | "article" | "software",
   data: {
     title: string;
     description: string;
@@ -108,75 +115,80 @@ export function generateStructuredData(
   }
 ) {
   const baseData = {
-    '@context': 'https://schema.org',
-    '@type': type === 'website' ? 'WebSite' : type === 'article' ? 'Article' : 'SoftwareApplication',
+    "@context": "https://schema.org",
+    "@type":
+      type === "website"
+        ? "WebSite"
+        : type === "article"
+        ? "Article"
+        : "SoftwareApplication",
     name: data.title,
     description: data.description,
     url: data.url,
     image: data.image || siteConfig.ogImage,
   };
 
-  if (type === 'website') {
+  if (type === "website") {
     return {
       ...baseData,
-      '@type': 'WebSite',
+      "@type": "WebSite",
       publisher: {
-        '@type': 'Person',
+        "@type": "Person",
         name: siteConfig.creator,
       },
       potentialAction: {
-        '@type': 'SearchAction',
+        "@type": "SearchAction",
         target: {
-          '@type': 'EntryPoint',
+          "@type": "EntryPoint",
           urlTemplate: `${siteConfig.url}/docs?q={search_term_string}`,
         },
-        'query-input': 'required name=search_term_string',
+        "query-input": "required name=search_term_string",
       },
     };
   }
 
-  if (type === 'article') {
+  if (type === "article") {
     return {
       ...baseData,
-      '@type': 'Article',
+      "@type": "Article",
       author: {
-        '@type': 'Person',
+        "@type": "Person",
         name: data.author || siteConfig.creator,
       },
       publisher: {
-        '@type': 'Person',
+        "@type": "Person",
         name: siteConfig.creator,
       },
       datePublished: data.datePublished,
       dateModified: data.dateModified,
       mainEntityOfPage: {
-        '@type': 'WebPage',
-        '@id': data.url,
+        "@type": "WebPage",
+        "@id": data.url,
       },
     };
   }
 
-  if (type === 'software') {
+  if (type === "software") {
     return {
       ...baseData,
-      '@type': 'SoftwareApplication',
-      applicationCategory: 'DeveloperApplication',
-      operatingSystem: ['Linux', 'macOS', 'Windows'],
-      programmingLanguage: 'Go',
+      "@type": "SoftwareApplication",
+      applicationCategory: "DeveloperApplication",
+      operatingSystem: ["Linux", "macOS", "Windows"],
+      programmingLanguage: "Go",
       downloadUrl: `${siteConfig.githubUrl}/releases`,
       codeRepository: siteConfig.githubUrl,
       license: `${siteConfig.githubUrl}/blob/master/LICENSE.md`,
       author: {
-        '@type': 'Person',
+        "@type": "Person",
         name: siteConfig.creator,
       },
       offers: {
-        '@type': 'Offer',
-        price: '0',
-        priceCurrency: 'USD',
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
       },
     };
   }
 
   return baseData;
-} 
+}
