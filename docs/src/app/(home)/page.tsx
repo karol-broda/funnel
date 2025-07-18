@@ -1,4 +1,4 @@
-import { buttonVariants } from 'fumadocs-ui/components/ui/button';
+import { buttonVariants } from "fumadocs-ui/components/ui/button";
 import {
   SparkleIcon,
   GlobeIcon,
@@ -6,17 +6,18 @@ import {
   TerminalIcon,
   HardDrivesIcon,
   LightningIcon,
-} from '@phosphor-icons/react/ssr';
-import Link from 'next/link';
-import Mermaid from '@/components/mdx/mermaid';
-import Aurora from '@/components/ui/aurora';
-import InstallScript from '@/components/home/install-script';
+  ArrowRightIcon,
+} from "@phosphor-icons/react/ssr";
+import Link from "next/link";
+import Mermaid from "@/components/mdx/mermaid";
+import Aurora from "@/components/ui/aurora";
+import InstallScript from "@/components/home/install-script";
 
 const architecture = `
 graph LR
-    A["local app<br/>:3000"] --> B["funnel client"]
-    B -.websocket.-> C["funnel server<br/>:8080"]
-    D["browser/curl"] --> E["tunnel-id.localhost:8080"]
+    A["your app<br/>chillin at :3000"] --> B["funnel client<br/>(the messenger)"]
+    B -.websocket magic.-> C["funnel server<br/>vibing at :8080"]
+    D["someone on<br/>the internet"] --> E["tunnel-id.localhost:8080<br/>(the secret door)"]
     E --> C
     C -.-> B
     B --> A
@@ -32,20 +33,35 @@ export default function HomePage() {
   return (
     <>
       <main className="relative py-32 md:py-48">
-        <div className="absolute inset-0 z-[-1] overflow-hidden">
-          <Aurora colorStops={['#1D4ED8', '#7C3AED', '#DB2777']} />
+        <div className="absolute inset-0 z-[-1] overflow-hidden opacity-60 dark:opacity-80">
+          <Aurora colorStops={["#60A5FA", "#A78BFA", "#F472B6"]} />
         </div>
         <div className="container relative flex flex-col items-center text-center">
-          <h1 className="mb-4 text-5xl font-bold tracking-tight">
-            expose local services to the world
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2 text-sm text-white">
+            <SparkleIcon className="h-4 w-4" />
+            <span>yet another tunneling tool nobody asked for</span>
+          </div>
+
+          <h1 className="mb-6 text-6xl font-bold tracking-tight text-white drop-shadow-2xl">
+            localhost wants to see other people
           </h1>
 
-          <p className="mb-8 max-w-2xl text-lg text-muted-foreground">
-            funnel is a lightweight, self-hostable tunneling solution that
-            exposes local services to the internet through secure websocket
-            connections. perfect for development, testing, and sharing your
-            work.
-          </p>
+          <div className="mb-8 max-w-2xl bg-black/10 backdrop-blur-sm rounded-2xl p-6">
+            <p className="text-xl text-white font-medium mb-3">
+              tired of {'"works on my machine"'}? yeah, me too.
+              <span className="text-white font-bold">
+                so i built this thing.
+              </span>
+            </p>
+
+            <p className="text-base text-white/90">
+              {
+                "it's like those expensive tunneling tools but free and jankier."
+              }{" "}
+              <br />
+              self-hosted, questionably secure, definitely overengineered.
+            </p>
+          </div>
 
           <InstallScript />
 
@@ -53,23 +69,44 @@ export default function HomePage() {
             <Link
               href="/docs"
               className={buttonVariants({
-                color: 'primary',
-                className: 'px-6 py-3 text-base font-semibold',
+                color: "primary",
+                className: "px-6 py-3 text-base font-semibold",
               })}
             >
-              get started
+              try it anyway <ArrowRightIcon weight="bold" />
             </Link>
             <a
               href="https://github.com/karol-broda/funnel"
               target="_blank"
               rel="noreferrer noopener"
               className={buttonVariants({
-                color: 'secondary',
-                className: 'px-6 py-3 text-base font-semibold',
+                color: "secondary",
+                className: "px-6 py-3 text-base font-semibold",
               })}
             >
-              view on github
+              ⭐ judge my code
             </a>
+          </div>
+
+          <div className="mt-12 flex flex-wrap justify-center items-center gap-4">
+            <div className="flex items-center gap-2 bg-black/20 backdrop-blur-sm rounded-full px-3 py-1">
+              <div className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-sm text-white font-medium">
+                works 90% of the time
+              </span>
+            </div>
+            <div className="flex items-center gap-2 bg-black/20 backdrop-blur-sm rounded-full px-3 py-1">
+              <div className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse" />
+              <span className="text-sm text-white font-medium">
+                minimal bugs™
+              </span>
+            </div>
+            <div className="flex items-center gap-2 bg-black/20 backdrop-blur-sm rounded-full px-3 py-1">
+              <div className="h-2 w-2 rounded-full bg-purple-400 animate-pulse" />
+              <span className="text-sm text-white font-medium">
+                procrastination-powered
+              </span>
+            </div>
           </div>
         </div>
       </main>
@@ -78,44 +115,50 @@ export default function HomePage() {
         <div className="container">
           <div className="text-center">
             <h2 className="mb-4 text-3xl font-bold tracking-tight">
-              powerful features, minimal setup
+              why funnel is kinda awesome 😎
             </h2>
             <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
-              everything you need to securely expose your local services
-              without the bloat.
+              {
+                "i built this because paying for tunneling services hurts my soul."
+              }
+              turns out, it works pretty well!
             </p>
           </div>
 
           <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
             <FeatureCard
               icon={<TerminalIcon className="h-6 w-6" weight="bold" />}
-              title="simple cli"
-              description="get started in minutes with a straightforward and easy-to-use command-line interface."
+              title="dead simple cli"
+              description={
+                "if you can type 'funnel http 3000', you're basically a pro already. no phd required."
+              }
             />
             <FeatureCard
               icon={<ShieldCheckIcon className="h-6 w-6" weight="bold" />}
-              title="secure by design"
-              description="built-in tls support with let's encrypt for secure, end-to-end encrypted tunnels."
+              title="probably secure"
+              description="i slapped tls on it with let's encrypt. your data is safer than my git commit history."
             />
             <FeatureCard
               icon={<SparkleIcon className="h-6 w-6" weight="bold" />}
-              title="fast & lightweight"
-              description="a single, small binary with minimal resource consumption, written in pure go."
+              title="stupidly fast"
+              description="written in go because i heard it was fast. uses less ram than your spotify tab."
             />
             <FeatureCard
               icon={<GlobeIcon className="h-6 w-6" weight="bold" />}
-              title="cross-platform"
-              description="builds for linux, macos, and windows, supporting both amd64 and arm64 architectures."
+              title="works everywhere™"
+              description="linux? mac? windows? raspberry pi? if it runs go, it probably runs funnel. no promises though."
             />
             <FeatureCard
               icon={<HardDrivesIcon className="h-6 w-6" weight="bold" />}
-              title="self-hostable"
-              description="full control over your infrastructure. run the funnel server on your own hardware or cloud provider."
+              title="host it yourself"
+              description="paranoid? control freak? same. run your own server and blame yourself when it breaks."
             />
             <FeatureCard
               icon={<LightningIcon className="h-6 w-6" weight="bold" />}
-              title="auto-reconnection"
-              description="client automatically re-establishes dropped connections with exponential backoff."
+              title="never gives up"
+              description={
+                "connection dropped? funnel reconnects like that ex who won't take a hint. but useful."
+              }
             />
           </div>
         </div>
@@ -124,23 +167,29 @@ export default function HomePage() {
       <section className="bg-muted/30 py-24 text-center">
         <div className="container">
           <h2 className="mb-4 text-3xl font-bold tracking-tight">
-            get started in 3 steps
+            literally just 3 steps (i counted twice)
           </h2>
+          <p className="mb-8 text-lg text-muted-foreground">
+            easier than making instant noodles, with 73% less sodium
+          </p>
           <div className="mt-8 flex flex-col items-stretch justify-center gap-8 md:flex-row">
             <StepCard
               step="1"
-              title="run your local app"
+              title="run your janky app"
               code="python3 -m http.server 3000"
+              subtitle={"or whatever mess you're building"}
             />
             <StepCard
               step="2"
-              title="start the funnel server"
+              title="fire up the server"
               code="./bin/funnel-server"
+              subtitle={"pray it doesn't crash"}
             />
             <StepCard
               step="3"
-              title="connect your client"
+              title="connect & share"
               code="funnel http 3000 --id demo"
+              subtitle={"watch people judge your css"}
             />
           </div>
         </div>
@@ -149,38 +198,46 @@ export default function HomePage() {
       <section className="py-24 text-center">
         <div className="container">
           <h2 className="mb-4 text-3xl font-bold tracking-tight">
-            how it works
+            the nerdy details (with pictures!)
           </h2>
           <p className="mx-auto mb-12 max-w-2xl text-lg text-muted-foreground">
-            funnel uses a client-server model to create a secure tunnel between
-            your local machine and a public server. all communication is
-            handled over a persistent websocket connection.
+            websockets go brrr... no seriously, thats basically it. i made this
+            diagram to look smart:
           </p>
           <div className="mx-auto w-full max-w-2xl">
             <Mermaid chart={architecture} />
           </div>
+          <p className="mt-8 text-sm text-muted-foreground">
+            {
+              "if this looks complicated, don't worry. i don't fully understand it either."
+            }
+          </p>
         </div>
       </section>
 
       <section className="py-32 text-center">
         <div className="container">
           <h2 className="text-4xl font-bold tracking-tight">
-            ready to start tunneling?
+            {"still here? wow, you're persistent 🏆"}
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-            get up and running in minutes. it's free and open-source.
+            look, i spent way too many weekends on this thing. might as well
+            give it a try. worst case, you waste 5 minutes.
           </p>
           <div className="mt-8 flex justify-center gap-4">
             <Link
               href="/docs"
               className={buttonVariants({
-                color: 'primary',
-                className: 'px-8 py-4 text-lg font-semibold',
+                color: "primary",
+                className: "px-8 py-4 text-lg font-semibold",
               })}
             >
-              quickstart guide
+              {"fine, i'll try your tunnel thing"}
             </Link>
           </div>
+          <p className="mt-6 text-sm text-muted-foreground">
+            {"or don't. i'm not your boss. 🤷"}
+          </p>
         </div>
       </section>
     </>
@@ -197,7 +254,7 @@ function FeatureCard({
   description: string;
 }) {
   return (
-    <div className="flex flex-col gap-4 rounded-lg border bg-card p-6 text-left transition-transform duration-200 hover:scale-105 hover:shadow-lg">
+    <div className="flex flex-col gap-4 rounded-lg border bg-card p-6 text-left transition-all duration-200 hover:scale-105 hover:shadow-lg hover:border-primary/50">
       <div className="self-start rounded-md bg-secondary p-3 text-secondary-foreground">
         {icon}
       </div>
@@ -211,18 +268,25 @@ function StepCard({
   step,
   title,
   code,
+  subtitle,
 }: {
   step: string;
   title: string;
   code: string;
+  subtitle?: string;
 }) {
   return (
-    <div className="flex-1 rounded-lg border bg-card p-6 text-left transition-transform duration-200 hover:scale-105 hover:shadow-lg">
+    <div className="flex-1 rounded-lg border bg-card p-6 text-left transition-all duration-200 hover:scale-105 hover:shadow-lg hover:border-primary/50">
       <div className="flex items-center gap-4">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary font-bold text-primary-foreground">
           {step}
         </div>
-        <h3 className="text-lg font-semibold">{title}</h3>
+        <div>
+          <h3 className="text-lg font-semibold">{title}</h3>
+          {subtitle && (
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
+          )}
+        </div>
       </div>
       <pre className="mt-4 w-full rounded-md bg-background p-4">
         <code className="text-sm">{code}</code>
