@@ -1,49 +1,249 @@
 ---
 title: security
 icon: ShieldCheckIcon
+description: understanding the current security model and deployment considerations.
 ---
-# server security
 
-Securing your funnel server is crucial to protect your services and data. This guide covers the essential security practices for your deployment.
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+<Callout title="security model" intent="warning">
+funnel currently uses a simple security model: **anyone who knows your server address can connect and create tunnels**. this is suitable for development environments but requires additional protection for production use.
+</Callout>
+
+## current security features
+
+<Cards>
+<Card title="🔐 tls encryption" description="automatic https certificates via let's encrypt" />
+<Card title="🆔 tunnel id validation" description="basic format validation and uniqueness checking" />
+<Card title="📋 comprehensive logging" description="detailed logging for monitoring connections" />
+<Card title="🔒 modern tls" description="secure tls configuration with modern ciphers" />
+</Cards>
+
+## what's not included
+
+<Callout title="no built-in access control" intent="warning">
+the server does not have built-in authentication, authorization, or user management. protection must be implemented at the network or proxy level.
+</Callout>
+
+current limitations:
+- **no authentication** - no user accounts, tokens, or passwords
+- **no authorization** - anyone can connect if they know the server address
+- **no rate limiting** - no built-in protection against abuse
+- **no ip restrictions** - accepts connections from any ip address
 
 ## tls encryption
 
-All traffic to the funnel server should be encrypted using TLS. The server has built-in support for automatic TLS certificate generation from Let's Encrypt.
+<Callout title="https is supported" intent="info">
+the server has built-in support for automatic tls certificate generation using let's encrypt.
+</Callout>
 
-### enabling tls
+<Tabs items={['Automatic TLS', 'Manual Certificates', 'Certificate Management']}>
+<Tab value="Automatic TLS">
+enable automatic tls with let's encrypt:
 
-To enable automatic TLS, you need to:
-1.  **Provide a domain name**: Set the `FUNNEL_DOMAIN` environment variable.
-2.  **Configure a DNS provider**: Set the `FUNNEL_DNS_PROVIDER` and `FUNNEL_DNS_PROVIDER_CONFIG_FILE` environment variables.
+```bash
+docker run -d --name funnel-server \
+  -p 80:8080 \
+  -p 443:8443 \
+  -v $(pwd)/dns-providers.json:/etc/funnel/dns-providers.json \
+  -v funnel-certs:/var/lib/funnel/certs \
+  -e FUNNEL_ENABLE_TLS=true \
+  -e FUNNEL_LETSENCRYPT_EMAIL=your-email@example.com \
+  -e FUNNEL_DNS_PROVIDERS_CONFIG=/etc/funnel/dns-providers.json \
+  ghcr.io/karol-broda/funnel-server:latest
+```
 
-The server will then automatically obtain and renew TLS certificates for your domain. For more details on the DNS provider configuration, see the [Deployment](/docs/server/deployment) guide.
+requires dns provider configuration for certificate validation.
+</Tab>
 
-### certificate management
+<Tab value="Manual Certificates">
+use your own certificates:
 
-- **On-Demand Generation**: Certificates are generated automatically on the first request for a new domain.
-- **Wildcard Support**: The server can generate wildcard certificates (e.g., `*.your-domain.com`).
-- **Automatic Renewal**: Certificates are renewed automatically before they expire.
+```bash
+docker run -d --name funnel-server \
+  -p 443:8443 \
+  -v /path/to/certs:/var/lib/funnel/certs \
+  -e FUNNEL_ENABLE_TLS=true \
+  ghcr.io/karol-broda/funnel-server:latest
+```
+</Tab>
 
-## restricting access
+<Tab value="Certificate Management">
+automatic certificate features:
+- **on-demand generation** - certificates created on first request
+- **automatic renewal** - renewed before expiration
+- **wildcard support** - can generate `*.domain.com` certificates
+- **secure storage** - stored in docker volume
+</Tab>
+</Tabs>
 
-By default, anyone who knows your server's address can connect a client and expose services. You can restrict access in a few ways:
+## deployment security
 
-### 1. firewall rules
+since the server lacks built-in access control, secure deployment requires external protection:
 
-Use a firewall to restrict which IP addresses can connect to the server's control port (the port used by the funnel client). This is the most straightforward way to limit access.
+<Steps>
+<Step>
+### network-level protection
 
-### 2. authentication tokens (coming soon)
+use firewall rules to restrict access:
 
-We are working on adding support for authentication tokens to allow only authorized clients to connect. This feature will be available in a future release.
+```bash
+# allow public access to tunnel traffic
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
 
-## secure by default
+# restrict websocket connections to trusted networks
+sudo ufw allow from 192.168.1.0/24 to any port 8080
+sudo ufw deny 8080/tcp
 
-The funnel server is designed with security in mind:
+sudo ufw enable
+```
 
-- **Secure TLS Ciphers**: The server uses a modern and secure set of TLS cipher suites.
-- **No Unencrypted Traffic**: When TLS is enabled, the server will not accept unencrypted traffic on the TLS port.
-- **Principle of Least Privilege**: The Docker container runs as a non-root user.
+<Callout title="firewall strategy" intent="tip">
+allow public access to ports 80/443 for tunnel traffic, but restrict the websocket port (8080) to trusted networks only.
+</Callout>
+</Step>
+
+<Step>
+### reverse proxy with authentication
+
+use nginx or similar to add authentication:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name tunnel.yourdomain.com;
+    
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    
+    # require basic auth for websocket connections
+    location ~ ^/\?id= {
+        auth_basic "Tunnel Access";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+    
+    # public access to tunnels
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+<Callout title="basic auth" intent="tip">
+this adds basic authentication to websocket connections while keeping tunnel traffic public.
+</Callout>
+</Step>
+
+<Step>
+### vpn or private network
+
+deploy the server in a private network:
+- use a vpn to access the server
+- deploy on a private subnet
+- use ssh tunneling for connections
+
+<Callout title="private deployment" intent="info">
+the most secure approach is to deploy in a private network and use vpn/ssh for access.
+</Callout>
+</Step>
+</Steps>
+
+## monitoring
+
+<Callout title="built-in logging" intent="info">
+the server provides comprehensive logging for monitoring connections and tunnel activity.
+</Callout>
+
+monitor these events:
+
+<Tabs items={['Connection Events', 'Certificate Events', 'Error Events']}>
+<Tab value="Connection Events">
+```bash
+# view real-time connection logs
+docker logs -f funnel-server
+
+# search for specific events
+docker logs funnel-server | grep -i "websocket\|tunnel"
+```
+
+key events to monitor:
+- websocket connection attempts
+- tunnel creation and removal
+- failed connection attempts
+</Tab>
+
+<Tab value="Certificate Events">
+```bash
+# monitor certificate activities
+docker logs funnel-server | grep -i "certificate\|tls\|acme"
+```
+
+certificate-related events:
+- certificate generation
+- renewal activities
+- tls handshake errors
+</Tab>
+
+<Tab value="Error Events">
+```bash
+# monitor errors and failures
+docker logs funnel-server | grep -i "error\|failed\|rejected"
+```
+
+important errors:
+- connection failures
+- invalid tunnel ids
+- certificate issues
+</Tab>
+</Tabs>
+
+## future security features
+
+<Callout title="roadmap" intent="info">
+we plan to add built-in authentication and authorization features in future releases.
+</Callout>
+
+planned features:
+- **authentication tokens** - api keys for client connections
+- **user management** - user accounts and permissions
+- **rate limiting** - protection against abuse
+- **ip allowlists** - built-in ip-based access control
 
 ## security updates
 
-It is important to keep your funnel server up to date to ensure you have the latest security patches. We announce new releases on our GitHub page. 
+<Callout title="stay updated" intent="warning">
+regularly update to get the latest security patches and features.
+</Callout>
+
+<Steps>
+<Step>
+### check for updates
+
+monitor [github releases](https://github.com/karol-broda/funnel/releases) for new versions.
+</Step>
+
+<Step>
+### update procedure
+
+```bash
+# pull latest image
+docker pull ghcr.io/karol-broda/funnel-server:latest
+
+# restart with new image
+docker stop funnel-server
+docker rm funnel-server
+docker run -d --name funnel-server [your-config] ghcr.io/karol-broda/funnel-server:latest
+```
+</Step>
+</Steps> 

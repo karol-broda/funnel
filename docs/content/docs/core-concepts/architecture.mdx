@@ -6,6 +6,7 @@ description: a look at how funnel works under the hood.
 
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 import { Callout } from 'fumadocs-ui/components/callout';
+import { Step, Steps } from 'fumadocs-ui/components/steps';
 
 funnel's architecture is designed to be both simple and efficient, relying on a persistent websocket connection to proxy http requests. the system consists of two main components: the **funnel server** and the **funnel client**.
 
@@ -57,16 +58,35 @@ the server runs on a publicly accessible machine (e.g., a vps). its responsibili
   the entire system is built around the websocket protocol. this allows for a persistent, bi-directional communication channel between the client and server, which is more efficient than traditional http polling for this use case.
 </Callout>
 
-1.  **connection**: the client initiates a websocket connection to the server's `/ws` endpoint, providing its desired tunnel id in the query parameters (`/ws?id=my-tunnel`).
-2.  **registration**: the server validates the id. if it's available, it creates a new `tunnel` instance and associates it with the websocket connection.
-3.  **request proxying**:
+<Steps>
+<Step>
+**connection**: the client initiates a websocket connection to the server's `/ws` endpoint, providing its desired tunnel id in the query parameters (`/ws?id=my-tunnel`).
+</Step>
+
+<Step>
+**registration**: the server validates the id. if it's available, it creates a new `tunnel` instance and associates it with the websocket connection.
+</Step>
+
+<Step>
+**request proxying**:
     -   an http request arrives at `my-tunnel.server.com`.
     -   the server's router extracts the subdomain (`my-tunnel`), finds the active tunnel, and constructs a json message containing the request details (method, path, headers, body).
     -   this message is sent down the websocket to the client.
-4.  **local forwarding**:
+</Step>
+
+<Step>
+**local forwarding**:
     -   the client receives the message, reconstructs the http request, and forwards it to the local service.
-5.  **response proxying**:
+</Step>
+
+<Step>
+**response proxying**:
     -   the local service returns a response.
     -   the client captures this response, serializes it into a json message, and sends it back to the server.
-6.  **final response**:
+</Step>
+
+<Step>
+**final response**:
     -   the server receives the response message and writes its contents (status code, headers, body) back to the original http requester. 
+</Step>
+</Steps>

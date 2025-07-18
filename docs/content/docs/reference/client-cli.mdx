@@ -4,21 +4,40 @@ icon: TerminalIcon
 description: a reference for all `funnel` client command-line flags.
 ---
 
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+<Callout title="client reference" intent="info">
 the `funnel` client is the command-line tool you use on your local machine to connect your service to a funnel server.
+</Callout>
+
+## primary commands
+
+<Cards>
+<Card title="🌐 funnel http" description="create an http tunnel (primary command)" />
+<Card title="📋 funnel version" description="display version information" />
+</Cards>
 
 ## `funnel http`
 
 this is the primary command for creating an http tunnel.
 
+<Callout title="basic syntax" intent="tip">
 ```bash
 funnel http [address:port | port] [flags]
 ```
+</Callout>
 
 ### arguments
 
--   **`[address:port | port]`** (required): the local address of the service you want to expose.
-    -   if you provide just a port (e.g., `3000`), it will default to `localhost:3000`.
-    -   you can provide a full address (e.g., `127.0.0.1:8080`).
+<Callout title="flexible addressing" intent="info">
+you can specify either just a port or a full address:port combination.
+</Callout>
+
+**`[address:port | port]`** (required): the local address of the service you want to expose.
+- if you provide just a port (e.g., `3000`), it will default to `localhost:3000`.
+- you can provide a full address (e.g., `127.0.0.1:8080`).
 
 ### flags
 
@@ -30,21 +49,127 @@ funnel http [address:port | port] [flags]
 
 ### examples
 
+<Tabs items={['Basic Usage', 'Custom Server', 'Full Configuration']}>
+<Tab value="Basic Usage">
+expose a service on port 3000, connecting to a local server:
+
 ```bash
-# expose a service on port 3000, connecting to a local server
 funnel http 3000
+```
 
-# expose a service on a different host and port
-funnel http 192.168.1.100:8000
+<Callout title="default behavior" intent="tip">
+this will connect to `localhost:8080` and generate a random tunnel id.
+</Callout>
+</Tab>
 
-# connect to a remote server with a custom subdomain
+<Tab value="Custom Server">
+connect to a remote server with a custom subdomain:
+
+```bash
 funnel http 3000 --server wss://my-server.com --id my-app-demo
 ```
 
+<Callout title="secure connection" intent="info">
+use `wss://` for secure websocket connections when connecting to a server with TLS enabled.
+</Callout>
+</Tab>
+
+<Tab value="Full Configuration">
+expose a service on a different host and port:
+
+```bash
+funnel http 192.168.1.100:8000 --server ws://tunnel.mycompany.com:8080 --id staging-api
+```
+
+<Callout title="network services" intent="warning">
+you can expose services running on other machines in your network, but ensure they're accessible from your client machine.
+</Callout>
+</Tab>
+</Tabs>
+
 ## `funnel version`
 
-prints the version of the funnel client.
+displays the version of the funnel client.
 
 ```bash
 funnel version
-``` 
+```
+
+<Callout title="version check" intent="tip">
+useful for verifying your installation and checking for updates.
+</Callout>
+
+## usage patterns
+
+### development workflow
+
+<Cards>
+<Card title="🔧 local development" description="funnel http 3000 --id my-project" />
+<Card title="🧪 testing" description="funnel http 8080 --server wss://test.example.com" />
+<Card title="🎯 demos" description="funnel http 5000 --id product-demo" />
+</Cards>
+
+### common scenarios
+
+<Tabs items={['Web Development', 'API Testing', 'Mobile Development']}>
+<Tab value="Web Development">
+expose your local development server:
+
+```bash
+# react development server
+funnel http 3000 --id my-react-app
+
+# next.js development server  
+funnel http 3000 --id my-nextjs-app
+
+# vite development server
+funnel http 5173 --id my-vite-app
+```
+</Tab>
+
+<Tab value="API Testing">
+expose your local api for testing:
+
+```bash
+# express api server
+funnel http 8000 --id my-api-v1
+
+# django development server
+funnel http 8000 --id django-api
+
+# flask development server
+funnel http 5000 --id flask-api
+```
+</Tab>
+
+<Tab value="Mobile Development">
+expose your local server for mobile app testing:
+
+```bash
+# react native metro bundler
+funnel http 8081 --id rn-bundler
+
+# local api for mobile app
+funnel http 3000 --id mobile-api
+```
+
+<Callout title="mobile testing" intent="tip">
+perfect for testing your mobile app against a local backend without complex network configuration.
+</Callout>
+</Tab>
+</Tabs>
+
+## troubleshooting
+
+<Callout title="common issues" intent="warning">
+if you encounter connection issues, check these common problems:
+</Callout>
+
+- **connection refused**: ensure the server is running and accessible
+- **tunnel id taken**: try a different `--id` or let the system generate one
+- **local service not found**: verify your local service is running on the specified port
+- **firewall blocking**: check that your firewall allows outbound websocket connections
+
+<Callout title="need help?" intent="info">
+for server-specific configuration, see the [server CLI reference](/docs/reference/server-cli).
+</Callout> 

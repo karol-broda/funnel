@@ -1,0 +1,12 @@
+{
+  "title": "documentation",
+  "icon": "BookOpenIcon",
+  "pages": [
+    "index",
+    "getting-started",
+    "core-concepts",
+    "reference",
+    "server",
+    "roadmap"
+  ]
+}

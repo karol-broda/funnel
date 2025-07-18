@@ -5,13 +5,20 @@ description: a step-by-step guide to get your first tunnel running.
 ---
 
 import { Steps } from 'fumadocs-ui/components/steps';
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
 
-this guide will walk you through a complete example of starting the server, connecting a client, and accessing your local service from the public internet.
+<Callout title="complete example" intent="info">
+this guide walks you through creating your first tunnel, from starting a local service to accessing it from anywhere on the internet.
+</Callout>
 
-### prerequisites
+## prerequisites
 
-- you have a local web service running. for this example, we'll assume it's on `localhost:3000`.
-- you have installed both the `funnel` client and `funnel-server` binaries.
+<Cards>
+<Card title="🌐 local service" description="a web service running on your machine (we'll use localhost:3000)" />
+<Card title="🔧 funnel client" description="the funnel client binary installed on your machine" />
+<Card title="🐳 docker" description="docker installed to run the server" />
+</Cards>
 
 <Steps>
 
@@ -19,45 +26,97 @@ this guide will walk you through a complete example of starting the server, conn
 
 first, you need a local web service to expose. if you don't have one, you can start a simple python web server.
 
-open a terminal and run:
+<Callout title="test server" intent="tip">
+this python server will serve the current directory on port 3000, perfect for testing your tunnel.
+</Callout>
+
 ```bash
 # this will serve the current directory on port 3000
 python3 -m http.server 3000
 ```
 
+you should see output like:
+```
+Serving HTTP on 0.0.0.0 port 3000 (http://0.0.0.0:3000/) ...
+```
+
 ### start the funnel server
 
-next, start the funnel server. this is the remote component that will listen for public traffic.
+next, start the funnel server using docker. this is the remote component that will listen for public traffic.
 
-in a second terminal, run:
+<Callout title="server component" intent="info">
+the server acts as a bridge between public internet traffic and your local client. it runs independently and can serve multiple clients.
+</Callout>
+
 ```bash
 # starts the server on the default port 8080
-./bin/funnel-server
+docker run -d --name funnel-server -p 8080:8080 ghcr.io/karol-broda/funnel-server:latest
 ```
-you should see a log message indicating the server is running.
+
+verify the server is running:
+```bash
+docker logs funnel-server
+```
+
+you should see logs indicating the server is listening on port 8080.
 
 ### connect the funnel client
 
-now, connect your local service to the server. this command tells the funnel client to connect to your remote server and forward traffic to your local service on port 3000. we'll also assign a custom subdomain `demo` to it.
+now, connect your local service to the server. this command tells the funnel client to connect to your remote server and forward traffic to your local service on port 3000.
 
-in a third terminal, run:
+<Callout title="custom subdomain" intent="tip">
+we're using the custom subdomain `demo` for this example. you can choose any available subdomain name.
+</Callout>
+
 ```bash
 # connect to the server, forwarding to localhost:3000
 funnel http 3000 --server ws://localhost:8080 --id demo
 ```
 
-you should see log output from the client indicating a successful connection, and it will display your public tunnel url.
+you should see output similar to:
+```
+✓ Connected to server
+✓ Tunnel active: http://demo.localhost:8080
+✓ Forwarding to localhost:3000
+```
 
 ### access your service
 
-your local service is now exposed to the world! you can access it from any device with an internet connection.
+<Callout title="success!" intent="success">
+your local service is now exposed to the world! you can access it from any device with internet connectivity.
+</Callout>
 
-open a browser or use curl to test it:
+test your tunnel:
 ```bash
 curl http://demo.localhost:8080
 ```
-this request will be sent to the funnel server, proxied through the websocket to your client, and then forwarded to your local python web server. the response will follow the same path back.
+
+you should see the response from your local python web server. the request flow is:
+1. **curl** → **funnel server** → **websocket** → **funnel client** → **localhost:3000**
+2. **localhost:3000** → **funnel client** → **websocket** → **funnel server** → **curl**
 
 </Steps>
 
-that's it! you have successfully created a tunnel. for more advanced configuration options, see the cli references. 
+## what's next?
+
+<Cards>
+<Card 
+  title="🏗️ architecture" 
+  description="understand how funnel works under the hood"
+  href="/docs/core-concepts/architecture"
+/>
+<Card 
+  title="📖 client cli" 
+  description="explore all available client commands and options"
+  href="/docs/reference/client-cli"
+/>
+<Card 
+  title="📦 server deployment" 
+  description="deploy your own server for production use"
+  href="/docs/server/deployment"
+/>
+</Cards>
+
+<Callout title="congratulations!" intent="success">
+you've successfully created your first tunnel! for production use, consider deploying your own server with TLS enabled.
+</Callout> 

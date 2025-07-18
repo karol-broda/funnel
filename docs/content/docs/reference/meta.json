@@ -1,0 +1,5 @@
+{
+  "title": "reference",
+  "icon": "FilesIcon",
+  "pages": ["client-cli", "server-cli"]
+}

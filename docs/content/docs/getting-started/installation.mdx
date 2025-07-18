@@ -6,53 +6,94 @@ description: how to install the funnel client and server.
 
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { Callout } from 'fumadocs-ui/components/callout';
+import { File, Folder, Files } from 'fumadocs-ui/components/files';
 
-you can get started with funnel by either using a one-line install script for the client, or by building from source for both the client and server.
+get started with funnel by installing the client and running the server using docker.
 
 ## client installation
 
-### one-line install (linux/macos)
-
-the easiest way to install the `funnel` client is with the following script. it will detect your os and architecture, and install the correct binary to `/usr/local/bin`.
+<Tabs items={['Quick Install', 'Manual Install', 'Build from Source']}>
+<Tab value="Quick Install">
+the easiest way to install the `funnel` client:
 
 ```bash
 curl -LsSf https://raw.githubusercontent.com/karol-broda/funnel/master/scripts/install.sh | sh
 ```
 
-### building from source
+supports linux and macos on both amd64 and arm64 architectures.
+</Tab>
 
-if you prefer to build from source, you'll need to have [go](https://go.dev/doc/install) installed.
+<Tab value="Manual Install">
+download from the [releases page](https://github.com/karol-broda/funnel/releases) and install:
 
 ```bash
-# 1. clone the repository
+# example for linux amd64
+sudo mv funnel /usr/local/bin/funnel
+sudo chmod +x /usr/local/bin/funnel
+```
+</Tab>
+
+<Tab value="Build from Source">
+requires [go](https://go.dev/doc/install) 1.21 or later:
+
+```bash
 git clone https://github.com/karol-broda/funnel.git
 cd funnel
-
-# 2. build the client
 make build-client
-
-# 3. (optional) install it to your path
 sudo mv ./bin/funnel /usr/local/bin/funnel
 ```
+</Tab>
+</Tabs>
 
 ## server installation
 
-the server must be built from source.
-
-<Callout title="prerequisites">
-  you'll need [go](https://go.dev/doc/install) installed on the machine that will run the server.
+<Callout title="docker required" intent="warning">
+the server runs as a docker container. you'll need [docker](https://docs.docker.com/get-docker/) installed.
 </Callout>
 
+### using docker image
+
 ```bash
-# 1. clone the repository
-git clone https://github.com/karol-broda/funnel.git
-cd funnel
-
-# 2. build the server
-make build-server
-
-# 3. the binary will be at ./bin/funnel-server
-./bin/funnel-server --version
+# pull and verify the server image
+docker pull ghcr.io/karol-broda/funnel-server:latest
+docker run --rm ghcr.io/karol-broda/funnel-server:latest version
 ```
 
-once you have the server binary, you can run it directly. see the [server cli reference](/docs/reference/server-cli) for configuration options. 
+### building from source
+
+```bash
+git clone https://github.com/karol-broda/funnel.git
+cd funnel
+make build-server-docker
+```
+
+## project structure
+
+<Files>
+  <Folder name="funnel" defaultOpen>
+    <Folder name="client" defaultOpen>
+      <File name="client.go" />
+      <File name="connection.go" />
+      <File name="runner.go" />
+    </Folder>
+    <Folder name="server" defaultOpen>
+      <File name="server.go" />
+      <File name="router.go" />
+      <File name="tunnel.go" />
+    </Folder>
+    <Folder name="cmd" defaultOpen>
+      <Folder name="funnel" defaultOpen>
+        <File name="main.go" />
+      </Folder>
+      <Folder name="server" defaultOpen>
+        <File name="main.go" />
+      </Folder>
+    </Folder>
+  </Folder>
+</Files>
+
+## next steps
+
+**[basic usage](/docs/getting-started/basic-usage)** - create your first tunnel  
+**[server deployment](/docs/server/deployment)** - deploy for production  
+**[cli reference](/docs/reference/client-cli)** - explore all commands 

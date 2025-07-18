@@ -67,10 +67,12 @@ export async function generateMetadata(props: {
   const page = source.getPage(params.slug);
   if (!page) notFound();
 
+  const image = ["/docs-og", ...(params.slug || []), "image.png"].join("/");
+
   return createMetadata(
     page.data.title,
     page.data.description,
-    undefined,
+    image,
     page.url
   );
 }

@@ -5,77 +5,97 @@ description: a reference for all `funnel-server` command-line flags and how to c
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 
-the `funnel-server` is the binary that runs on your public-facing server. it manages client connections and proxies traffic.
+<Callout title="docker only" intent="warning">
+the funnel server runs exclusively as a docker container for easy deployment and management.
+</Callout>
 
-## `funnel-server`
+## running the server
 
-this command starts the server.
-
-```bash
-./bin/funnel-server [flags]
-```
-
-### flags
-
-| flag                     | shorthand | default                   | description                                                              |
-| :----------------------- | :-------- | :------------------------ | :----------------------------------------------------------------------- |
-| `--port`                 | `-p`      | `8080`                    | the port to listen on for http traffic.                                  |
-| `--host`                 |           | `0.0.0.0`                 | the host interface to bind to.                                           |
-| `--enable-tls`           |           | `false`                   | enable automatic tls via let's encrypt.                                  |
-| `--tls-port`             |           | `8443`                    | the port to listen on for https traffic.                                 |
-| `--letsencrypt-email`    |           |                           | the email address for your let's encrypt account. (required for tls)     |
-| `--cert-dir`             |           | `/var/lib/funnel/certs`   | directory to store tls certificates.                                     |
-| `--dns-providers-config` |           |                           | path to the dns providers config file. (required for tls)                |
-| `--help`                 | `-h`      |                           | show help for the command.                                               |
-
-## `funnel-server version`
-
-prints the version of the funnel server.
+basic command to start the server:
 
 ```bash
-./bin/funnel-server version
+docker run -d --name funnel-server [options] ghcr.io/karol-broda/funnel-server:latest
 ```
 
----
+## configuration
+
+<Accordions>
+<Accordion title="Environment Variables">
+| variable | default | description |
+| --- | --- | --- |
+| `FUNNEL_PORT` | `8080` | http traffic port |
+| `FUNNEL_HOST` | `0.0.0.0` | host interface to bind |
+| `FUNNEL_ENABLE_TLS` | `false` | enable automatic tls |
+| `FUNNEL_TLS_PORT` | `8443` | https traffic port |
+| `FUNNEL_LETSENCRYPT_EMAIL` | - | email for let's encrypt (required for tls) |
+| `FUNNEL_CERT_DIR` | `/var/lib/funnel/certs` | certificate storage directory |
+| `FUNNEL_DNS_PROVIDERS_CONFIG` | - | dns provider config path (required for tls) |
+</Accordion>
+
+<Accordion title="Command Line Flags">
+alternatively, pass flags directly to the container:
+
+| flag | shorthand | description |
+| --- | --- | --- |
+| `--port` | `-p` | http traffic port |
+| `--enable-tls` | - | enable automatic tls |
+| `--tls-port` | - | https traffic port |
+| `--letsencrypt-email` | - | email for let's encrypt |
+| `--cert-dir` | - | certificate storage directory |
+| `--dns-providers-config` | - | dns provider config path |
+| `--help` | `-h` | show help |
+</Accordion>
+</Accordions>
+
+## examples
+
+basic server:
+```bash
+docker run -d --name funnel-server -p 8080:8080 ghcr.io/karol-broda/funnel-server:latest
+```
+
+server with custom port:
+```bash
+docker run -d --name funnel-server -p 9000:9000 -e FUNNEL_PORT=9000 ghcr.io/karol-broda/funnel-server:latest
+```
 
 ## tls configuration
 
-funnel can automatically provision and renew tls certificates from let's encrypt using the dns-01 challenge. this allows you to have secure, `https` tunnels out of the box.
-
-<Callout title="dns-01 challenge" intent="info">
-  the dns-01 challenge requires the server to have api access to your dns provider to create temporary txt records. funnel uses the popular `lego` library to support a wide range of dns providers.
+<Callout title="automatic tls" intent="info">
+funnel automatically provisions and renews tls certificates from let's encrypt using the dns-01 challenge.
 </Callout>
 
-### steps to enable tls
+### setup steps
 
-1.  **create a dns provider configuration file.**
-    this file tells funnel how to authenticate with your dns provider's api. it's a json file that you will pass to the `--dns-providers-config` flag.
+1. **create dns provider config** - see [lego documentation](https://go-acme.github.io/lego/dns/)
 
-    see the [`lego` dns provider documentation](https://go-acme.github.io/lego/dns/) for a list of all supported providers and the required configuration for each.
-
-    here is an example for cloudflare:
-    ```json title="dns-providers.json"
+```json title="dns-providers.json"
+{
+  "providers": [
     {
-      "providers": [
-        {
-          "name": "cloudflare",
-          "env": {
-            "CF_API_TOKEN": "your-cloudflare-api-token"
-          }
-        }
-      ]
+      "name": "cloudflare",
+      "env": {
+        "CF_API_TOKEN": "your-cloudflare-api-token"
+      }
     }
-    ```
+  ]
+}
+```
 
-2.  **start the server with tls flags enabled.**
-    you must provide your email and the path to your config file.
+2. **start with tls enabled**
 
-    ```bash
-    ./bin/funnel-server \
-      --enable-tls \
-      --letsencrypt-email your-email@example.com \
-      --dns-providers-config ./dns-providers.json
-    ```
+```bash
+docker run -d --name funnel-server \
+  -p 8080:8080 \
+  -p 8443:8443 \
+  -v $(pwd)/dns-providers.json:/etc/funnel/dns-providers.json \
+  -v funnel-certs:/var/lib/funnel/certs \
+  -e FUNNEL_ENABLE_TLS=true \
+  -e FUNNEL_LETSENCRYPT_EMAIL=your-email@example.com \
+  -e FUNNEL_DNS_PROVIDERS_CONFIG=/etc/funnel/dns-providers.json \
+  ghcr.io/karol-broda/funnel-server:latest
+```
 
-when the server starts, it will begin provisioning certificates for the tunnels as they connect. the first connection to a new host may take a few moments while the certificate is being issued. 
+certificates are generated automatically on first request and renewed before expiration. 
