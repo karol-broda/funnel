@@ -3,23 +3,46 @@ import "./global.css";
 import { RootProvider } from "fumadocs-ui/provider";
 import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
-import { type Metadata } from "next";
+import { createMetadata, generateStructuredData, siteConfig } from "@/lib/seo";
+import Analytics from "@/app/analytics";
 
 const inter = Inter({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "funnel docs",
-    template: "%s | funnel",
-  },
-};
+export const metadata = createMetadata(
+  siteConfig.name,
+  siteConfig.description,
+  siteConfig.ogImage,
+  "/"
+);
 
 export default function Layout({ children }: { children: ReactNode }) {
+  const structuredData = generateStructuredData("website", {
+    title: siteConfig.name,
+    description: siteConfig.description,
+    url: siteConfig.url,
+    image: siteConfig.ogImage,
+  });
+
   return (
     <html lang="en" className={inter.className} suppressHydrationWarning>
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/site.webmanifest" />
+        <meta name="theme-color" content="#000000" />
+        <meta name="color-scheme" content="dark light" />
+      </head>
       <body>
+        <Analytics />
         <RootProvider>{children}</RootProvider>
       </body>
     </html>
