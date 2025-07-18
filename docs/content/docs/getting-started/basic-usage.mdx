@@ -1,0 +1,63 @@
+---
+title: basic usage
+icon: RocketLaunchIcon
+description: a step-by-step guide to get your first tunnel running.
+---
+
+import { Steps } from 'fumadocs-ui/components/steps';
+
+this guide will walk you through a complete example of starting the server, connecting a client, and accessing your local service from the public internet.
+
+### prerequisites
+
+- you have a local web service running. for this example, we'll assume it's on `localhost:3000`.
+- you have installed both the `funnel` client and `funnel-server` binaries.
+
+<Steps>
+
+### start a local service
+
+first, you need a local web service to expose. if you don't have one, you can start a simple python web server.
+
+open a terminal and run:
+```bash
+# this will serve the current directory on port 3000
+python3 -m http.server 3000
+```
+
+### start the funnel server
+
+next, start the funnel server. this is the remote component that will listen for public traffic.
+
+in a second terminal, run:
+```bash
+# starts the server on the default port 8080
+./bin/funnel-server
+```
+you should see a log message indicating the server is running.
+
+### connect the funnel client
+
+now, connect your local service to the server. this command tells the funnel client to connect to your remote server and forward traffic to your local service on port 3000. we'll also assign a custom subdomain `demo` to it.
+
+in a third terminal, run:
+```bash
+# connect to the server, forwarding to localhost:3000
+funnel http 3000 --server ws://localhost:8080 --id demo
+```
+
+you should see log output from the client indicating a successful connection, and it will display your public tunnel url.
+
+### access your service
+
+your local service is now exposed to the world! you can access it from any device with an internet connection.
+
+open a browser or use curl to test it:
+```bash
+curl http://demo.localhost:8080
+```
+this request will be sent to the funnel server, proxied through the websocket to your client, and then forwarded to your local python web server. the response will follow the same path back.
+
+</Steps>
+
+that's it! you have successfully created a tunnel. for more advanced configuration options, see the cli references. 

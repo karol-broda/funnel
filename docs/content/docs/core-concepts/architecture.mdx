@@ -1,0 +1,72 @@
+---
+title: architecture
+icon: GraphIcon
+description: a look at how funnel works under the hood.
+---
+
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+funnel's architecture is designed to be both simple and efficient, relying on a persistent websocket connection to proxy http requests. the system consists of two main components: the **funnel server** and the **funnel client**.
+
+## system diagram
+
+this diagram illustrates the flow of a request from an end-user to your local application.
+
+<Mermaid
+  chart={`
+graph LR
+    A["local app<br/>:3000"] --> B["funnel client"]
+    B -.websocket.-> C["funnel server<br/>:8080"]
+    D["browser/curl"] --> E["tunnel-id.localhost:8080"]
+    E --> C
+    C -.-> B
+    B --> A
+    
+    style A fill:#b7bdf8,color:#24273a
+    style B fill:#f5bde6,color:#24273a
+    style C fill:#8bd5ca,color:#24273a
+    style D fill:#a6da95,color:#24273a
+    style E fill:#91d7e3,color:#24273a
+`}
+/>
+
+## component breakdown
+
+<Accordions>
+<Accordion title="funnel client">
+the client runs on your local machine, alongside the service you want to expose. its primary responsibilities are:
+-   establishing and maintaining a persistent websocket connection to the funnel server.
+-   when a request is received from the server, it forwards it to the specified local service (e.g., `localhost:3000`).
+-   it captures the response from the local service and sends it back to the server over the websocket.
+-   it automatically reconnects to the server if the connection is lost.
+</Accordion>
+<Accordion title="funnel server">
+the server runs on a publicly accessible machine (e.g., a vps). its responsibilities are:
+-   listening for websocket connections from funnel clients.
+-   for each connected client, it registers a unique tunnel id and manages its lifecycle.
+-   listening for public http traffic on a specific port (e.g., 8080).
+-   when a request arrives at a tunnel's public url (e.g., `your-id.your-server.com`), it proxies that request to the corresponding client over the correct websocket.
+-   it then waits for the response from the client and forwards it back to the original requester.
+</Accordion>
+</Accordions>
+
+## communication protocol
+
+<Callout title="websocket is key">
+  the entire system is built around the websocket protocol. this allows for a persistent, bi-directional communication channel between the client and server, which is more efficient than traditional http polling for this use case.
+</Callout>
+
+1.  **connection**: the client initiates a websocket connection to the server's `/ws` endpoint, providing its desired tunnel id in the query parameters (`/ws?id=my-tunnel`).
+2.  **registration**: the server validates the id. if it's available, it creates a new `tunnel` instance and associates it with the websocket connection.
+3.  **request proxying**:
+    -   an http request arrives at `my-tunnel.server.com`.
+    -   the server's router extracts the subdomain (`my-tunnel`), finds the active tunnel, and constructs a json message containing the request details (method, path, headers, body).
+    -   this message is sent down the websocket to the client.
+4.  **local forwarding**:
+    -   the client receives the message, reconstructs the http request, and forwards it to the local service.
+5.  **response proxying**:
+    -   the local service returns a response.
+    -   the client captures this response, serializes it into a json message, and sends it back to the server.
+6.  **final response**:
+    -   the server receives the response message and writes its contents (status code, headers, body) back to the original http requester. 

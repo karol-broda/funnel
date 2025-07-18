@@ -1,0 +1,50 @@
+---
+title: client cli
+icon: TerminalIcon
+description: a reference for all `funnel` client command-line flags.
+---
+
+the `funnel` client is the command-line tool you use on your local machine to connect your service to a funnel server.
+
+## `funnel http`
+
+this is the primary command for creating an http tunnel.
+
+```bash
+funnel http [address:port | port] [flags]
+```
+
+### arguments
+
+-   **`[address:port | port]`** (required): the local address of the service you want to expose.
+    -   if you provide just a port (e.g., `3000`), it will default to `localhost:3000`.
+    -   you can provide a full address (e.g., `127.0.0.1:8080`).
+
+### flags
+
+| flag      | shorthand | default                  | description                                                              |
+| :-------- | :-------- | :----------------------- | :----------------------------------------------------------------------- |
+| `--server`  | `-s`      | `http://localhost:8080`  | the url of the remote funnel server. use `ws://` or `wss://`.             |
+| `--id`      | `-i`      | (randomly generated)     | the custom subdomain to request for the tunnel.                          |
+| `--help`    | `-h`      |                          | show help for the command.                                               |
+
+### examples
+
+```bash
+# expose a service on port 3000, connecting to a local server
+funnel http 3000
+
+# expose a service on a different host and port
+funnel http 192.168.1.100:8000
+
+# connect to a remote server with a custom subdomain
+funnel http 3000 --server wss://my-server.com --id my-app-demo
+```
+
+## `funnel version`
+
+prints the version of the funnel client.
+
+```bash
+funnel version
+``` 
