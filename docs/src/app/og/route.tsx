@@ -1,19 +1,14 @@
 import { ImageResponse } from "next/og";
-import { NextRequest } from "next/server";
 import { flavors } from "@catppuccin/palette";
 
 const macchiato = flavors.macchiato;
 
 export const runtime = "edge";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url);
-    const title =
-      searchParams.get("title") || "localhost wants to see other people";
-    const description =
-      searchParams.get("description") ||
-      "yet another tunneling tool nobody asked for";
+    const title = "localhost wants to see other people";
+    const description = "yet another tunneling tool nobody asked for";
 
     return new ImageResponse(
       (
