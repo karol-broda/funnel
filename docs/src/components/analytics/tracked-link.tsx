@@ -27,12 +27,10 @@ export function TrackedLink({
   const { trackExternalLink } = useDocumentationTracking();
 
   const handleClick: MouseEventHandler<HTMLAnchorElement> = (event) => {
-    // track external link clicks
     if (href.startsWith("http")) {
       trackExternalLink(href, context);
     }
 
-    // call custom onClick if provided
     if (onClick) {
       onClick(event);
     }

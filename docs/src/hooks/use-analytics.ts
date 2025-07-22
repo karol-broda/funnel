@@ -7,9 +7,15 @@ import { useEffect } from "react";
 export function useAnalytics() {
   const posthog = usePostHog();
 
-  const trackEvent = (eventName: string, properties?: Record<string, any>) => {
+  const trackEvent = (
+    eventName: string,
+    properties?: Record<string, string | number | boolean | null>
+  ) => {
     if (posthog) {
       posthog.capture(eventName, properties);
+      if (process.env.NODE_ENV === "development") {
+        console.log("📊", eventName);
+      }
     }
   };
 
@@ -21,7 +27,10 @@ export function useAnalytics() {
     }
   };
 
-  const identifyUser = (userId: string, properties?: Record<string, any>) => {
+  const identifyUser = (
+    userId: string,
+    properties?: Record<string, string | number | boolean | null>
+  ) => {
     if (posthog) {
       posthog.identify(userId, properties);
     }
@@ -48,7 +57,6 @@ export function usePageTracking() {
   }, [pathname, searchParams, trackPageView]);
 }
 
-// pre-defined tracking events
 export function useDocumentationTracking() {
   const { trackEvent } = useAnalytics();
 

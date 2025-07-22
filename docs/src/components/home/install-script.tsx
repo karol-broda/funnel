@@ -15,7 +15,6 @@ export default function InstallScript() {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
 
-      // track the copy event
       trackInstallCommand("curl_script");
       trackCodeCopy(installScript, "home_page_install");
     });

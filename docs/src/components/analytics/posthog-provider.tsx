@@ -11,9 +11,6 @@ type PostHogProviderWrapperProps = {
 export function PostHogProviderWrapper({
   children,
 }: PostHogProviderWrapperProps) {
-  // posthog is already initialized in instrumentation-client.ts
-  // this provider just makes it available to React components
-
   if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) {
     return <>{children}</>;
   }

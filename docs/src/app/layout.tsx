@@ -5,7 +5,7 @@ import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
 import { createMetadata, generateStructuredData, siteConfig } from "@/lib/seo";
 import { PostHogProviderWrapper } from "@/components/analytics/posthog-provider";
-import { PageTracker } from "@/components/analytics/page-tracker";
+import { PageTrackerWithSuspense } from "@/components/analytics/page-tracker-suspense";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -44,7 +44,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <PostHogProviderWrapper>
-          <PageTracker />
+          <PageTrackerWithSuspense />
           <RootProvider
             theme={{
               defaultTheme: "dark",
