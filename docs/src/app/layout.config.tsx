@@ -10,5 +10,9 @@ export const baseOptions: BaseLayoutProps = {
       text: "documentation",
       url: "/docs",
     },
+    {
+      text: "privacy",
+      url: "/privacy",
+    },
   ],
 };

@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 import { createMetadata, generateStructuredData, siteConfig } from "@/lib/seo";
 import { PostHogProviderWrapper } from "@/components/analytics/posthog-provider";
 import { PageTrackerWithSuspense } from "@/components/analytics/page-tracker-suspense";
+import { CookieBanner } from "@/components/legal/cookie-banner";
+import { PrivacyAwareAnalytics } from "@/components/legal/privacy-aware-analytics";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -45,6 +47,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <body>
         <PostHogProviderWrapper>
           <PageTrackerWithSuspense />
+          <PrivacyAwareAnalytics />
           <RootProvider
             theme={{
               defaultTheme: "dark",
@@ -52,6 +55,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             }}
           >
             {children}
+            <CookieBanner />
           </RootProvider>
         </PostHogProviderWrapper>
       </body>
