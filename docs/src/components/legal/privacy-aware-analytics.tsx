@@ -15,7 +15,7 @@ export function PrivacyAwareAnalytics() {
       if (posthog) {
         if (consentGiven) {
           posthog.opt_in_capturing();
-        } else if (consent === "declined") {
+        } else {
           posthog.opt_out_capturing();
         }
       }

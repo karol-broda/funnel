@@ -11,7 +11,8 @@ export function CookieBanner() {
 
   useEffect(() => {
     const hasConsent = localStorage.getItem(CONSENT_KEY);
-    if (!hasConsent) {
+
+    if (hasConsent !== "accepted") {
       setIsVisible(true);
     }
   }, []);
@@ -19,10 +20,16 @@ export function CookieBanner() {
   const handleAccept = () => {
     localStorage.setItem(CONSENT_KEY, "accepted");
     setIsVisible(false);
+
+    if (
+      typeof window !== "undefined" &&
+      (window as unknown as { posthog?: any }).posthog
+    ) {
+      (window as unknown as { posthog?: any }).posthog.opt_in_capturing();
+    }
   };
 
   const handleDecline = () => {
-    localStorage.setItem(CONSENT_KEY, "declined");
     setIsVisible(false);
 
     if (
@@ -49,7 +56,7 @@ export function CookieBanner() {
               <Link href="/privacy" className="underline hover:no-underline">
                 privacy policy
               </Link>{" "}
-              for details.
+              for details. If you decline, we won't store anything at all.
             </p>
           </div>
 
