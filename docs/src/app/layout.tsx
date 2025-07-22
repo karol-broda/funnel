@@ -4,6 +4,8 @@ import { RootProvider } from "fumadocs-ui/provider";
 import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
 import { createMetadata, generateStructuredData, siteConfig } from "@/lib/seo";
+import { PostHogProviderWrapper } from "@/components/analytics/posthog-provider";
+import { PageTracker } from "@/components/analytics/page-tracker";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -41,14 +43,17 @@ export default function Layout({ children }: { children: ReactNode }) {
         <meta name="color-scheme" content="dark light" />
       </head>
       <body>
-        <RootProvider
-          theme={{
-            defaultTheme: "dark",
-            storageKey: "theme",
-          }}
-        >
-          {children}
-        </RootProvider>
+        <PostHogProviderWrapper>
+          <PageTracker />
+          <RootProvider
+            theme={{
+              defaultTheme: "dark",
+              storageKey: "theme",
+            }}
+          >
+            {children}
+          </RootProvider>
+        </PostHogProviderWrapper>
       </body>
     </html>
   );

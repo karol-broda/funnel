@@ -10,6 +10,13 @@
     "types": "tsc --noEmit",
     "lint": "next lint"
   },
+  "browserslist": [
+    "chrome 64",
+    "edge 79",
+    "firefox 67",
+    "opera 51",
+    "safari 12"
+  ],
   "dependencies": {
     "@catppuccin/palette": "1.7.1",
     "@phosphor-icons/react": "2.1.10",
@@ -21,6 +28,8 @@
     "mermaid": "11.8.1",
     "next": "15.3.4",
     "ogl": "1.0.11",
+    "posthog-js": "1.257.1",
+    "posthog-node": "5.6.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "rehype-katex": "7.0.1",

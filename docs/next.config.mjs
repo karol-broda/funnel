@@ -11,10 +11,28 @@ const config = {
   generateEtags: true,
 
   trailingSlash: false,
+  skipTrailingSlashRedirect: true,
 
   images: {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 31536000,
+  },
+
+  async rewrites() {
+    return [
+      {
+        source: "/ingest/static/:path*",
+        destination: "https://eu-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ingest/:path*",
+        destination: "https://eu.i.posthog.com/:path*",
+      },
+      {
+        source: "/ingest/decide",
+        destination: "https://eu.i.posthog.com/decide",
+      },
+    ];
   },
 
   headers: async () => {
