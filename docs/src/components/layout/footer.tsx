@@ -1,3 +1,4 @@
+import { HeartIcon } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 
 export function Footer() {
@@ -10,17 +11,20 @@ export function Footer() {
               href="/privacy"
               className="hover:text-foreground transition-colors"
             >
-              Privacy Policy
+              privacy policy
             </Link>
             <Link
               href="/terms"
               className="hover:text-foreground transition-colors"
             >
-              Terms of Service
+              terms of service
             </Link>
           </div>
           <span className="hidden sm:inline">•</span>
-          <span>Built with ❤️ for developers</span>
+          <span>
+            built with <HeartIcon className="inline-block" weight="fill" /> for
+            developers.
+          </span>
         </div>
         <div className="text-xs text-muted-foreground">
           © 2025 funnel. Open source tunneling solution.

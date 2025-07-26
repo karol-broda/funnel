@@ -4,24 +4,24 @@ icon: PackageIcon
 ---
 import { Step, Steps } from 'fumadocs-ui/components/steps';
 
-This guide will walk you through deploying the funnel server using Docker.
+this guide will walk you through deploying the funnel server using docker.
 
 ## prerequisites
 
-- Docker installed on your machine.
-- A domain name for your server (for TLS/HTTPS tunnels).
-- DNS provider credentials for automatic TLS certificate generation (optional but recommended).
+- docker installed on your machine.
+- a domain name for your server (for tls/https tunnels).
+- dns provider credentials for automatic tls certificate generation (optional but recommended).
 
 ## docker deployment
 
-The recommended way to deploy the server is using the official Docker image.
+the recommended way to deploy the server is using the official docker image.
 
 <Steps>
 
 <Step>
 ### create a volume for certificates
 
-The server needs to persist TLS certificates. Create a Docker volume to store them.
+the server needs to persist tls certificates. create a docker volume to store them.
 
 ```bash
 docker volume create funnel-certs
@@ -31,7 +31,7 @@ docker volume create funnel-certs
 <Step>
 ### basic deployment
 
-For a basic deployment without TLS, you can run:
+for a basic deployment without tls, you can run:
 
 ```bash
 docker run -d --name funnel-server \
@@ -40,15 +40,15 @@ docker run -d --name funnel-server \
   ghcr.io/karol-broda/funnel-server:latest
 ```
 
-This will start the server on port 8080 and make it accessible at `http://your-server-ip:8080`.
+this will start the server on port 8080 and make it accessible at `http://your-server-ip:8080`.
 </Step>
 
 <Step>
-### deployment with TLS (recommended)
+### deployment with tls (recommended)
 
-For a production deployment with automatic TLS certificates, you'll need to provide your domain name and DNS provider configuration.
+for a production deployment with automatic tls certificates, you'll need to provide your domain name and dns provider configuration.
 
-First, create a DNS provider configuration file (see the [Server CLI Reference](/docs/reference/server-cli) for details):
+first, create a dns provider configuration file (see the [server cli reference](/docs/reference/server-cli) for details):
 
 ```json title="dns-providers.json"
 {
@@ -63,7 +63,7 @@ First, create a DNS provider configuration file (see the [Server CLI Reference](
 }
 ```
 
-Then run the server with TLS enabled:
+then run the server with tls enabled:
 
 ```bash
 docker run -d --name funnel-server \
@@ -78,40 +78,40 @@ docker run -d --name funnel-server \
   ghcr.io/karol-broda/funnel-server:latest
 ```
 
-Replace `your-email@example.com` with your actual email address.
+replace `your-email@example.com` with your actual email address.
 </Step>
 
 <Step>
 ### verify the deployment
 
-Check the logs to ensure the server started correctly:
+check the logs to ensure the server started correctly:
 
 ```bash
 docker logs -f funnel-server
 ```
 
-You should see logs indicating that the server is listening on the configured ports. If TLS is enabled, you'll also see logs about certificate generation.
+you should see logs indicating that the server is listening on the configured ports. if tls is enabled, you'll also see logs about certificate generation.
 
 </Step>
 </Steps>
 
 ## configuration
 
-The server can be configured using environment variables:
+the server can be configured using environment variables:
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `FUNNEL_HOST` | The host to listen on. | `0.0.0.0` |
-| `FUNNEL_PORT` | The port for HTTP traffic. | `8080` |
-| `FUNNEL_TLS_PORT` | The port for HTTPS/TLS traffic. | `8443` |
-| `FUNNEL_ENABLE_TLS` | Enable automatic TLS certificate generation. | `false` |
-| `FUNNEL_LETSENCRYPT_EMAIL` | Email address for Let's Encrypt account (required for TLS). | `""` |
-| `FUNNEL_DNS_PROVIDERS_CONFIG` | Path to the DNS provider config file (required for TLS). | `""` |
-| `FUNNEL_CERT_DIR` | Directory to store TLS certificates. | `/var/lib/funnel/certs` |
+| `FUNNEL_HOST` | the host to listen on. | `0.0.0.0` |
+| `FUNNEL_PORT` | the port for http traffic. | `8080` |
+| `FUNNEL_TLS_PORT` | the port for https/tls traffic. | `8443` |
+| `FUNNEL_ENABLE_TLS` | enable automatic tls certificate generation. | `false` |
+| `FUNNEL_LETSENCRYPT_EMAIL` | email address for let's encrypt account (required for tls). | `""` |
+| `FUNNEL_DNS_PROVIDERS_CONFIG` | path to the dns provider config file (required for tls). | `""` |
+| `FUNNEL_CERT_DIR` | directory to store tls certificates. | `/var/lib/funnel/certs` |
 
 ## docker compose (alternative)
 
-You can also use Docker Compose for easier management:
+you can also use docker compose for easier management:
 
 ```yaml title="docker-compose.yml"
 version: '3.8'
@@ -135,9 +135,9 @@ volumes:
   funnel-certs:
 ```
 
-Then run:
+then run:
 ```bash
 docker-compose up -d
 ```
 
-For a complete list of configuration options, please refer to the [Server CLI Reference](/docs/reference/server-cli). 
+for a complete list of configuration options, please refer to the [server cli reference](/docs/reference/server-cli). 
