@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import { useEffect, useRef } from "react";
 import { Renderer, Program, Mesh, Color, Triangle } from "ogl";
 
@@ -94,7 +94,9 @@ void main() {
   vec3 rampColor;
   COLOR_RAMP(colors, uv.x, rampColor);
   
-  float height = snoise(vec2(uv.x * 2.0 + uTime * 0.1, uTime * 0.25)) * 0.5 * uAmplitude;
+  // subtle breathing effect for natural animation
+  float breathingEffect = sin(uTime * 0.5) * 0.1 + 0.9;
+  float height = snoise(vec2(uv.x * 2.0 + uTime * 0.1, uTime * 0.25)) * 0.5 * uAmplitude * breathingEffect;
   height = exp(height);
   height = (uv.y * 2.0 - height + 0.2);
   float intensity = 0.6 * height;
@@ -157,7 +159,7 @@ export default function Aurora(props: AuroraProps) {
 
     const geometry = new Triangle(gl);
     if (geometry.attributes.uv) {
-      delete (geometry.attributes).uv;
+      delete geometry.attributes.uv;
     }
 
     const colorStopsArray = colorStops.map((hex) => {

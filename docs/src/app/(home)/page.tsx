@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import Mermaid from "@/components/mdx/mermaid";
 import Aurora from "@/components/ui/aurora";
+import FeatureBento from "@/components/ui/feature-bento";
 import InstallScript from "@/components/home/install-script";
 import { createMetadata } from "@/lib/seo";
 import { TrackedLink } from "@/components/analytics/tracked-link";
@@ -38,9 +39,68 @@ graph LR
     style E fill:#91d7e3,color:#24273a
 `;
 
+const funnelFeatures = [
+  {
+    icon: <TerminalIcon className="h-6 w-6" weight="bold" />,
+    title: "dead simple cli",
+    description:
+      "if you can type 'funnel http 3000', you're basically a pro already. no phd required.",
+    label: "Easy",
+  },
+  {
+    icon: <ShieldCheckIcon className="h-6 w-6" weight="bold" />,
+    title: "probably secure",
+    description:
+      "i slapped tls on it with let's encrypt. your data is safer than my git commit history.",
+    label: "Safe",
+  },
+  {
+    icon: <SparkleIcon className="h-6 w-6" weight="bold" />,
+    title: "stupidly fast",
+    description:
+      "written in go because i heard it was fast. uses less ram than your spotify tab.",
+    label: "Speed",
+  },
+  {
+    icon: <GlobeIcon className="h-6 w-6" weight="bold" />,
+    title: "works everywhere™",
+    description:
+      "linux? mac? windows? raspberry pi? if it runs go, it probably runs funnel. no promises though.",
+    label: "Universal",
+  },
+  {
+    icon: <HardDrivesIcon className="h-6 w-6" weight="bold" />,
+    title: "host it yourself",
+    description:
+      "paranoid? control freak? same. run your own server and blame yourself when it breaks.",
+    label: "Self-hosted",
+  },
+  {
+    icon: <LightningIcon className="h-6 w-6" weight="bold" />,
+    title: "never gives you up",
+    description:
+      "connection dropped? funnel reconnects like that ex who won't take a hint. but useful.",
+    label: "Reliable",
+  },
+];
+
 export default function HomePage() {
   return (
     <>
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+          @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+          }
+          
+          .animate-shimmer {
+            animation: shimmer 1.5s ease-out;
+          }
+        `,
+        }}
+      />
       <main className="relative py-32 md:py-48">
         <div className="absolute inset-0 z-[-1] overflow-hidden opacity-60 dark:opacity-80">
           <Aurora colorStops={["#60A5FA", "#A78BFA", "#F472B6"]} />
@@ -135,40 +195,18 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-            <FeatureCard
-              icon={<TerminalIcon className="h-6 w-6" weight="bold" />}
-              title="dead simple cli"
-              description={
-                "if you can type 'funnel http 3000', you're basically a pro already. no phd required."
-              }
-            />
-            <FeatureCard
-              icon={<ShieldCheckIcon className="h-6 w-6" weight="bold" />}
-              title="probably secure"
-              description="i slapped tls on it with let's encrypt. your data is safer than my git commit history."
-            />
-            <FeatureCard
-              icon={<SparkleIcon className="h-6 w-6" weight="bold" />}
-              title="stupidly fast"
-              description="written in go because i heard it was fast. uses less ram than your spotify tab."
-            />
-            <FeatureCard
-              icon={<GlobeIcon className="h-6 w-6" weight="bold" />}
-              title="works everywhere™"
-              description="linux? mac? windows? raspberry pi? if it runs go, it probably runs funnel. no promises though."
-            />
-            <FeatureCard
-              icon={<HardDrivesIcon className="h-6 w-6" weight="bold" />}
-              title="host it yourself"
-              description="paranoid? control freak? same. run your own server and blame yourself when it breaks."
-            />
-            <FeatureCard
-              icon={<LightningIcon className="h-6 w-6" weight="bold" />}
-              title="never gives you up, never lets you down"
-              description={
-                "connection dropped? funnel reconnects like that ex who won't take a hint. but useful."
-              }
+          <div className="mt-12 flex justify-center">
+            <FeatureBento
+              cards={funnelFeatures}
+              enableStars={true}
+              enableSpotlight={true}
+              enableBorderGlow={true}
+              enableTilt={false}
+              enableMagnetism={false}
+              clickEffect={true}
+              glowColor="96, 165, 250"
+              particleCount={6}
+              spotlightRadius={300}
             />
           </div>
         </div>
@@ -254,26 +292,6 @@ export default function HomePage() {
   );
 }
 
-function FeatureCard({
-  icon,
-  title,
-  description,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex flex-col gap-4 rounded-lg border bg-card p-6 text-left transition-all duration-200 hover:scale-105 hover:shadow-lg hover:border-primary/50">
-      <div className="self-start rounded-md bg-secondary p-3 text-secondary-foreground">
-        {icon}
-      </div>
-      <h3 className="text-lg font-semibold">{title}</h3>
-      <p className="text-muted-foreground">{description}</p>
-    </div>
-  );
-}
-
 function StepCard({
   step,
   title,
@@ -286,20 +304,28 @@ function StepCard({
   subtitle?: string;
 }) {
   return (
-    <div className="flex-1 rounded-lg border bg-card p-6 text-left transition-all duration-200 hover:scale-105 hover:shadow-lg hover:border-primary/50">
+    <div className="group relative overflow-hidden flex-1 rounded-lg border bg-card p-6 text-left transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-primary/20 hover:border-primary/50 hover:-translate-y-2">
+      {/* shimmer effect */}
+      <div className="absolute inset-0 -translate-x-full group-hover:animate-shimmer bg-gradient-to-r from-transparent via-white/5 to-transparent pointer-events-none" />
       <div className="flex items-center gap-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary font-bold text-primary-foreground">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary font-bold text-primary-foreground transition-all duration-300 group-hover:scale-110 group-hover:rotate-12 group-hover:shadow-lg">
           {step}
         </div>
         <div>
-          <h3 className="text-lg font-semibold">{title}</h3>
+          <h3 className="text-lg font-semibold transition-colors duration-300 group-hover:text-primary">
+            {title}
+          </h3>
           {subtitle && (
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
+            <p className="text-sm text-muted-foreground transition-colors duration-300 group-hover:text-foreground">
+              {subtitle}
+            </p>
           )}
         </div>
       </div>
-      <pre className="mt-4 w-full rounded-md bg-background p-4">
-        <code className="text-sm">{code}</code>
+      <pre className="mt-4 w-full rounded-md bg-background p-4 transition-all duration-300 group-hover:bg-secondary/20 group-hover:border group-hover:border-primary/20">
+        <code className="text-sm transition-colors duration-300 group-hover:text-primary">
+          {code}
+        </code>
       </pre>
     </div>
   );
