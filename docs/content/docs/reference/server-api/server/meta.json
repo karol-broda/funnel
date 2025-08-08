@@ -1,6 +1,6 @@
 {
   "title": "Server",
-  "icon": "ServerIcon",
+  "icon": "HardDrivesIcon",
   "pages": [
     "health",
     "metrics",

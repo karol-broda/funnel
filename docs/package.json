@@ -20,6 +20,7 @@
   "dependencies": {
     "@catppuccin/palette": "1.7.1",
     "@phosphor-icons/react": "2.1.10",
+    "ajv": "^8.17.1",
     "fumadocs-core": "15.6.3",
     "fumadocs-mdx": "11.6.10",
     "fumadocs-openapi": "9.1.10",
