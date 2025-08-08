@@ -1,0 +1,949 @@
+{
+    "schemes": ["http"],
+    "swagger": "2.0",
+    "info": {
+        "description": "REST API for tunnel management and monitoring in the funnel tunneling solution\n\nThis API provides endpoints for:\n- Health checking\n- Server statistics and monitoring\n- Tunnel management (list, view, delete)\n- Individual tunnel statistics",
+        "title": "Funnel Server API",
+        "contact": {
+            "name": "Funnel Support",
+            "url": "https://github.com/karol-broda/funnel"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://github.com/karol-broda/funnel/blob/master/LICENSE.md"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api",
+    "paths": {
+        "/health": {
+            "get": {
+                "description": "Returns the health status of the server",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Server"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "Server is healthy",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/server.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/server.HealthData"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics": {
+            "get": {
+                "description": "Returns detailed server-wide metrics including performance, resource usage, and aggregated statistics",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Server"
+                ],
+                "summary": "Get comprehensive server metrics",
+                "responses": {
+                    "200": {
+                        "description": "Comprehensive server metrics",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/server.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/server.ServerMetricsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics/historical": {
+            "get": {
+                "description": "Returns time-series data for server-wide metrics over a specified time range",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Server"
+                ],
+                "summary": "Get historical server metrics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "24h",
+                        "description": "Time range (1h, 24h, 7d)",
+                        "name": "range",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "5m",
+                        "description": "Data interval (1m, 5m, 1h)",
+                        "name": "interval",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Historical server metrics",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/server.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/server.HistoricalMetricsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/server/stats": {
+            "get": {
+                "description": "Returns comprehensive server-wide statistics including tunnel count, request metrics, and cache performance",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Server"
+                ],
+                "summary": "Get server statistics",
+                "responses": {
+                    "200": {
+                        "description": "Server statistics retrieved successfully",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/server.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/server.ServerStats"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/tunnels": {
+            "get": {
+                "description": "Returns a list of all currently active tunnel connections",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tunnels"
+                ],
+                "summary": "List active tunnels",
+                "responses": {
+                    "200": {
+                        "description": "List of active tunnels",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/server.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/server.TunnelInfo"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/tunnels/{tunnelId}": {
+            "get": {
+                "description": "Returns detailed information about a specific tunnel",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tunnels"
+                ],
+                "summary": "Get tunnel details",
+                "parameters": [
+                    {
+                        "maxLength": 63,
+                        "minLength": 3,
+                        "type": "string",
+                        "description": "Tunnel ID (3-63 characters, lowercase letters, numbers, and hyphens only)",
+                        "name": "tunnelId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Tunnel details retrieved successfully",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/server.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/server.TunnelInfo"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid tunnel ID format",
+                        "schema": {
+                            "$ref": "#/definitions/server.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Tunnel not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.APIResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Forcibly closes a tunnel connection",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tunnels"
+                ],
+                "summary": "Delete tunnel",
+                "parameters": [
+                    {
+                        "maxLength": 63,
+                        "minLength": 3,
+                        "type": "string",
+                        "description": "Tunnel ID to delete",
+                        "name": "tunnelId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Tunnel deleted successfully",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/server.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/server.TunnelDeleteData"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid tunnel ID format",
+                        "schema": {
+                            "$ref": "#/definitions/server.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Tunnel not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tunnels/{tunnelId}/historical": {
+            "get": {
+                "description": "Returns time-series data for a specific tunnel over a specified time range",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tunnels"
+                ],
+                "summary": "Get tunnel historical data",
+                "parameters": [
+                    {
+                        "maxLength": 63,
+                        "minLength": 3,
+                        "type": "string",
+                        "description": "Tunnel ID",
+                        "name": "tunnelId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "24h",
+                        "description": "Time range (1h, 24h, 7d)",
+                        "name": "range",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start time (RFC3339 format)",
+                        "name": "start",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End time (RFC3339 format)",
+                        "name": "end",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Tunnel historical data",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/server.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/server.HistoricalMetricsResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/server.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Tunnel not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tunnels/{tunnelId}/metrics": {
+            "get": {
+                "description": "Returns detailed performance and usage metrics for a specific tunnel",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tunnels"
+                ],
+                "summary": "Get comprehensive tunnel metrics",
+                "parameters": [
+                    {
+                        "maxLength": 63,
+                        "minLength": 3,
+                        "type": "string",
+                        "description": "Tunnel ID",
+                        "name": "tunnelId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Comprehensive tunnel metrics",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/server.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/server.DetailedTunnelMetrics"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid tunnel ID format",
+                        "schema": {
+                            "$ref": "#/definitions/server.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Tunnel not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.APIResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tunnels/{tunnelId}/stats": {
+            "get": {
+                "description": "Returns detailed statistics and metrics for a specific tunnel",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tunnels"
+                ],
+                "summary": "Get tunnel statistics",
+                "parameters": [
+                    {
+                        "maxLength": 63,
+                        "minLength": 3,
+                        "type": "string",
+                        "description": "Tunnel ID",
+                        "name": "tunnelId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Tunnel statistics retrieved successfully",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/server.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/server.TunnelStats"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid tunnel ID format",
+                        "schema": {
+                            "$ref": "#/definitions/server.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Tunnel not found",
+                        "schema": {
+                            "$ref": "#/definitions/server.APIResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "server.APIResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Response data (present on success)"
+                },
+                "error": {
+                    "description": "Error message (present on failure)",
+                    "type": "string",
+                    "example": "error message"
+                },
+                "success": {
+                    "description": "Indicates if the request was successful",
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "server.DetailedTunnelMetrics": {
+            "type": "object",
+            "properties": {
+                "average_response_time_ms": {
+                    "description": "Average response time in ms",
+                    "type": "number",
+                    "example": 25.5
+                },
+                "client_ip": {
+                    "description": "Client IP address",
+                    "type": "string",
+                    "example": "192.168.1.100:52341"
+                },
+                "connection_errors": {
+                    "description": "Connection errors",
+                    "type": "integer",
+                    "example": 2
+                },
+                "connections_active": {
+                    "description": "Active connections",
+                    "type": "integer",
+                    "example": 1
+                },
+                "connections_total": {
+                    "description": "Total connections made",
+                    "type": "integer",
+                    "example": 3
+                },
+                "created_at": {
+                    "description": "Creation time",
+                    "type": "string",
+                    "example": "2025-08-08T18:30:00Z"
+                },
+                "data_errors": {
+                    "description": "Data errors",
+                    "type": "integer",
+                    "example": 1
+                },
+                "last_activity": {
+                    "description": "Last activity time",
+                    "type": "string",
+                    "example": "2025-08-08T20:30:00Z"
+                },
+                "max_response_time_ms": {
+                    "description": "Maximum response time in ms",
+                    "type": "number",
+                    "example": 150.8
+                },
+                "min_response_time_ms": {
+                    "description": "Minimum response time in ms",
+                    "type": "number",
+                    "example": 5.2
+                },
+                "reconnect_count": {
+                    "description": "Number of reconnections",
+                    "type": "integer",
+                    "example": 2
+                },
+                "requests_per_second": {
+                    "description": "Requests per second",
+                    "type": "number",
+                    "example": 12.4
+                },
+                "timeout_count": {
+                    "description": "Number of timeouts",
+                    "type": "integer",
+                    "example": 5
+                },
+                "total_bytes_in": {
+                    "description": "Total bytes received",
+                    "type": "integer",
+                    "example": 125430
+                },
+                "total_bytes_out": {
+                    "description": "Total bytes sent",
+                    "type": "integer",
+                    "example": 987650
+                },
+                "total_requests": {
+                    "description": "Total requests processed",
+                    "type": "integer",
+                    "example": 1542
+                },
+                "total_requests_error": {
+                    "description": "Failed requests",
+                    "type": "integer",
+                    "example": 44
+                },
+                "total_requests_success": {
+                    "description": "Successful requests",
+                    "type": "integer",
+                    "example": 1498
+                },
+                "tunnel_id": {
+                    "description": "Tunnel identifier",
+                    "type": "string",
+                    "example": "my-tunnel"
+                },
+                "user_agent": {
+                    "description": "Client user agent",
+                    "type": "string",
+                    "example": "FunnelClient/1.0"
+                }
+            }
+        },
+        "server.HealthData": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "description": "Service status",
+                    "type": "string",
+                    "example": "healthy"
+                },
+                "timestamp": {
+                    "description": "Current timestamp",
+                    "type": "string",
+                    "example": "2025-08-08T20:11:00Z"
+                },
+                "uptime": {
+                    "description": "Server uptime duration",
+                    "type": "string",
+                    "example": "6.4281425s"
+                }
+            }
+        },
+        "server.HistoricalDataPoint": {
+            "type": "object",
+            "properties": {
+                "active_connections": {
+                    "type": "integer"
+                },
+                "bytes_in": {
+                    "type": "integer"
+                },
+                "bytes_out": {
+                    "type": "integer"
+                },
+                "error_count": {
+                    "type": "integer"
+                },
+                "request_count": {
+                    "type": "integer"
+                },
+                "response_time_ms": {
+                    "type": "number"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "server.HistoricalMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "data_points": {
+                    "description": "Historical data points",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.HistoricalDataPoint"
+                    }
+                },
+                "interval": {
+                    "description": "Data point interval",
+                    "type": "string",
+                    "example": "1m"
+                },
+                "time_range": {
+                    "description": "Time range of data",
+                    "type": "string",
+                    "example": "24h"
+                },
+                "tunnel_id": {
+                    "description": "Tunnel identifier",
+                    "type": "string",
+                    "example": "my-tunnel"
+                }
+            }
+        },
+        "server.ServerMetricsResponse": {
+            "type": "object",
+            "properties": {
+                "active_tunnels": {
+                    "description": "Currently active tunnels",
+                    "type": "integer",
+                    "example": 8
+                },
+                "average_response_time_ms": {
+                    "description": "Server average response time",
+                    "type": "number",
+                    "example": 28.7
+                },
+                "cpu_usage_percent": {
+                    "description": "CPU usage percentage",
+                    "type": "number",
+                    "example": 15.5
+                },
+                "error_rate_percent": {
+                    "description": "Error rate percentage",
+                    "type": "number",
+                    "example": 0.18
+                },
+                "memory_usage_bytes": {
+                    "description": "Memory usage in bytes",
+                    "type": "integer",
+                    "example": 67108864
+                },
+                "network_connections": {
+                    "description": "Active network connections",
+                    "type": "integer",
+                    "example": 12
+                },
+                "server_requests_per_second": {
+                    "description": "Server-wide RPS",
+                    "type": "number",
+                    "example": 45.2
+                },
+                "server_uptime": {
+                    "description": "Server uptime",
+                    "type": "string",
+                    "example": "5h23m15s"
+                },
+                "total_bytes_transferred": {
+                    "description": "Total bytes transferred",
+                    "type": "integer",
+                    "example": 5670000
+                },
+                "total_errors": {
+                    "description": "Total errors",
+                    "type": "integer",
+                    "example": 234
+                },
+                "total_requests": {
+                    "description": "Total requests processed",
+                    "type": "integer",
+                    "example": 125430
+                },
+                "total_tunnels": {
+                    "description": "Total tunnels created",
+                    "type": "integer",
+                    "example": 15
+                }
+            }
+        },
+        "server.ServerStats": {
+            "type": "object",
+            "properties": {
+                "active_tunnels": {
+                    "description": "Number of currently active tunnel connections",
+                    "type": "integer",
+                    "example": 2
+                },
+                "cache_hit_rate": {
+                    "description": "Cache hit rate percentage",
+                    "type": "string",
+                    "example": "90.9%"
+                },
+                "cache_hits": {
+                    "description": "Number of cache hits for hostname resolution",
+                    "type": "integer",
+                    "example": 1401
+                },
+                "cache_misses": {
+                    "description": "Number of cache misses for hostname resolution",
+                    "type": "integer",
+                    "example": 141
+                },
+                "router_stats": {
+                    "description": "Detailed router statistics",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "total_requests": {
+                    "description": "Total number of HTTP requests processed",
+                    "type": "integer",
+                    "example": 1542
+                },
+                "uptime": {
+                    "description": "Server uptime duration",
+                    "type": "string",
+                    "example": "2h15m30s"
+                }
+            }
+        },
+        "server.TunnelDeleteData": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "description": "Success message",
+                    "type": "string",
+                    "example": "tunnel deleted successfully"
+                },
+                "tunnel_id": {
+                    "description": "Deleted tunnel ID",
+                    "type": "string",
+                    "example": "my-tunnel"
+                }
+            }
+        },
+        "server.TunnelInfo": {
+            "type": "object",
+            "properties": {
+                "bytes_received": {
+                    "description": "Total bytes received from client",
+                    "type": "integer",
+                    "example": 12543
+                },
+                "bytes_sent": {
+                    "description": "Total bytes sent to client",
+                    "type": "integer",
+                    "example": 98765
+                },
+                "created_at": {
+                    "description": "Tunnel creation timestamp",
+                    "type": "string",
+                    "example": "2025-08-08T18:30:00Z"
+                },
+                "id": {
+                    "description": "Unique tunnel identifier",
+                    "type": "string",
+                    "example": "my-tunnel"
+                },
+                "messages_received": {
+                    "description": "Number of messages received from client",
+                    "type": "integer",
+                    "example": 45
+                },
+                "messages_sent": {
+                    "description": "Number of messages sent to client",
+                    "type": "integer",
+                    "example": 45
+                },
+                "status": {
+                    "description": "Current tunnel status",
+                    "type": "string",
+                    "enum": [
+                        "connected",
+                        "disconnected"
+                    ],
+                    "example": "connected"
+                },
+                "uptime": {
+                    "description": "Tunnel connection uptime",
+                    "type": "string",
+                    "example": "1h15m30s"
+                }
+            }
+        },
+        "server.TunnelStats": {
+            "type": "object",
+            "properties": {
+                "bytes_received": {
+                    "description": "Bytes received total",
+                    "type": "integer",
+                    "example": 12543
+                },
+                "bytes_sent": {
+                    "description": "Bytes sent total",
+                    "type": "integer",
+                    "example": 98765
+                },
+                "connection_info": {
+                    "description": "Connection details",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "created_at": {
+                    "description": "Creation timestamp",
+                    "type": "string",
+                    "example": "2025-08-08T18:30:00Z"
+                },
+                "messages_received": {
+                    "description": "Messages received count",
+                    "type": "integer",
+                    "example": 45
+                },
+                "messages_sent": {
+                    "description": "Messages sent count",
+                    "type": "integer",
+                    "example": 45
+                },
+                "status": {
+                    "description": "Connection status",
+                    "type": "string",
+                    "example": "connected"
+                },
+                "tunnel_id": {
+                    "description": "Tunnel identifier",
+                    "type": "string",
+                    "example": "my-tunnel"
+                },
+                "uptime": {
+                    "description": "Connection uptime",
+                    "type": "string",
+                    "example": "1h15m30s"
+                }
+            }
+        }
+    },
+    "tags": [
+        {
+            "description": "Server health and statistics endpoints",
+            "name": "Server"
+        },
+        {
+            "description": "Tunnel management and monitoring endpoints",
+            "name": "Tunnels"
+        }
+    ]
+}

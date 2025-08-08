@@ -1,3 +1,31 @@
+// Package main provides the main entry point for the funnel server.
+//
+// @title           Funnel Server API
+// @version         1.0
+// @description     REST API for tunnel management and monitoring in the funnel tunneling solution
+// @description
+// @description     This API provides endpoints for:
+// @description     - Health checking
+// @description     - Server statistics and monitoring
+// @description     - Tunnel management (list, view, delete)
+// @description     - Individual tunnel statistics
+//
+// @contact.name   Funnel Support
+// @contact.url    https://github.com/karol-broda/funnel
+//
+// @license.name  MIT
+// @license.url   https://github.com/karol-broda/funnel/blob/master/LICENSE.md
+//
+// @host      localhost:8080
+// @BasePath  /api
+//
+// @schemes   http https
+//
+// @tag.name Server
+// @tag.description Server health and statistics endpoints
+//
+// @tag.name Tunnels
+// @tag.description Tunnel management and monitoring endpoints
 package main
 
 import (
@@ -64,6 +92,11 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	s := server.NewServer()
 	tunnelRouter := server.NewTunnelRouter(s)
+	s.SetRouter(tunnelRouter)
+
+	// Initialize API handler
+	apiHandler := server.NewAPIHandler(s, tunnelRouter)
+	tunnelRouter.SetAPIHandler(apiHandler)
 
 	if enableTls {
 		if letsEncryptEmail == "" || dnsProvidersConfig == "" {

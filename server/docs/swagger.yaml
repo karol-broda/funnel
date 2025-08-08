@@ -1,0 +1,658 @@
+basePath: /api
+definitions:
+  server.APIResponse:
+    properties:
+      data:
+        description: Response data (present on success)
+      error:
+        description: Error message (present on failure)
+        example: error message
+        type: string
+      success:
+        description: Indicates if the request was successful
+        example: true
+        type: boolean
+    type: object
+  server.DetailedTunnelMetrics:
+    properties:
+      average_response_time_ms:
+        description: Average response time in ms
+        example: 25.5
+        type: number
+      client_ip:
+        description: Client IP address
+        example: 192.168.1.100:52341
+        type: string
+      connection_errors:
+        description: Connection errors
+        example: 2
+        type: integer
+      connections_active:
+        description: Active connections
+        example: 1
+        type: integer
+      connections_total:
+        description: Total connections made
+        example: 3
+        type: integer
+      created_at:
+        description: Creation time
+        example: "2025-08-08T18:30:00Z"
+        type: string
+      data_errors:
+        description: Data errors
+        example: 1
+        type: integer
+      last_activity:
+        description: Last activity time
+        example: "2025-08-08T20:30:00Z"
+        type: string
+      max_response_time_ms:
+        description: Maximum response time in ms
+        example: 150.8
+        type: number
+      min_response_time_ms:
+        description: Minimum response time in ms
+        example: 5.2
+        type: number
+      reconnect_count:
+        description: Number of reconnections
+        example: 2
+        type: integer
+      requests_per_second:
+        description: Requests per second
+        example: 12.4
+        type: number
+      timeout_count:
+        description: Number of timeouts
+        example: 5
+        type: integer
+      total_bytes_in:
+        description: Total bytes received
+        example: 125430
+        type: integer
+      total_bytes_out:
+        description: Total bytes sent
+        example: 987650
+        type: integer
+      total_requests:
+        description: Total requests processed
+        example: 1542
+        type: integer
+      total_requests_error:
+        description: Failed requests
+        example: 44
+        type: integer
+      total_requests_success:
+        description: Successful requests
+        example: 1498
+        type: integer
+      tunnel_id:
+        description: Tunnel identifier
+        example: my-tunnel
+        type: string
+      user_agent:
+        description: Client user agent
+        example: FunnelClient/1.0
+        type: string
+    type: object
+  server.HealthData:
+    properties:
+      status:
+        description: Service status
+        example: healthy
+        type: string
+      timestamp:
+        description: Current timestamp
+        example: "2025-08-08T20:11:00Z"
+        type: string
+      uptime:
+        description: Server uptime duration
+        example: 6.4281425s
+        type: string
+    type: object
+  server.HistoricalDataPoint:
+    properties:
+      active_connections:
+        type: integer
+      bytes_in:
+        type: integer
+      bytes_out:
+        type: integer
+      error_count:
+        type: integer
+      request_count:
+        type: integer
+      response_time_ms:
+        type: number
+      timestamp:
+        type: string
+    type: object
+  server.HistoricalMetricsResponse:
+    properties:
+      data_points:
+        description: Historical data points
+        items:
+          $ref: '#/definitions/server.HistoricalDataPoint'
+        type: array
+      interval:
+        description: Data point interval
+        example: 1m
+        type: string
+      time_range:
+        description: Time range of data
+        example: 24h
+        type: string
+      tunnel_id:
+        description: Tunnel identifier
+        example: my-tunnel
+        type: string
+    type: object
+  server.ServerMetricsResponse:
+    properties:
+      active_tunnels:
+        description: Currently active tunnels
+        example: 8
+        type: integer
+      average_response_time_ms:
+        description: Server average response time
+        example: 28.7
+        type: number
+      cpu_usage_percent:
+        description: CPU usage percentage
+        example: 15.5
+        type: number
+      error_rate_percent:
+        description: Error rate percentage
+        example: 0.18
+        type: number
+      memory_usage_bytes:
+        description: Memory usage in bytes
+        example: 67108864
+        type: integer
+      network_connections:
+        description: Active network connections
+        example: 12
+        type: integer
+      server_requests_per_second:
+        description: Server-wide RPS
+        example: 45.2
+        type: number
+      server_uptime:
+        description: Server uptime
+        example: 5h23m15s
+        type: string
+      total_bytes_transferred:
+        description: Total bytes transferred
+        example: 5670000
+        type: integer
+      total_errors:
+        description: Total errors
+        example: 234
+        type: integer
+      total_requests:
+        description: Total requests processed
+        example: 125430
+        type: integer
+      total_tunnels:
+        description: Total tunnels created
+        example: 15
+        type: integer
+    type: object
+  server.ServerStats:
+    properties:
+      active_tunnels:
+        description: Number of currently active tunnel connections
+        example: 2
+        type: integer
+      cache_hit_rate:
+        description: Cache hit rate percentage
+        example: 90.9%
+        type: string
+      cache_hits:
+        description: Number of cache hits for hostname resolution
+        example: 1401
+        type: integer
+      cache_misses:
+        description: Number of cache misses for hostname resolution
+        example: 141
+        type: integer
+      router_stats:
+        additionalProperties: true
+        description: Detailed router statistics
+        type: object
+      total_requests:
+        description: Total number of HTTP requests processed
+        example: 1542
+        type: integer
+      uptime:
+        description: Server uptime duration
+        example: 2h15m30s
+        type: string
+    type: object
+  server.TunnelDeleteData:
+    properties:
+      message:
+        description: Success message
+        example: tunnel deleted successfully
+        type: string
+      tunnel_id:
+        description: Deleted tunnel ID
+        example: my-tunnel
+        type: string
+    type: object
+  server.TunnelInfo:
+    properties:
+      bytes_received:
+        description: Total bytes received from client
+        example: 12543
+        type: integer
+      bytes_sent:
+        description: Total bytes sent to client
+        example: 98765
+        type: integer
+      created_at:
+        description: Tunnel creation timestamp
+        example: "2025-08-08T18:30:00Z"
+        type: string
+      id:
+        description: Unique tunnel identifier
+        example: my-tunnel
+        type: string
+      messages_received:
+        description: Number of messages received from client
+        example: 45
+        type: integer
+      messages_sent:
+        description: Number of messages sent to client
+        example: 45
+        type: integer
+      status:
+        description: Current tunnel status
+        enum:
+        - connected
+        - disconnected
+        example: connected
+        type: string
+      uptime:
+        description: Tunnel connection uptime
+        example: 1h15m30s
+        type: string
+    type: object
+  server.TunnelStats:
+    properties:
+      bytes_received:
+        description: Bytes received total
+        example: 12543
+        type: integer
+      bytes_sent:
+        description: Bytes sent total
+        example: 98765
+        type: integer
+      connection_info:
+        additionalProperties: true
+        description: Connection details
+        type: object
+      created_at:
+        description: Creation timestamp
+        example: "2025-08-08T18:30:00Z"
+        type: string
+      messages_received:
+        description: Messages received count
+        example: 45
+        type: integer
+      messages_sent:
+        description: Messages sent count
+        example: 45
+        type: integer
+      status:
+        description: Connection status
+        example: connected
+        type: string
+      tunnel_id:
+        description: Tunnel identifier
+        example: my-tunnel
+        type: string
+      uptime:
+        description: Connection uptime
+        example: 1h15m30s
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: Funnel Support
+    url: https://github.com/karol-broda/funnel
+  description: |-
+    REST API for tunnel management and monitoring in the funnel tunneling solution
+
+    This API provides endpoints for:
+    - Health checking
+    - Server statistics and monitoring
+    - Tunnel management (list, view, delete)
+    - Individual tunnel statistics
+  license:
+    name: MIT
+    url: https://github.com/karol-broda/funnel/blob/master/LICENSE.md
+  title: Funnel Server API
+  version: "1.0"
+paths:
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Returns the health status of the server
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Server is healthy
+          schema:
+            allOf:
+            - $ref: '#/definitions/server.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/server.HealthData'
+              type: object
+      summary: Health check
+      tags:
+      - Server
+  /metrics:
+    get:
+      consumes:
+      - application/json
+      description: Returns detailed server-wide metrics including performance, resource
+        usage, and aggregated statistics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Comprehensive server metrics
+          schema:
+            allOf:
+            - $ref: '#/definitions/server.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/server.ServerMetricsResponse'
+              type: object
+      summary: Get comprehensive server metrics
+      tags:
+      - Server
+  /metrics/historical:
+    get:
+      consumes:
+      - application/json
+      description: Returns time-series data for server-wide metrics over a specified
+        time range
+      parameters:
+      - default: 24h
+        description: Time range (1h, 24h, 7d)
+        in: query
+        name: range
+        type: string
+      - default: 5m
+        description: Data interval (1m, 5m, 1h)
+        in: query
+        name: interval
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Historical server metrics
+          schema:
+            allOf:
+            - $ref: '#/definitions/server.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/server.HistoricalMetricsResponse'
+              type: object
+      summary: Get historical server metrics
+      tags:
+      - Server
+  /server/stats:
+    get:
+      consumes:
+      - application/json
+      description: Returns comprehensive server-wide statistics including tunnel count,
+        request metrics, and cache performance
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Server statistics retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/server.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/server.ServerStats'
+              type: object
+      summary: Get server statistics
+      tags:
+      - Server
+  /tunnels:
+    get:
+      consumes:
+      - application/json
+      description: Returns a list of all currently active tunnel connections
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of active tunnels
+          schema:
+            allOf:
+            - $ref: '#/definitions/server.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/server.TunnelInfo'
+                  type: array
+              type: object
+      summary: List active tunnels
+      tags:
+      - Tunnels
+  /tunnels/{tunnelId}:
+    delete:
+      consumes:
+      - application/json
+      description: Forcibly closes a tunnel connection
+      parameters:
+      - description: Tunnel ID to delete
+        in: path
+        maxLength: 63
+        minLength: 3
+        name: tunnelId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Tunnel deleted successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/server.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/server.TunnelDeleteData'
+              type: object
+        "400":
+          description: Invalid tunnel ID format
+          schema:
+            $ref: '#/definitions/server.APIResponse'
+        "404":
+          description: Tunnel not found
+          schema:
+            $ref: '#/definitions/server.APIResponse'
+      summary: Delete tunnel
+      tags:
+      - Tunnels
+    get:
+      consumes:
+      - application/json
+      description: Returns detailed information about a specific tunnel
+      parameters:
+      - description: Tunnel ID (3-63 characters, lowercase letters, numbers, and hyphens
+          only)
+        in: path
+        maxLength: 63
+        minLength: 3
+        name: tunnelId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Tunnel details retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/server.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/server.TunnelInfo'
+              type: object
+        "400":
+          description: Invalid tunnel ID format
+          schema:
+            $ref: '#/definitions/server.APIResponse'
+        "404":
+          description: Tunnel not found
+          schema:
+            $ref: '#/definitions/server.APIResponse'
+      summary: Get tunnel details
+      tags:
+      - Tunnels
+  /tunnels/{tunnelId}/historical:
+    get:
+      consumes:
+      - application/json
+      description: Returns time-series data for a specific tunnel over a specified
+        time range
+      parameters:
+      - description: Tunnel ID
+        in: path
+        maxLength: 63
+        minLength: 3
+        name: tunnelId
+        required: true
+        type: string
+      - default: 24h
+        description: Time range (1h, 24h, 7d)
+        in: query
+        name: range
+        type: string
+      - description: Start time (RFC3339 format)
+        in: query
+        name: start
+        type: string
+      - description: End time (RFC3339 format)
+        in: query
+        name: end
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Tunnel historical data
+          schema:
+            allOf:
+            - $ref: '#/definitions/server.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/server.HistoricalMetricsResponse'
+              type: object
+        "400":
+          description: Invalid parameters
+          schema:
+            $ref: '#/definitions/server.APIResponse'
+        "404":
+          description: Tunnel not found
+          schema:
+            $ref: '#/definitions/server.APIResponse'
+      summary: Get tunnel historical data
+      tags:
+      - Tunnels
+  /tunnels/{tunnelId}/metrics:
+    get:
+      consumes:
+      - application/json
+      description: Returns detailed performance and usage metrics for a specific tunnel
+      parameters:
+      - description: Tunnel ID
+        in: path
+        maxLength: 63
+        minLength: 3
+        name: tunnelId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Comprehensive tunnel metrics
+          schema:
+            allOf:
+            - $ref: '#/definitions/server.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/server.DetailedTunnelMetrics'
+              type: object
+        "400":
+          description: Invalid tunnel ID format
+          schema:
+            $ref: '#/definitions/server.APIResponse'
+        "404":
+          description: Tunnel not found
+          schema:
+            $ref: '#/definitions/server.APIResponse'
+      summary: Get comprehensive tunnel metrics
+      tags:
+      - Tunnels
+  /tunnels/{tunnelId}/stats:
+    get:
+      consumes:
+      - application/json
+      description: Returns detailed statistics and metrics for a specific tunnel
+      parameters:
+      - description: Tunnel ID
+        in: path
+        maxLength: 63
+        minLength: 3
+        name: tunnelId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Tunnel statistics retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/server.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/server.TunnelStats'
+              type: object
+        "400":
+          description: Invalid tunnel ID format
+          schema:
+            $ref: '#/definitions/server.APIResponse'
+        "404":
+          description: Tunnel not found
+          schema:
+            $ref: '#/definitions/server.APIResponse'
+      summary: Get tunnel statistics
+      tags:
+      - Tunnels
+schemes:
+- http
+- https
+swagger: "2.0"
+tags:
+- description: Server health and statistics endpoints
+  name: Server
+- description: Tunnel management and monitoring endpoints
+  name: Tunnels

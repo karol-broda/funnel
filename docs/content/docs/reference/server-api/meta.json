@@ -1,0 +1,8 @@
+{
+  "title": "Server API",
+  "icon": "CodeIcon",
+  "pages": [
+    "server",
+    "tunnels"
+  ]
+}

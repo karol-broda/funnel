@@ -14,7 +14,7 @@ import Aurora from "@/components/ui/aurora";
 import FeatureBento from "@/components/ui/feature-bento";
 import InstallScript from "@/components/home/install-script";
 import { createMetadata } from "@/lib/seo";
-import { TrackedLink } from "@/components/analytics/tracked-link";
+
 
 export const metadata = createMetadata(
   "funnel",
@@ -144,18 +144,17 @@ export default function HomePage() {
             >
               try it anyway <ArrowRightIcon weight="bold" />
             </Link>
-            <TrackedLink
+            <Link
               href="https://github.com/karol-broda/funnel"
               target="_blank"
               rel="noreferrer noopener"
-              context="home_page_github_button"
               className={buttonVariants({
                 color: "secondary",
                 className: "px-6 py-3 text-base font-semibold",
               })}
             >
               ⭐ judge my code
-            </TrackedLink>
+            </Link>
           </div>
 
           <div className="mt-12 flex flex-wrap justify-center items-center gap-4">

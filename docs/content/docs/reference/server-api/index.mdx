@@ -1,0 +1,76 @@
+---
+title: Server API
+description: Complete REST API reference for the Funnel Server
+full: true
+---
+
+## Overview
+
+The Funnel Server API provides comprehensive endpoints for tunnel management, monitoring, and statistics. All endpoints return JSON responses and follow RESTful conventions.
+
+## Base URL
+
+```
+http://localhost:8080/api
+```
+
+## Authentication
+
+Currently, the API does not require authentication. This will be added in future versions.
+
+## Response Format
+
+All API responses follow this structure:
+
+```json
+{
+  "success": true,
+  "data": {...},
+  "error": null
+}
+```
+
+## Endpoints
+
+The API is organized into the following groups:
+
+### Server Endpoints
+- **Health Check** - Basic server health status
+- **Server Stats** - Basic server statistics 
+- **Metrics** - Comprehensive server-wide metrics
+- **Historical Metrics** - Historical server data with time ranges
+
+### Tunnel Endpoints
+- **List Tunnels** - Get all active tunnels
+- **Tunnel Info** - Get specific tunnel information
+- **Tunnel Stats** - Basic tunnel statistics
+- **Tunnel Metrics** - Comprehensive tunnel metrics
+- **Tunnel Historical** - Historical tunnel data
+- **Delete Tunnel** - Remove a tunnel
+
+## Interactive Documentation
+
+Each endpoint has detailed interactive documentation with:
+- Request/response schemas
+- Example requests and responses
+- Try-it-out functionality
+- Code samples in multiple languages
+
+Browse the endpoints in the navigation sidebar to explore the complete API.
+
+## Error Handling
+
+Error responses include:
+- HTTP status codes (400, 404, 500, etc.)
+- Descriptive error messages in the `error` field
+- `success: false` in the response body
+
+## Rate Limiting
+
+Currently, no rate limiting is implemented.
+
+## OpenAPI Specification
+
+The complete OpenAPI specification is available at:
+- **JSON**: `http://localhost:8080/api/swagger/doc.json`
+- **Swagger UI**: `http://localhost:8080/swagger/`

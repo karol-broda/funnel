@@ -15,7 +15,7 @@ import {
 import { Metadata } from "next";
 import LastModified from "@/components/mdx/last-modified";
 import { getMDXComponents } from "@/mdx-components";
-import { DocTracker } from "@/components/docs/doc-tracker";
+
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -41,7 +41,6 @@ export default async function Page(props: {
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
-      <DocTracker docPath={page.url} docTitle={page.data.title} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{

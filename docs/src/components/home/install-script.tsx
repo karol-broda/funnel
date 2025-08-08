@@ -2,11 +2,9 @@
 
 import { useState, useCallback } from "react";
 import { CopyIcon, CheckIcon } from "@phosphor-icons/react";
-import { useDocumentationTracking } from "@/hooks/use-analytics";
 
 export default function InstallScript() {
   const [isCopied, setIsCopied] = useState(false);
-  const { trackInstallCommand, trackCodeCopy } = useDocumentationTracking();
   const installScript =
     "curl -LsSf https://raw.githubusercontent.com/karol-broda/funnel/master/scripts/install.sh | sh";
 
@@ -14,11 +12,8 @@ export default function InstallScript() {
     navigator.clipboard.writeText(installScript).then(() => {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
-
-      trackInstallCommand("curl_script");
-      trackCodeCopy(installScript, "home_page_install");
     });
-  }, [installScript, trackInstallCommand, trackCodeCopy]);
+  }, [installScript]);
 
   return (
     <div className="group relative max-w-xl w-full">

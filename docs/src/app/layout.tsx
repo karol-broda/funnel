@@ -4,10 +4,6 @@ import { RootProvider } from "fumadocs-ui/provider";
 import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
 import { createMetadata, generateStructuredData, siteConfig } from "@/lib/seo";
-import { PostHogProviderWrapper } from "@/components/analytics/posthog-provider";
-import { PageTrackerWithSuspense } from "@/components/analytics/page-tracker-suspense";
-import { CookieBanner } from "@/components/legal/cookie-banner";
-import { PrivacyAwareAnalytics } from "@/components/legal/privacy-aware-analytics";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -45,19 +41,14 @@ export default function Layout({ children }: { children: ReactNode }) {
         <meta name="color-scheme" content="dark light" />
       </head>
       <body>
-        <PostHogProviderWrapper>
-          <PageTrackerWithSuspense />
-          <PrivacyAwareAnalytics />
-          <RootProvider
-            theme={{
-              defaultTheme: "dark",
-              storageKey: "theme",
-            }}
-          >
-            {children}
-            <CookieBanner />
-          </RootProvider>
-        </PostHogProviderWrapper>
+        <RootProvider
+          theme={{
+            defaultTheme: "dark",
+            storageKey: "theme",
+          }}
+        >
+          {children}
+        </RootProvider>
       </body>
     </html>
   );

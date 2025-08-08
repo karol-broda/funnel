@@ -23,6 +23,7 @@ type TunnelRouter struct {
 	cacheMisses int64
 
 	bufferPool sync.Pool
+	apiHandler *APIHandler
 }
 
 func NewTunnelRouter(server *Server) *TunnelRouter {
@@ -68,9 +69,28 @@ func (tr *TunnelRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Int64("total_requests", currentRequests).
 		Msg("incoming HTTP request")
 
+	// handle websocket upgrade requests first
 	if len(r.Header["Upgrade"]) > 0 && r.Header["Upgrade"][0] == "websocket" {
 		logger.Debug().Str("request_id", requestID).Msg("routing to websocket handler")
 		tr.server.HandleWebSocket(w, r)
+		return
+	}
+
+	// handle swagger UI requests
+	if strings.HasPrefix(r.URL.Path, "/swagger/") {
+		logger.Debug().Str("request_id", requestID).Msg("routing to Swagger UI handler")
+		tr.ServeSwaggerUI(w, r)
+		return
+	}
+
+	// handle API requests
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		logger.Debug().Str("request_id", requestID).Msg("routing to API handler")
+		if tr.apiHandler != nil {
+			tr.apiHandler.HandleAPIRequest(w, r)
+		} else {
+			http.Error(w, "API handler not initialized", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -520,4 +540,11 @@ func (tr *TunnelRouter) GetStats() map[string]interface{} {
 		Msg("router statistics requested")
 
 	return stats
+}
+
+// SetAPIHandler sets the API handler for the router
+func (tr *TunnelRouter) SetAPIHandler(apiHandler *APIHandler) {
+	logger := shared.GetLogger("server.router")
+	tr.apiHandler = apiHandler
+	logger.Debug().Msg("API handler configured for router")
 }

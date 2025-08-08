@@ -109,8 +109,8 @@ export default function TermsPage() {
 
         <p>
           Your use of this website is also governed by our{" "}
-          <a href="/privacy">Privacy Policy</a>. We collect minimal analytics
-          data to improve our documentation.
+          <a href="/privacy">Privacy Policy</a>. We do not collect personal data
+          or use analytics tracking on our documentation website.
         </p>
 
         <h2>Modifications</h2>

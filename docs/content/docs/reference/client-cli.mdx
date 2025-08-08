@@ -43,7 +43,7 @@ you can specify either just a port or a full address:port combination.
 
 | flag      | shorthand | default                  | description                                                              |
 | :-------- | :-------- | :----------------------- | :----------------------------------------------------------------------- |
-| `--server`  | `-s`      | `http://localhost:8080`  | the url of the remote funnel server. use `ws://` or `wss://`.             |
+| `--server`  | `-s`      | `http://localhost:8080`  | the url of the remote funnel server. use `http://` or `https://`.             |
 | `--id`      | `-i`      | (randomly generated)     | the custom subdomain to request for the tunnel.                          |
 | `--help`    | `-h`      |                          | show help for the command.                                               |
 
@@ -66,11 +66,11 @@ this will connect to `localhost:8080` and generate a random tunnel id.
 connect to a remote server with a custom subdomain:
 
 ```bash
-funnel http 3000 --server wss://my-server.com --id my-app-demo
+funnel http 3000 --server https://my-server.com --id my-app-demo
 ```
 
 <Callout title="secure connection" intent="info">
-use `wss://` for secure websocket connections when connecting to a server with TLS enabled.
+use `https://` for secure connections when connecting to a server with TLS enabled.
 </Callout>
 </Tab>
 
@@ -78,7 +78,7 @@ use `wss://` for secure websocket connections when connecting to a server with T
 expose a service on a different host and port:
 
 ```bash
-funnel http 192.168.1.100:8000 --server ws://tunnel.mycompany.com:8080 --id staging-api
+funnel http 192.168.1.100:8000 --server http://tunnel.mycompany.com:8080 --id staging-api
 ```
 
 <Callout title="network services" intent="warning">
@@ -105,7 +105,7 @@ useful for verifying your installation and checking for updates.
 
 <Cards>
 <Card title="🔧 local development" description="funnel http 3000 --id my-project" />
-<Card title="🧪 testing" description="funnel http 8080 --server wss://test.example.com" />
+<Card title="🧪 testing" description="funnel http 8080 --server https://test.example.com" />
 <Card title="🎯 demos" description="funnel http 5000 --id product-demo" />
 </Cards>
 

@@ -19,135 +19,68 @@ export default function PrivacyPage() {
 
         <p>
           This privacy policy explains how funnel ("we", "us", or "our")
-          collects, uses, and protects your information when you use our
-          documentation website at {siteConfig.url}.
+          handles your information when you use our documentation website at {siteConfig.url}.
         </p>
 
         <h2>Information We Collect</h2>
 
-        <h3>Analytics Data</h3>
         <p>
-          We use PostHog to collect analytics data to improve our documentation
-          and understand how users interact with our site. This includes:
+          We do not collect personal information or use analytics tracking on this website.
         </p>
-        <ul>
-          <li>
-            <strong>Page views:</strong> Which pages you visit and when
-          </li>
-          <li>
-            <strong>User interactions:</strong> Button clicks, link clicks, and
-            form interactions
-          </li>
-          <li>
-            <strong>Device information:</strong> Browser type, device type,
-            screen resolution
-          </li>
-          <li>
-            <strong>Performance metrics:</strong> Page load times and web vitals
-          </li>
-          <li>
-            <strong>Usage patterns:</strong> How you navigate through our
-            documentation
-          </li>
-        </ul>
 
         <h3>Technical Information</h3>
         <p>
-          When you visit our site, we automatically collect certain technical
-          information:
+          Our hosting provider may automatically collect basic technical information in server logs:
         </p>
         <ul>
-          <li>IP address (anonymized)</li>
-          <li>Browser type and version</li>
-          <li>Operating system</li>
-          <li>Referrer URL</li>
-          <li>Session duration</li>
+          <li>IP addresses (for security and performance purposes)</li>
+          <li>HTTP requests and responses</li>
+          <li>Browser user agent strings</li>
+          <li>Timestamps of requests</li>
         </ul>
 
         <h2>How We Use Your Information</h2>
 
-        <p>We use the collected information to:</p>
+        <p>The minimal technical information collected is used only for:</p>
         <ul>
-          <li>Improve our documentation and user experience</li>
-          <li>Understand which content is most helpful</li>
-          <li>Identify and fix technical issues</li>
-          <li>Monitor site performance</li>
-          <li>Generate anonymized usage statistics</li>
+          <li>Ensuring website security and preventing abuse</li>
+          <li>Maintaining site performance and availability</li>
+          <li>Basic error monitoring and troubleshooting</li>
         </ul>
 
         <h2>Data Storage and Processing</h2>
 
         <p>
-          Analytics data is processed by PostHog and stored in their EU servers.
-          We proxy analytics requests through our own infrastructure to respect
-          user privacy and avoid ad blockers.
-        </p>
-
-        <p>
-          We do not store personal information beyond what's necessary for
-          analytics. All data is anonymized and aggregated.
+          Our website is hosted on cloud infrastructure. Server logs are retained
+          temporarily for operational purposes and automatically deleted according
+          to our hosting provider's policies.
         </p>
 
         <h2>Third-Party Services</h2>
 
-        <h3>PostHog</h3>
-        <p>
-          We use PostHog for analytics. PostHog's privacy policy can be found at{" "}
-          <a
-            href="https://posthog.com/privacy"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            https://posthog.com/privacy
-          </a>
-        </p>
-
         <h3>Hosting</h3>
         <p>
           Our website is hosted on cloud infrastructure. Server logs may contain
-          technical information about requests.
+          basic technical information about requests as described above.
         </p>
 
         <h2>Your Rights</h2>
 
-        <p>You have the right to:</p>
+        <p>Since we don't collect personal data through analytics or tracking, there is minimal personal information to manage. However, you have the right to:</p>
         <ul>
-          <li>
-            Opt out of analytics tracking by enabling "Do Not Track" in your
-            browser
-          </li>
-          <li>Request information about data we've collected about you</li>
-          <li>Request deletion of your data</li>
-          <li>Object to data processing</li>
+          <li>Request information about any data that may be in server logs</li>
+          <li>Contact us with privacy concerns</li>
         </ul>
 
         <h2>Cookies and Local Storage</h2>
 
-        <p>We use minimal cookies and local storage for:</p>
+        <p>We use minimal local storage only for:</p>
         <ul>
           <li>Theme preferences (dark/light mode)</li>
-          <li>Analytics session tracking</li>
-          <li>Performance monitoring</li>
         </ul>
 
         <p>
-          You can disable cookies in your browser settings, though this may
-          affect site functionality.
-        </p>
-
-        <h2>Data Retention</h2>
-
-        <p>
-          Analytics data is retained for a maximum of 2 years. Theme preferences
-          are stored locally on your device until you clear your browser data.
-        </p>
-
-        <h2>International Data Transfers</h2>
-
-        <p>
-          Your data may be processed in countries outside your residence. We
-          ensure appropriate safeguards are in place for international
-          transfers.
+          This data is stored locally on your device and is not transmitted to our servers.
         </p>
 
         <h2>Updates to This Policy</h2>
@@ -181,9 +114,9 @@ export default function PrivacyPage() {
         <h2>Legal Basis</h2>
 
         <p>
-          Our legal basis for processing personal data is legitimate interest in
-          improving our product and documentation, and your consent for
-          analytics tracking.
+          Since we do not collect personal data through analytics or tracking,
+          minimal processing is based on legitimate interest for website operation
+          and security.
         </p>
       </div>
     </div>

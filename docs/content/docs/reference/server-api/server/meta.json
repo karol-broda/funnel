@@ -1,0 +1,9 @@
+{
+  "title": "Server",
+  "icon": "ServerIcon",
+  "pages": [
+    "health",
+    "metrics",
+    "server"
+  ]
+}

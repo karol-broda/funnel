@@ -29,6 +29,9 @@ type Tunnel struct {
 	messagesSent     int64
 	bytesReceived    int64
 	bytesSent        int64
+
+	statistics     *TunnelStatistics
+	historicalData *TunnelHistoricalData
 }
 
 func (s *Server) GetTunnel(id string) (*Tunnel, bool) {
@@ -41,6 +44,12 @@ func (s *Server) GetTunnel(id string) (*Tunnel, bool) {
 func (s *Server) AddTunnel(id string, conn *websocket.Conn, wg *sync.WaitGroup) *Tunnel {
 	logger := shared.GetTunnelLogger("server.tunnel", id)
 
+	clientIP := "unknown"
+	userAgent := ""
+	if conn != nil && conn.RemoteAddr() != nil {
+		clientIP = conn.RemoteAddr().String()
+	}
+
 	tunnel := &Tunnel{
 		ID:               id,
 		conn:             conn,
@@ -49,6 +58,8 @@ func (s *Server) AddTunnel(id string, conn *websocket.Conn, wg *sync.WaitGroup) 
 		outgoingMessages: make(chan *shared.Message, 100),
 		server:           s,
 		createdAt:        time.Now(),
+		statistics:       NewTunnelStatistics(id, clientIP, userAgent),
+		historicalData:   NewTunnelHistoricalData(id, 1440, time.Minute), // 24 hours of minute-by-minute data
 	}
 
 	s.TunnelsMu.Lock()
@@ -369,6 +380,13 @@ func (t *Tunnel) Run() {
 		<-done
 		logger.Debug().Msg("tunnel has stopped")
 	})
+}
+
+func (t *Tunnel) getRemoteAddr() string {
+	if t.conn != nil && t.conn.RemoteAddr() != nil {
+		return t.conn.RemoteAddr().String()
+	}
+	return "unknown"
 }
 
 func (t *Tunnel) closeConnection() {

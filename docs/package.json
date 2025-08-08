@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "dev": "next dev --turbo",
+    "dev": "NODE_OPTIONS='--inspect' next dev --turbo",
     "start": "next start",
     "postinstall": "fumadocs-mdx",
     "types": "tsc --noEmit",
@@ -22,6 +22,7 @@
     "@phosphor-icons/react": "2.1.10",
     "fumadocs-core": "15.6.3",
     "fumadocs-mdx": "11.6.10",
+    "fumadocs-openapi": "9.1.10",
     "fumadocs-twoslash": "3.1.4",
     "fumadocs-ui": "15.6.3",
     "gsap": "3.13.0",
@@ -29,12 +30,12 @@
     "mermaid": "11.8.1",
     "next": "15.3.4",
     "ogl": "1.0.11",
-    "posthog-js": "1.257.1",
-    "posthog-node": "5.6.0",
+
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "rehype-katex": "7.0.1",
     "remark-math": "6.0.0",
+    "shiki": "3.9.2",
     "twoslash": "0.3.2"
   },
   "devDependencies": {
@@ -49,5 +50,6 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.11",
     "typescript": "^5.8.3"
-  }
+  },
+  "packageManager": "pnpm@10.11.0+sha512.6540583f41cc5f628eb3d9773ecee802f4f9ef9923cc45b69890fb47991d4b092964694ec3a4f738a420c918a333062c8b925d312f42e4f0c263eb603551f977"
 }
