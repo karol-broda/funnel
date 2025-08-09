@@ -280,21 +280,22 @@ make version
 - ✅ **auto-reconnection** - clients automatically reconnect with exponential backoff
 - ✅ **cross-platform support** - builds for linux, macos, windows (amd64/arm64)
 - ✅ **custom domains** - works with any domain, not just localhost
+- ✅ **server api** - comprehensive rest api for tunnel management and monitoring
+- ✅ **tunnel statistics** - detailed metrics, historical data, and performance monitoring
+- ✅ **openapi documentation** - interactive api docs with swagger ui integration
 
 ### 🔄 **working on next**
 
-- 🔄 **server api** - rest api for tunnel management and monitoring
-- 🔄 **client api** - programmatic client control and configuration
-- 📋 **tunnel statistics** - request counts, bandwidth usage, connection health
-- 📋 **client authentication** - authenticate clients when connecting to server
+- 🔄 **client authentication** - api key-based authentication for secure access
+- 🔄 **web dashboard** - browser-based tunnel monitoring and control interface
 
 ### 📋 **planned improvements**
 
+- 📋 **client api** - programmatic client control and configuration sdk
 - 📋 **https by default** - automatic tls for all tunnel endpoints
 - 📋 **oauth integration** - secure tunnels with tokens generated via oauth
 - 📋 **tcp forwarding** - tunnel any tcp service, not just http
 - 📋 **multiple tunnels per client** - run multiple services through single client
-- 📋 **web dashboard** - browser-based tunnel monitoring and control
 
 ### **legend**
 - ✅ **completed** - ready to use

@@ -22,29 +22,30 @@ funnel aims to be a simple, secure, and powerful tunneling solution for develope
 <Card title="✅ auto-reconnection" description="clients automatically reconnect with exponential backoff" />
 <Card title="✅ cross-platform support" description="builds for linux, macos, windows (amd64/arm64)" />
 <Card title="✅ custom domains" description="works with any domain, not just localhost" />
+<Card title="✅ server api" description="comprehensive rest api for tunnel management and monitoring" />
+<Card title="✅ tunnel statistics" description="detailed metrics, historical data, and performance monitoring" />
+<Card title="✅ openapi documentation" description="interactive api docs with swagger ui integration" />
 </Cards>
 </Tab>
 
 <Tab value="In Progress">
 <Cards>
-<Card title="🔄 server api" description="rest api for tunnel management and monitoring" />
-<Card title="🔄 client api" description="programmatic client control and configuration" />
+<Card title="🔄 client authentication" description="api key-based authentication for secure access" />
+<Card title="🔄 web dashboard" description="browser-based tunnel monitoring and control interface" />
 </Cards>
 
 <Callout title="next milestone" intent="tip">
-our current focus is on building apis for better tunnel management and monitoring capabilities.
+our current focus is on adding authentication and building a web dashboard for visual tunnel management.
 </Callout>
 </Tab>
 
 <Tab value="Planned">
 <Cards>
-<Card title="📋 tunnel statistics" description="request counts, bandwidth usage, connection health" />
-<Card title="📋 client authentication" description="authenticate clients when connecting to server" />
+<Card title="📋 client api" description="programmatic client control and configuration sdk" />
 <Card title="📋 https by default" description="automatic tls for all tunnel endpoints" />
 <Card title="📋 oauth integration" description="secure tunnels with tokens generated via oauth" />
 <Card title="📋 tcp forwarding" description="tunnel any tcp service, not just http" />
 <Card title="📋 multiple tunnels per client" description="run multiple services through single client" />
-<Card title="📋 web dashboard" description="browser-based tunnel monitoring and control" />
 </Cards>
 </Tab>
 </Tabs>
@@ -78,29 +79,43 @@ our current focus is on building apis for better tunnel management and monitorin
 - supports production deployments with real domains
 - integrates with existing dns infrastructure
 
-### 🔄 **working on next**
-
-**server api** - programmatic server management:
-- rest api for tunnel lifecycle management
-- monitoring and statistics endpoints
-- configuration management via api
-
-**client api** - programmatic client control:
-- sdk for embedding client functionality
-- configuration management and control
-- integration with existing applications
-
-### 📋 **planned improvements**
+**server api** - comprehensive rest api:
+- complete tunnel lifecycle management (create, read, delete)
+- detailed monitoring and statistics endpoints
+- server health and metrics tracking
+- historical data with configurable time ranges
 
 **tunnel statistics** - comprehensive monitoring:
-- request counts and bandwidth usage tracking
+- real-time request counts and bandwidth usage
 - connection health and uptime monitoring
-- historical data and analytics
+- historical data and performance analytics
+- detailed metrics for individual tunnels and server-wide stats
+
+**openapi documentation** - interactive api docs:
+- auto-generated swagger documentation from go annotations
+- interactive api playground with try-it-out functionality
+- comprehensive request/response schemas and examples
+- integrated with fumadocs for seamless documentation experience
+
+### 🔄 **working on next**
 
 **client authentication** - secure access control:
 - api key-based authentication for clients
 - user management and permissions
 - integration with existing auth systems
+
+**web dashboard** - visual tunnel management:
+- browser-based tunnel monitoring interface
+- real-time connection status and metrics
+- graphical configuration and control
+- integrated with server api for complete management
+
+### 📋 **planned improvements**
+
+**client api** - programmatic client control:
+- sdk for embedding client functionality
+- configuration management and control
+- integration with existing applications
 
 **https by default** - automatic security:
 - automatic tls certificate generation
@@ -121,11 +136,6 @@ our current focus is on building apis for better tunnel management and monitorin
 - run multiple services through a single client connection
 - shared connection overhead
 - simplified client management
-
-**web dashboard** - visual management:
-- browser-based tunnel monitoring
-- real-time connection status
-- graphical configuration interface
 
 ## contributing
 
