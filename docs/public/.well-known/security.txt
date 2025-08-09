@@ -1,0 +1,6 @@
+Contact: https://github.com/karol-broda/funnel/issues
+Contact: mailto:me@karolbroda.com
+Expires: 2025-12-31T23:59:59.000Z
+Acknowledgments: https://github.com/karol-broda/funnel
+Preferred-Languages: en
+Canonical: https://funnel.karolbroda.com/.well-known/security.txt

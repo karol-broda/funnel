@@ -1,0 +1,36 @@
+/* TEAM */
+Creator: Karol Broda
+Contact: https://github.com/karol-broda
+Location: 🇩🇪
+
+/* SITE */
+Standards: HTML5, CSS3, JavaScript
+Components: Next.js, React, TypeScript, Go
+Software: Git
+
+/* DESCRIPTION */
+A tunneling solution built with Go. 
+Expose local services to the internet through websocket connections.
+Perfect for development, testing, and demonstration purposes.
+
+                               -o/-                     
+                              +ooo/                     
+                             +oooo+                     
+                            +ooooo+                     
+                           +oooooo+                     
+                          +ooooooo+                     
+                         +oooooooo+                     
+                        +ooooooooo+                     
+                       +oooooooooo+                     
+                      +ooooooooooo+                     
+                     +oooooooooooo+                     
+                    +ooooooooooooo+                     
+                   +oooooooooooooo+                     
+                  +ooooooooooooooo+                     
+                 +oooooooooooooooo+                     
+                +ooooooooooooooooo+                     
+               +oooooooooooooooooo+                     
+               oooooooooooooooooooo                     
+               oooooooooooooooooooo                     
+               oooooooooooooooooooo                     
+               oooooooooooooooooooo                     

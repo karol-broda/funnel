@@ -11,7 +11,7 @@ export const siteConfig = {
     "tunneling",
     "ngrok alternative",
     "localhost tunnel",
-    "websocket tunnel",
+    "websocket tunnel", 
     "development tools",
     "local development",
     "expose localhost",
@@ -26,6 +26,20 @@ export const siteConfig = {
     "local https",
     "tunnel service",
     "self-hosted tunnel",
+    "free ngrok alternative",
+    "open source tunneling tool",
+    "localhost to internet tunnel",
+    "expose local server to internet",
+    "webhook testing tunnel",
+    "local development tunnel",
+    "secure localhost tunnel",
+    "self-hosted reverse proxy",
+    "go websocket tunnel",
+    "free tunnel service",
+    "local port forwarding",
+    "development server tunnel",
+    "localhost ssl tunnel",
+    "remote access localhost",
   ],
   creator: "Karol Broda",
   githubUrl: "https://github.com/karol-broda/funnel",
@@ -61,6 +75,10 @@ export function createMetadata(
     metadataBase: new URL(siteConfig.url),
     alternates: {
       canonical: canonicalUrl,
+      languages: {
+        'en-US': canonicalUrl,
+        'x-default': canonicalUrl,
+      },
     },
     openGraph: {
       type: "website",
@@ -99,6 +117,27 @@ export function createMetadata(
     verification: {
       google: "vKc0JFsriogcH7LEL0Ke9B7xd6j4TdAtIrool1A_Sck",
     },
+    category: siteConfig.category,
+    applicationName: siteConfig.name,
+    referrer: "origin-when-cross-origin",
+    formatDetection: {
+      email: false,
+      address: false,
+      telephone: false,
+    },
+  };
+}
+
+export function generateBreadcrumbData(breadcrumbs: Array<{name: string, url: string}>) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: breadcrumbs.map((crumb, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: crumb.name,
+      item: crumb.url,
+    })),
   };
 }
 

@@ -5,4 +5,11 @@ Allow: /
 Sitemap: https://funnel.karolbroda.com/sitemap.xml
 
 # Crawl delay
-Crawl-delay: 1 
+Crawl-delay: 1
+
+# Specific rules for common bots
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: / 

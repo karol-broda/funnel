@@ -13,8 +13,7 @@ import Mermaid from "@/components/mdx/mermaid";
 import Aurora from "@/components/ui/aurora";
 import FeatureBento from "@/components/ui/feature-bento";
 import InstallScript from "@/components/home/install-script";
-import { createMetadata } from "@/lib/seo";
-
+import { createMetadata, generateStructuredData, siteConfig } from "@/lib/seo";
 
 export const metadata = createMetadata(
   "funnel",
@@ -85,8 +84,21 @@ const funnelFeatures = [
 ];
 
 export default function HomePage() {
+  const softwareStructuredData = generateStructuredData("software", {
+    title: siteConfig.name,
+    description: siteConfig.description,
+    url: siteConfig.url,
+    image: siteConfig.ogImage,
+  });
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(softwareStructuredData),
+        }}
+      />
       <style
         dangerouslySetInnerHTML={{
           __html: `
@@ -213,12 +225,12 @@ export default function HomePage() {
 
       <section className="bg-muted/30 py-24 text-center">
         <div className="container">
-          <h2 className="mb-4 text-3xl font-bold tracking-tight">
-            literally just 3 steps (i counted twice)
-          </h2>
-          <p className="mb-8 text-lg text-muted-foreground">
-            easier than making instant noodles, with 73% less sodium
-          </p>
+                      <h2 className="mb-4 text-3xl font-bold tracking-tight">
+              literally just 3 steps (i counted twice)
+            </h2>
+            <p className="mb-8 text-lg text-muted-foreground">
+              easier than making instant noodles, with 73% less sodium
+            </p>
           <div className="mt-8 flex flex-col items-stretch justify-center gap-8 md:flex-row">
             <StepCard
               step="1"

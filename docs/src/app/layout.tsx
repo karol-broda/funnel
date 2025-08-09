@@ -33,12 +33,15 @@ export default function Layout({ children }: { children: ReactNode }) {
             __html: JSON.stringify(structuredData),
           }}
         />
-        <link rel="icon" href="/favicon.ico" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        {/* <link rel="apple-touch-icon" href="/apple-touch-icon.png" /> */}
+        <meta name="msapplication-TileColor" content="#000000" />
         <link rel="manifest" href="/site.webmanifest" />
         <meta name="theme-color" content="#000000" />
         <meta name="color-scheme" content="dark light" />
+        <meta name="robots" content="index,follow" />
+        <meta name="googlebot" content="index,follow" />
+        <link rel="author" href="/humans.txt" />
+        <link rel="alternate" type="application/rss+xml" title="funnel RSS Feed" href="/feed.xml" />
       </head>
       <body>
         <RootProvider
