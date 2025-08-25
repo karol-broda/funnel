@@ -389,6 +389,16 @@ func (t *Tunnel) getRemoteAddr() string {
 	return "unknown"
 }
 
+// GetRemoteAddr returns the remote address of the tunnel connection
+func (t *Tunnel) GetRemoteAddr() string {
+	return t.getRemoteAddr()
+}
+
+// GetCreatedAt returns the creation time of the tunnel
+func (t *Tunnel) GetCreatedAt() time.Time {
+	return t.createdAt
+}
+
 func (t *Tunnel) closeConnection() {
 	t.closeOnce.Do(func() {
 		if t.conn != nil {

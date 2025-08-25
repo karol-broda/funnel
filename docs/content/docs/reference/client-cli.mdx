@@ -43,22 +43,102 @@ you can specify either just a port or a full address:port combination.
 
 | flag      | shorthand | default                  | description                                                              |
 | :-------- | :-------- | :----------------------- | :----------------------------------------------------------------------- |
-| `--server`  | `-s`      | `http://localhost:8080`  | the url of the remote funnel server. use `http://` or `https://`.             |
+| `--server`  | `-s`      | (from config)            | the url of the remote funnel server. use `http://` or `https://`. overrides config. |
 | `--id`      | `-i`      | (randomly generated)     | the custom subdomain to request for the tunnel.                          |
+| `--inlet`   |           | `default`                | the inlet configuration to use from your config file.                    |
 | `--help`    | `-h`      |                          | show help for the command.                                               |
+
+## configuration
+
+the funnel client supports configuration files to save and reuse server endpoints. this allows you to quickly switch between different tunnel servers without specifying the full URL each time.
+
+### config file location
+
+the client looks for configuration in the following order:
+1. `$XDG_CONFIG_HOME/funnel/config.toml` (if `XDG_CONFIG_HOME` is set)
+2. `~/.config/funnel/config.toml` (default location)
+
+<Callout title="manual setup required" intent="warning">
+you must create the configuration file manually. the client will not create a default config automatically.
+</Callout>
+
+### config file format
+
+configuration uses TOML format with the following structure:
+
+```toml
+[inlets.default]
+server = "http://localhost:8080"
+domain = "localhost:8080"
+
+[inlets.production]
+server = "https://api.tunneling.dev"
+domain = "tunneling.dev"
+
+[inlets.staging]
+server = "https://staging.tunneling.dev"
+domain = "staging.tunneling.dev"
+
+[inlets.local]
+server = "http://localhost:8080"
+domain = "localhost:8080"
+```
+
+### inlet configuration
+
+each inlet section contains:
+- **`server`** (required): the URL of the tunnel server
+- **`domain`** (optional): the domain for display purposes
+
+### using inlets
+
+<Callout title="inlet usage" intent="tip">
+use the `--inlet` flag to specify which configuration to use, or omit it to use the default inlet.
+</Callout>
+
+```bash
+# use default inlet
+funnel http 3000
+
+# use specific inlet
+funnel http 3000 --inlet production
+
+# override config with command line
+funnel http 3000 --inlet production --server https://custom.example.com
+```
+
+<Callout title="configuration required" intent="warning">
+if no configuration file exists or the specified inlet doesn't exist, the client will require you to specify the `--server` flag explicitly.
+</Callout>
 
 ### examples
 
-<Tabs items={['Basic Usage', 'Custom Server', 'Full Configuration']}>
+<Tabs items={['Basic Usage', 'Configuration', 'Custom Server', 'Full Configuration']}>
 <Tab value="Basic Usage">
-expose a service on port 3000, connecting to a local server:
+expose a service on port 3000, using the default inlet:
 
 ```bash
 funnel http 3000
 ```
 
 <Callout title="default behavior" intent="tip">
-this will connect to `localhost:8080` and generate a random tunnel id.
+this will use the default inlet from your config file, or `localhost:8080` if no config exists.
+</Callout>
+</Tab>
+
+<Tab value="Configuration">
+use a specific inlet configuration:
+
+```bash
+# use production inlet
+funnel http 3000 --inlet production
+
+# use staging inlet with custom id
+funnel http 3000 --inlet staging --id my-app-staging
+```
+
+<Callout title="configuration workflow" intent="info">
+perfect for switching between different environments (development, staging, production) without remembering server URLs.
 </Callout>
 </Tab>
 
@@ -104,9 +184,9 @@ useful for verifying your installation and checking for updates.
 ### development workflow
 
 <Cards>
-<Card title="🔧 local development" description="funnel http 3000 --id my-project" />
-<Card title="🧪 testing" description="funnel http 8080 --server https://test.example.com" />
-<Card title="🎯 demos" description="funnel http 5000 --id product-demo" />
+<Card title="🔧 local development" description="funnel http 3000 --inlet local" />
+<Card title="🧪 testing" description="funnel http 8080 --inlet staging" />
+<Card title="🎯 demos" description="funnel http 5000 --inlet production" />
 </Cards>
 
 ### common scenarios
@@ -117,13 +197,13 @@ expose your local development server:
 
 ```bash
 # react development server
-funnel http 3000 --id my-react-app
+funnel http 3000 --inlet local --id my-react-app
 
 # next.js development server  
-funnel http 3000 --id my-nextjs-app
+funnel http 3000 --inlet local --id my-nextjs-app
 
 # vite development server
-funnel http 5173 --id my-vite-app
+funnel http 5173 --inlet local --id my-vite-app
 ```
 </Tab>
 
@@ -132,13 +212,13 @@ expose your local api for testing:
 
 ```bash
 # express api server
-funnel http 8000 --id my-api-v1
+funnel http 8000 --inlet staging --id my-api-v1
 
 # django development server
-funnel http 8000 --id django-api
+funnel http 8000 --inlet staging --id django-api
 
 # flask development server
-funnel http 5000 --id flask-api
+funnel http 5000 --inlet staging --id flask-api
 ```
 </Tab>
 
@@ -147,10 +227,10 @@ expose your local server for mobile app testing:
 
 ```bash
 # react native metro bundler
-funnel http 8081 --id rn-bundler
+funnel http 8081 --inlet local --id rn-bundler
 
 # local api for mobile app
-funnel http 3000 --id mobile-api
+funnel http 3000 --inlet staging --id mobile-api
 ```
 
 <Callout title="mobile testing" intent="tip">
@@ -169,6 +249,8 @@ if you encounter connection issues, check these common problems:
 - **tunnel id taken**: try a different `--id` or let the system generate one
 - **local service not found**: verify your local service is running on the specified port
 - **firewall blocking**: check that your firewall allows outbound websocket connections
+- **inlet not found**: verify the inlet exists in your config file or use `--server` to override
+- **config file not found**: create a config file manually at `~/.config/funnel/config.toml` or use `--server` flag
 
 <Callout title="need help?" intent="info">
 for server-specific configuration, see the [server CLI reference](/docs/reference/server-cli).

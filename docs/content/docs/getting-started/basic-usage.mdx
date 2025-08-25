@@ -20,6 +20,10 @@ this guide walks you through creating your first tunnel, from starting a local s
 <Card title="🐳 docker" description="docker installed to run the server" />
 </Cards>
 
+<Callout title="configuration (optional)" intent="tip">
+for convenience, you can set up configuration files to save server endpoints. this allows you to use `funnel http 3000` instead of specifying the full server URL each time.
+</Callout>
+
 <Steps>
 
 ### start a local service
@@ -60,6 +64,34 @@ docker logs funnel-server
 
 you should see logs indicating the server is listening on port 8080.
 
+### (optional) set up configuration
+
+for convenience, you can create a configuration file to save your server settings. this allows you to use shorter commands in the future.
+
+<Callout title="manual setup required" intent="warning">
+you must create the configuration file manually. the client will not create a default config automatically.
+</Callout>
+
+create a config file at `~/.config/funnel/config.toml` with this structure:
+
+```toml
+[inlets.default]
+server = "http://localhost:8080"
+domain = "localhost:8080"
+```
+
+you can add more inlets for different environments:
+
+```toml
+[inlets.default]
+server = "http://localhost:8080"
+domain = "localhost:8080"
+
+[inlets.production]
+server = "https://api.tunneling.dev"
+domain = "tunneling.dev"
+```
+
 ### connect the funnel client
 
 now, connect your local service to the server. this command tells the funnel client to connect to your remote server and forward traffic to your local service on port 3000.
@@ -72,6 +104,13 @@ we're using the custom subdomain `demo` for this example. you can choose any ava
 # connect to the server, forwarding to localhost:3000
 funnel http 3000 --server http://localhost:8080 --id demo
 ```
+
+<Callout title="with configuration" intent="tip">
+if you set up configuration, you can use the shorter command:
+```bash
+funnel http 3000 --id demo
+```
+</Callout>
 
 you should see output similar to:
 ```
