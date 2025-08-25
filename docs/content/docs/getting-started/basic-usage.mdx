@@ -24,6 +24,17 @@ this guide walks you through creating your first tunnel, from starting a local s
 for convenience, you can set up configuration files to save server endpoints. this allows you to use `funnel http 3000` instead of specifying the full server URL each time.
 </Callout>
 
+<Callout title="client authentication" type="error">
+for client authentication, currently there is none.
+what i recommend is throwing a uuid at a subdomain and hoping it sticks like spaghetti on the wall. well yea funnel uses letsencrypt for the domain, so crt.sh indexes it faster than i can say "oops i committed my api keys again".
+
+some buzzkills would call this a "security nightmare". some would say it's like using tissues as a bulletproof vest. but hey, at least it's documented now! that's basically the same as fixing it, right?
+
+well yea it is a little unoptimal
+
+but honestly at this point security is just performance art. we're all just improvising until someone gets pwned.
+</Callout>
+
 <Steps>
 
 ### start a local service
