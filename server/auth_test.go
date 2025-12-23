@@ -286,4 +286,3 @@ func TestTokenStore_FilePermissions(t *testing.T) {
 		t.Fatalf("expected file permissions 0600, got: %o", perm)
 	}
 }
-
