@@ -6,6 +6,7 @@ description: a reference for all `funnel-server` command-line flags and how to c
 
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 <Callout title="docker only" intent="warning">
 the funnel server runs exclusively as a docker container for easy deployment and management.
@@ -27,6 +28,8 @@ docker run -d --name funnel-server [options] ghcr.io/karol-broda/funnel-server:l
 | --- | --- | --- |
 | `FUNNEL_PORT` | `8080` | http traffic port |
 | `FUNNEL_HOST` | `0.0.0.0` | host interface to bind |
+| `FUNNEL_REQUIRE_AUTH` | `false` | require token authentication |
+| `FUNNEL_TOKEN_STORE` | `/var/lib/funnel/tokens.json` | token storage file path |
 | `FUNNEL_ENABLE_TLS` | `false` | enable automatic tls |
 | `FUNNEL_TLS_PORT` | `8443` | https traffic port |
 | `FUNNEL_LETSENCRYPT_EMAIL` | - | email for let's encrypt (required for tls) |
@@ -40,6 +43,8 @@ alternatively, pass flags directly to the container:
 | flag | shorthand | description |
 | --- | --- | --- |
 | `--port` | `-p` | http traffic port |
+| `--require-auth` | - | require token authentication |
+| `--token-store` | - | token storage file path |
 | `--enable-tls` | - | enable automatic tls |
 | `--tls-port` | - | https traffic port |
 | `--letsencrypt-email` | - | email for let's encrypt |
@@ -51,15 +56,82 @@ alternatively, pass flags directly to the container:
 
 ## examples
 
-basic server:
+basic server (no authentication):
 ```bash
 docker run -d --name funnel-server -p 8080:8080 ghcr.io/karol-broda/funnel-server:latest
+```
+
+server with authentication:
+```bash
+docker run -d --name funnel-server \
+  -p 8080:8080 \
+  -v funnel-data:/var/lib/funnel \
+  -e FUNNEL_REQUIRE_AUTH=true \
+  ghcr.io/karol-broda/funnel-server:latest
 ```
 
 server with custom port:
 ```bash
 docker run -d --name funnel-server -p 9000:9000 -e FUNNEL_PORT=9000 ghcr.io/karol-broda/funnel-server:latest
 ```
+
+## authentication
+
+<Callout title="token-based auth" intent="info">
+funnel supports api key-based authentication to control who can create tunnels.
+</Callout>
+
+### managing tokens
+
+<Tabs items={['Create', 'List', 'Revoke']}>
+<Tab value="Create">
+```bash
+# with docker
+docker exec funnel-server funnel-server token create --name my-laptop
+
+# output:
+# Token created for "my-laptop"
+#
+#   sk_7Fj2kL9xMnPqRsTuVwXyZ0AbCdEfGhIj
+#
+#   Save this token now - it will NOT be shown again.
+#   Token is persisted to disk and survives server restarts.
+```
+
+<Callout title="important" intent="warning">
+save the token immediately - it cannot be retrieved later. only the hash is stored on the server.
+</Callout>
+</Tab>
+
+<Tab value="List">
+```bash
+docker exec funnel-server funnel-server token list
+
+# output:
+# NAME                 PREFIX       CREATED
+# ----                 ------       -------
+# my-laptop            sk_7Fj2kL... 2 hours ago
+# ci-pipeline          sk_x8Yz9W... 5 days ago
+```
+</Tab>
+
+<Tab value="Revoke">
+```bash
+docker exec funnel-server funnel-server token revoke --name my-laptop
+
+# output:
+# Token "my-laptop" revoked.
+```
+</Tab>
+</Tabs>
+
+### token storage
+
+tokens are hashed with sha-256 before storage. the token file is saved at `/var/lib/funnel/tokens.json` by default.
+
+<Callout title="persistence" intent="tip">
+mount a volume at `/var/lib/funnel` to persist tokens across container restarts.
+</Callout>
 
 ## tls configuration
 

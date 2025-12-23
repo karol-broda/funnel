@@ -16,6 +16,7 @@ type Config struct {
 type Inlet struct {
 	Server string `toml:"server"`
 	Domain string `toml:"domain,omitempty"`
+	Token  string `toml:"token,omitempty"`
 }
 
 // ConfigManager handles configuration loading and management
@@ -96,8 +97,8 @@ func (cm *ConfigManager) SaveConfig(config *Config) error {
 		return fmt.Errorf("failed to marshal config to TOML: %w", err)
 	}
 
-	// write to file
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	// write to file with restricted permissions (contains token)
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write config file %s: %w", configPath, err)
 	}
 
@@ -163,4 +164,51 @@ func (cm *ConfigManager) ValidateConfig() error {
 	}
 
 	return nil
+}
+
+// SetToken sets the token for a specific inlet, creating the inlet if it doesn't exist
+func (cm *ConfigManager) SetToken(inletName, token string) error {
+	if cm.config == nil {
+		cm.config = &Config{Inlets: make(map[string]Inlet)}
+		cm.LoadConfig()
+		if cm.config == nil {
+			cm.config = &Config{Inlets: make(map[string]Inlet)}
+		}
+	}
+
+	inlet := cm.config.Inlets[inletName]
+	inlet.Token = token
+	cm.config.Inlets[inletName] = inlet
+
+	return cm.SaveConfig(cm.config)
+}
+
+// SetServer sets the server URL for a specific inlet, creating the inlet if it doesn't exist
+func (cm *ConfigManager) SetServer(inletName, server string) error {
+	if cm.config == nil {
+		cm.config = &Config{Inlets: make(map[string]Inlet)}
+		cm.LoadConfig()
+		if cm.config == nil {
+			cm.config = &Config{Inlets: make(map[string]Inlet)}
+		}
+	}
+
+	inlet := cm.config.Inlets[inletName]
+	inlet.Server = server
+	cm.config.Inlets[inletName] = inlet
+
+	return cm.SaveConfig(cm.config)
+}
+
+// GetConfigPath returns the path to the config file
+func (cm *ConfigManager) GetConfigPath() string {
+	return cm.getConfigPath()
+}
+
+// GetConfig returns the loaded config, loading it if necessary
+func (cm *ConfigManager) GetConfig() *Config {
+	if cm.config == nil {
+		cm.LoadConfig()
+	}
+	return cm.config
 }

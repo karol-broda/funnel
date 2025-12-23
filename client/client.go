@@ -13,6 +13,7 @@ type Client struct {
 	TunnelID          string
 	ServerURL         string
 	LocalAddr         string
+	Token             string
 	Conn              *websocket.Conn
 	connMu            sync.Mutex
 	lastPong          time.Time
@@ -27,12 +28,13 @@ type Client struct {
 	cancel            context.CancelFunc
 }
 
-func New(tunnelID, serverURL, localAddr string) *Client {
+func New(tunnelID, serverURL, localAddr, token string) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
 		TunnelID:         tunnelID,
 		ServerURL:        serverURL,
 		LocalAddr:        localAddr,
+		Token:            token,
 		ongoingRequests:  make(map[string]context.CancelFunc),
 		requestSemaphore: make(chan struct{}, 128),
 		outgoingMessages: make(chan *shared.Message, 100),

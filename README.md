@@ -12,7 +12,7 @@
 
 </div>
 
-> **⚠️ disclaimer:** this tunneling solution is intended for development and testing purposes. while functional, it may not include all security features required for production environments. use at your own discretion and implement additional security measures as needed for production deployments.
+> **note:** this tunneling solution is primarily intended for development and testing. authentication is supported via `--require-auth`. for production use, also consider tls encryption and network-level security.
 
 ## 🚀 quick start
 
@@ -161,6 +161,40 @@ funnel http 3000 --server http://localhost:8080 --id my-custom-tunnel
 funnel version
 ```
 
+### authentication
+
+<details>
+<summary><strong>securing your server with tokens</strong></summary>
+
+1. **start server with authentication:**
+   ```bash
+   ./bin/funnel-server --require-auth
+   ```
+
+2. **create a token:**
+   ```bash
+   ./bin/funnel-server token create --name my-laptop
+   # outputs: sk_xxx... (save this!)
+   ```
+
+3. **configure client:**
+   ```bash
+   funnel config set-server http://localhost:8080
+   funnel config set-token sk_xxx...
+   ```
+
+4. **connect (token is used automatically):**
+   ```bash
+   funnel http 3000
+   ```
+
+or pass the token directly:
+```bash
+funnel http 3000 --server http://localhost:8080 --token sk_xxx...
+```
+
+</details>
+
 ### configuration
 
 use `funnel-server --help` and `funnel --help` for current options
@@ -273,34 +307,30 @@ make version
 
 ## 🗺️ roadmap
 
-### ✅ **what works now**
+### what works now
 
-- ✅ **http tunneling** - expose local web services through websocket tunnels
-- ✅ **custom tunnel ids** - use your own subdomain names or auto-generate them  
-- ✅ **auto-reconnection** - clients automatically reconnect with exponential backoff
-- ✅ **cross-platform support** - builds for linux, macos, windows (amd64/arm64)
-- ✅ **custom domains** - works with any domain, not just localhost
-- ✅ **server api** - comprehensive rest api for tunnel management and monitoring
-- ✅ **tunnel statistics** - detailed metrics, historical data, and performance monitoring
-- ✅ **openapi documentation** - interactive api docs with swagger ui integration
+- **http tunneling** - expose local web services through websocket tunnels
+- **custom tunnel ids** - use your own subdomain names or auto-generate them  
+- **auto-reconnection** - clients automatically reconnect with exponential backoff
+- **cross-platform support** - builds for linux, macos, windows (amd64/arm64)
+- **custom domains** - works with any domain, not just localhost
+- **server api** - comprehensive rest api for tunnel management and monitoring
+- **tunnel statistics** - detailed metrics, historical data, and performance monitoring
+- **openapi documentation** - interactive api docs with swagger ui integration
+- **client authentication** - api key-based authentication for secure access
 
-### 🔄 **working on next**
+### working on next
 
-- 🔄 **client authentication** - api key-based authentication for secure access
-- 🔄 **web dashboard** - browser-based tunnel monitoring and control interface
+- **web dashboard** - browser-based tunnel monitoring and control interface
 
-### 📋 **planned improvements**
+### planned improvements
 
-- 📋 **client api** - programmatic client control and configuration sdk
-- 📋 **https by default** - automatic tls for all tunnel endpoints
-- 📋 **oauth integration** - secure tunnels with tokens generated via oauth
-- 📋 **tcp forwarding** - tunnel any tcp service, not just http
-- 📋 **multiple tunnels per client** - run multiple services through single client
-
-### **legend**
-- ✅ **completed** - ready to use
-- 🔄 **in progress** - actively being developed  
-- 📋 **planned** - scheduled for development
+- **client api** - programmatic client control and configuration sdk
+- **https by default** - automatic tls for all tunnel endpoints
+- **oauth integration** - secure tunnels with tokens generated via oauth
+- **tcp forwarding** - tunnel any tcp service, not just http
+- **multiple tunnels per client** - run multiple services through single client
+- **rate limiting** - protection against abuse
 
 ### 🤝 contributing
 

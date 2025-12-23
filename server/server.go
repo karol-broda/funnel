@@ -10,10 +10,11 @@ import (
 )
 
 type Server struct {
-	Tunnels   map[string]*Tunnel
-	TunnelsMu sync.RWMutex
-	Upgrader  websocket.Upgrader
-	router    RouterInterface
+	Tunnels    map[string]*Tunnel
+	TunnelsMu  sync.RWMutex
+	Upgrader   websocket.Upgrader
+	router     RouterInterface
+	tokenStore *TokenStore
 }
 
 type RouterInterface interface {
@@ -48,4 +49,28 @@ func (s *Server) SetRouter(router RouterInterface) {
 
 	s.router = router
 	logger.Debug().Msg("router configured for server")
+}
+
+func (s *Server) SetTokenStore(tokenStore *TokenStore) {
+	logger := shared.GetLogger("server")
+
+	s.tokenStore = tokenStore
+	if tokenStore.IsEnabled() {
+		logger.Info().
+			Int("active_tokens", tokenStore.Count()).
+			Msg("token store configured - authentication enabled")
+	} else {
+		logger.Warn().Msg("token store not configured - authentication disabled")
+	}
+}
+
+func (s *Server) GetTokenStore() *TokenStore {
+	return s.tokenStore
+}
+
+func (s *Server) ValidateToken(token string) (*TokenRecord, bool) {
+	if s.tokenStore == nil {
+		return nil, true
+	}
+	return s.tokenStore.Validate(token)
 }

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -46,8 +47,15 @@ func (c *Client) connect(ctx context.Context) error {
 		Bool("compression_enabled", dialer.EnableCompression).
 		Msg("websocket dialer configured")
 
+	var headers http.Header
+	if c.Token != "" {
+		headers = http.Header{}
+		headers.Set("Authorization", "Bearer "+c.Token)
+		logger.Debug().Msg("authentication token configured")
+	}
+
 	dialStart := time.Now()
-	conn, resp, err := dialer.DialContext(ctx, wsURL, nil)
+	conn, resp, err := dialer.DialContext(ctx, wsURL, headers)
 	dialDuration := time.Since(dialStart)
 
 	if err != nil {

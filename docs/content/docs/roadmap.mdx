@@ -25,17 +25,17 @@ funnel aims to be a simple, secure, and powerful tunneling solution for develope
 <Card title="✅ server api" description="comprehensive rest api for tunnel management and monitoring" />
 <Card title="✅ tunnel statistics" description="detailed metrics, historical data, and performance monitoring" />
 <Card title="✅ openapi documentation" description="interactive api docs with swagger ui integration" />
+<Card title="✅ client authentication" description="api key-based authentication for secure access" />
 </Cards>
 </Tab>
 
 <Tab value="In Progress">
 <Cards>
-<Card title="🔄 client authentication" description="api key-based authentication for secure access" />
 <Card title="🔄 web dashboard" description="browser-based tunnel monitoring and control interface" />
 </Cards>
 
 <Callout title="next milestone" intent="tip">
-our current focus is on adding authentication and building a web dashboard for visual tunnel management.
+our current focus is on building a web dashboard for visual tunnel management.
 </Callout>
 </Tab>
 
@@ -97,12 +97,14 @@ our current focus is on adding authentication and building a web dashboard for v
 - comprehensive request/response schemas and examples
 - integrated with fumadocs for seamless documentation experience
 
-### 🔄 **working on next**
-
 **client authentication** - secure access control:
 - api key-based authentication for clients
-- user management and permissions
-- integration with existing auth systems
+- token creation, listing, and revocation via cli
+- tokens hashed with sha-256 on server (secure storage)
+- client config file support for token storage
+- tokens persist across server restarts
+
+### 🔄 **working on next**
 
 **web dashboard** - visual tunnel management:
 - browser-based tunnel monitoring interface

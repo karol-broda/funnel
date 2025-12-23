@@ -1,7 +1,7 @@
 ---
 title: security
 icon: ShieldCheckIcon
-description: understanding the current security model and deployment considerations.
+description: authentication, tls encryption, and deployment security considerations.
 ---
 
 import { Step, Steps } from 'fumadocs-ui/components/steps';
@@ -9,30 +9,119 @@ import { Callout } from 'fumadocs-ui/components/callout';
 import { Card, Cards } from 'fumadocs-ui/components/card';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
-<Callout title="security model" intent="warning">
-funnel currently uses a simple security model: **anyone who knows your server address can connect and create tunnels**. this is suitable for development environments but requires additional protection for production use.
+<Callout title="authentication available" intent="info">
+funnel supports api key-based authentication. enable it with `--require-auth` to secure your server.
 </Callout>
 
 ## current security features
 
 <Cards>
+<Card title="🔑 token authentication" description="api key-based authentication for tunnel connections" />
 <Card title="🔐 tls encryption" description="automatic https certificates via let's encrypt" />
 <Card title="🆔 tunnel id validation" description="basic format validation and uniqueness checking" />
 <Card title="📋 comprehensive logging" description="detailed logging for monitoring connections" />
-<Card title="🔒 modern tls" description="secure tls configuration with modern ciphers" />
 </Cards>
 
-## what's not included
+## authentication
 
-<Callout title="no built-in access control" intent="warning">
-the server does not have built-in authentication, authorization, or user management. protection must be implemented at the network or proxy level.
+funnel supports api key-based authentication to control who can create tunnels on your server.
+
+### enabling authentication
+
+start the server with the `--require-auth` flag:
+
+```bash
+funnel-server --require-auth
+```
+
+or with docker:
+
+```bash
+docker run -d --name funnel-server \
+  -p 8080:8080 \
+  -v funnel-tokens:/var/lib/funnel \
+  -e FUNNEL_REQUIRE_AUTH=true \
+  ghcr.io/karol-broda/funnel-server:latest
+```
+
+### managing tokens
+
+<Tabs items={['Create Token', 'List Tokens', 'Revoke Token']}>
+<Tab value="Create Token">
+```bash
+funnel-server token create --name my-laptop
+
+# output:
+# Token created for "my-laptop"
+#
+#   sk_7Fj2kL9xMnPqRsTuVwXyZ0AbCdEfGhIj
+#
+#   Save this token now - it will NOT be shown again.
+#   Token is persisted to disk and survives server restarts.
+```
+
+<Callout title="save your token" intent="warning">
+the plain token is only shown once. save it immediately - you cannot retrieve it later.
+</Callout>
+</Tab>
+
+<Tab value="List Tokens">
+```bash
+funnel-server token list
+
+# output:
+# NAME                 PREFIX       CREATED
+# ----                 ------       -------
+# my-laptop            sk_7Fj2kL... 2 hours ago
+# ci-pipeline          sk_x8Yz9W... 5 days ago
+```
+</Tab>
+
+<Tab value="Revoke Token">
+```bash
+funnel-server token revoke --name my-laptop
+
+# output:
+# Token "my-laptop" revoked.
+```
+</Tab>
+</Tabs>
+
+### token storage security
+
+| location | storage method | security |
+| --- | --- | --- |
+| server (`tokens.json`) | sha-256 hashed | cannot recover plain token if file leaks |
+| client (`config.toml`) | plain text | file saved with 0600 permissions |
+
+<Callout title="server-side security" intent="info">
+tokens are hashed before storage on the server. even if the token file is compromised, attackers cannot use the hashes to authenticate.
 </Callout>
 
-current limitations:
-- **no authentication** - no user accounts, tokens, or passwords
-- **no authorization** - anyone can connect if they know the server address
+### client configuration
+
+clients can save their token to avoid passing it on every command:
+
+```bash
+# save token to config
+funnel config set-token sk_7Fj2kL9xMnPqRsTuVwXyZ0AbCdEfGhIj
+
+# save server url
+funnel config set-server https://tunnel.example.com
+
+# now just run without flags
+funnel http 3000
+```
+
+<Callout title="plain text warning" intent="warning">
+the client stores the token in plain text in `~/.config/funnel/config.toml`. the file is created with restricted permissions (0600), but ensure your machine is secure.
+</Callout>
+
+## current limitations
+
 - **no rate limiting** - no built-in protection against abuse
 - **no ip restrictions** - accepts connections from any ip address
+- **no user management** - tokens are not tied to user accounts
 
 ## tls encryption
 
@@ -82,7 +171,7 @@ automatic certificate features:
 
 ## deployment security
 
-since the server lacks built-in access control, secure deployment requires external protection:
+for additional security beyond token authentication, consider these deployment strategies:
 
 <Steps>
 <Step>
@@ -211,14 +300,14 @@ important errors:
 ## future security features
 
 <Callout title="roadmap" intent="info">
-we plan to add built-in authentication and authorization features in future releases.
+we plan to add additional security features in future releases.
 </Callout>
 
 planned features:
-- **authentication tokens** - api keys for client connections
-- **user management** - user accounts and permissions
 - **rate limiting** - protection against abuse
 - **ip allowlists** - built-in ip-based access control
+- **user management** - user accounts and permissions
+- **oauth integration** - enterprise sso support
 
 ## security updates
 

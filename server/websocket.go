@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/karol-broda/funnel/shared"
@@ -16,10 +17,26 @@ func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		Str("origin", r.Header.Get("Origin")).
 		Msg("websocket connection attempt")
 
+	token := extractToken(r)
+	tokenRecord, valid := s.ValidateToken(token)
+	if !valid {
+		logger.Warn().
+			Str("remote_addr", r.RemoteAddr).
+			Msg("websocket upgrade rejected - invalid or missing token")
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	tokenName := ""
+	if tokenRecord != nil {
+		tokenName = tokenRecord.Name
+	}
+
 	tunnelID := r.URL.Query().Get("id")
 	if tunnelID == "" {
 		logger.Warn().
 			Str("remote_addr", r.RemoteAddr).
+			Str("token_name", tokenName).
 			Msg("websocket upgrade rejected - missing tunnel id")
 		http.Error(w, "tunnel id required", http.StatusBadRequest)
 		return
@@ -29,6 +46,7 @@ func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		logger.Warn().
 			Str("remote_addr", r.RemoteAddr).
 			Str("tunnel_id", tunnelID).
+			Str("token_name", tokenName).
 			Err(err).
 			Msg("websocket upgrade rejected - invalid tunnel id format")
 		http.Error(w, "invalid tunnel id format: "+err.Error(), http.StatusBadRequest)
@@ -40,6 +58,7 @@ func (s *Server) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	tunnelLogger.Info().
 		Str("remote_addr", r.RemoteAddr).
 		Str("user_agent", r.UserAgent()).
+		Str("token_name", tokenName).
 		Msg("websocket upgrade requested")
 
 	if s.TunnelExists(tunnelID) {
@@ -101,4 +120,18 @@ func (s *Server) setupWebSocketConnection(tunnel *Tunnel) {
 	})
 
 	logger.Debug().Msg("websocket connection setup completed")
+}
+
+func extractToken(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader != "" {
+		return strings.TrimPrefix(authHeader, "Bearer ")
+	}
+
+	token := r.URL.Query().Get("token")
+	if token != "" {
+		return token
+	}
+
+	return ""
 }

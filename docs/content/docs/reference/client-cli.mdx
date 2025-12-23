@@ -16,6 +16,7 @@ the `funnel` client is the command-line tool you use on your local machine to co
 
 <Cards>
 <Card title="🌐 funnel http" description="create an http tunnel (primary command)" />
+<Card title="⚙️ funnel config" description="manage client configuration" />
 <Card title="📋 funnel version" description="display version information" />
 </Cards>
 
@@ -46,6 +47,7 @@ you can specify either just a port or a full address:port combination.
 | `--server`  | `-s`      | (from config)            | the url of the remote funnel server. use `http://` or `https://`. overrides config. |
 | `--id`      | `-i`      | (randomly generated)     | the custom subdomain to request for the tunnel.                          |
 | `--inlet`   |           | `default`                | the inlet configuration to use from your config file.                    |
+| `--token`   | `-t`      | (from config)            | authentication token for the server. overrides config.                   |
 | `--help`    | `-h`      |                          | show help for the command.                                               |
 
 ## configuration
@@ -58,8 +60,8 @@ the client looks for configuration in the following order:
 1. `$XDG_CONFIG_HOME/funnel/config.toml` (if `XDG_CONFIG_HOME` is set)
 2. `~/.config/funnel/config.toml` (default location)
 
-<Callout title="manual setup required" intent="warning">
-you must create the configuration file manually. the client will not create a default config automatically.
+<Callout title="easy setup" intent="tip">
+use `funnel config set-server` and `funnel config set-token` to create and manage your config file automatically.
 </Callout>
 
 ### config file format
@@ -70,18 +72,17 @@ configuration uses TOML format with the following structure:
 [inlets.default]
 server = "http://localhost:8080"
 domain = "localhost:8080"
+token = "sk_your_token_here"
 
 [inlets.production]
 server = "https://api.tunneling.dev"
 domain = "tunneling.dev"
+token = "sk_production_token"
 
 [inlets.staging]
 server = "https://staging.tunneling.dev"
 domain = "staging.tunneling.dev"
-
-[inlets.local]
-server = "http://localhost:8080"
-domain = "localhost:8080"
+token = "sk_staging_token"
 ```
 
 ### inlet configuration
@@ -89,6 +90,11 @@ domain = "localhost:8080"
 each inlet section contains:
 - **`server`** (required): the URL of the tunnel server
 - **`domain`** (optional): the domain for display purposes
+- **`token`** (optional): authentication token for the server
+
+<Callout title="token security" intent="warning">
+the token is stored in plain text in the config file. the file is created with restricted permissions (0600), but ensure your machine is secure.
+</Callout>
 
 ### using inlets
 
@@ -166,6 +172,76 @@ you can expose services running on other machines in your network, but ensure th
 </Callout>
 </Tab>
 </Tabs>
+
+## `funnel config`
+
+manage client configuration, including server urls and authentication tokens.
+
+### subcommands
+
+<Tabs items={['set-token', 'set-server', 'show', 'path']}>
+<Tab value="set-token">
+save an authentication token to your config file:
+
+```bash
+funnel config set-token sk_your_token_here
+
+# for a specific inlet
+funnel config set-token sk_prod_token --inlet production
+```
+
+<Callout title="token storage" intent="warning">
+the token is stored in plain text in the config file. the file is created with restricted permissions (0600).
+</Callout>
+</Tab>
+
+<Tab value="set-server">
+save a server url to your config file:
+
+```bash
+funnel config set-server https://tunnel.example.com
+
+# for a specific inlet
+funnel config set-server https://prod.tunnel.io --inlet production
+```
+</Tab>
+
+<Tab value="show">
+display the current configuration:
+
+```bash
+funnel config show
+
+# output:
+# Config file: ~/.config/funnel/config.toml
+#
+# [default]
+#   server: http://localhost:8080
+#   token:  sk_7Fj2kL...
+#
+# [production]
+#   server: https://tunnel.example.com
+#   token:  sk_prod_t...
+```
+</Tab>
+
+<Tab value="path">
+show the config file path:
+
+```bash
+funnel config path
+
+# output:
+# /home/user/.config/funnel/config.toml
+```
+</Tab>
+</Tabs>
+
+### config flags
+
+| flag | default | description |
+| :--- | :------ | :---------- |
+| `--inlet` | `default` | the inlet to configure |
 
 ## `funnel version`
 

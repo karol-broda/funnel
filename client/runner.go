@@ -14,9 +14,9 @@ import (
 
 const maxReconnectDelay = 30 * time.Second
 
-func Run(tunnelID, serverURL, localAddr string, shutdown <-chan struct{}) {
+func Run(tunnelID, serverURL, localAddr, token string, shutdown <-chan struct{}) {
 	logger := shared.GetTunnelLogger("client.runner", tunnelID)
-	logger.Info().Str("local_addr", localAddr).Str("server_url", serverURL).Msg("starting tunnel client with reconnection logic")
+	logger.Info().Str("local_addr", localAddr).Str("server_url", serverURL).Bool("has_token", token != "").Msg("starting tunnel client with reconnection logic")
 
 	reconnectAttempts := 0
 
@@ -26,10 +26,10 @@ func Run(tunnelID, serverURL, localAddr string, shutdown <-chan struct{}) {
 			logger.Info().Msg("shutdown signal received, stopping client runner.")
 			return
 		default:
-			// contunue
+			// continue
 		}
 
-		c := New(tunnelID, serverURL, localAddr)
+		c := New(tunnelID, serverURL, localAddr, token)
 
 		logger.Info().Int("attempt", reconnectAttempts+1).Msg("attempting to connect to server")
 		err := c.connect(c.ctx)
