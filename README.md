@@ -1,111 +1,34 @@
 <div align="center">
 
-# 🕳️ **funnel**
+# funnel
 
-*a tunneling solution built with go*
+a tunneling solution built with go
 
----
+expose local services to the internet through websocket connections
 
-**expose local services to the internet through websocket connections**
-
-*perfect for development, testing, and demonstration purposes*
+[documentation](https://funnel.karolbroda.com/docs) | [installation](https://funnel.karolbroda.com/docs/getting-started/installation) | [roadmap](https://funnel.karolbroda.com/docs/roadmap)
 
 </div>
 
-> **note:** this tunneling solution is primarily intended for development and testing. authentication is supported via `--require-auth`. for production use, also consider tls encryption and network-level security.
+## overview
 
-## 🚀 quick start
+funnel creates tunnels from a public server to your local machine using websockets. when requests arrive at the server, they get proxied through to your local service. useful for development, testing, webhooks, and demos.
 
-one line install script:
+## quick start
+
 ```bash
 curl -sSfL https://raw.githubusercontent.com/karol-broda/funnel/master/scripts/install.sh | bash
 ```
 
-<details>
-<summary><strong>📦 installation options</strong></summary>
-
-the recommended way to install `funnel` is with the installer script. it automatically detects your platform, downloads the correct binary, and installs it on your system.
-
-by default, the script installs `funnel` to `$HOME/.local/bin`. this is the recommended method as it does not require `sudo`.
-
-the script provides several flags to customize the installation:
-
-- **global install**: use the `--global` flag to install `funnel` to `/usr/local/bin`, making it available to all users. this requires `sudo`.
-  ```bash
-  curl -sSfL https://.../install.sh | bash -s -- --global
-  ```
-
-- **custom directory**: use `-b` or `--bin-dir` to specify a custom installation directory.
-  ```bash
-  curl -sSfL https://.../install.sh | bash -s -- -b /path/to/your/bin
-  ```
-
-- **specific version**: use `-v` to install a specific version of `funnel`.
-  ```bash
-  curl -sSfL https://.../install.sh | bash -s -- -v v0.0.4
-  ```
-
-- **list versions**: use `-l` to see a list of available versions.
-  ```bash
-  curl -sSfL https://.../install.sh | bash -s -- -l
-  ```
-
-</details>
-
-<details>
-<summary><strong>🔨 building from source</strong></summary>
-
 ```bash
-git clone https://github.com/karol-broda/funnel.git
-cd funnel
-make dev-setup
-make build
+funnel http 3000 --server http://localhost:8080 --id my-tunnel
 ```
 
-</details>
+your service is now available at `http://my-tunnel.localhost:8080`.
 
-<details>
-<summary><strong>⚡ basic usage</strong></summary>
+see the [installation guide](https://funnel.karolbroda.com/docs/getting-started/installation) for more options.
 
-1. **start the server:**
-   ```bash
-   ./bin/funnel-server
-   # or: ./bin/funnel-server -port 9000
-   ```
-
-2. **connect your local service:**
-   ```bash
-   funnel http 3000 --server http://localhost:8080
-   # or with custom id: funnel http 3000 --server http://localhost:8080 --id my-tunnel
-   ```
-
-3. **access your service:**
-   ```bash
-   curl http://your-tunnel-id.localhost:8080
-   ```
-
-</details>
-
-<details>
-<summary><strong>🎯 complete example</strong></summary>
-
-```bash
-# terminal 1: start a local service
-python3 -m http.server 3000
-
-# terminal 2: start funnel server  
-make run-server
-
-# terminal 3: connect funnel client
-funnel http 3000 --server http://localhost:8080 --id demo
-
-# terminal 4: test the tunnel
-curl http://demo.localhost:8080
-```
-
-</details>
-
-## 🏗️ architecture
+## how it works
 
 ```mermaid
 graph LR
@@ -123,227 +46,40 @@ graph LR
     style E fill:#91d7e3,color:#24273a
 ```
 
-### how it works
-- **funnel client**: connects to server via websocket, forwards requests to local app
-- **funnel server**: accepts websocket connections, routes external http requests to clients  
-- **local app**: your application running locally (e.g., web server, api)
-- requests to `tunnel-id.server:port` get routed through websocket to your local app
+the client connects to the server via websocket and forwards http requests to your local app. the server routes requests based on subdomain (`tunnel-id.server:port`).
 
-## 💻 usage
+more in the [architecture docs](https://funnel.karolbroda.com/docs/core-concepts/architecture).
 
-### server commands
+## features
 
-```bash
-# start server (default port 8080)
-./bin/funnel-server
+http tunneling, custom tunnel ids, auto-reconnection with exponential backoff, cross-platform (linux/macos/windows, amd64/arm64), tls via let's encrypt, api key authentication, rest api for management.
 
-# specify custom port
-./bin/funnel-server -port 9000
+## docs
 
-# show version info
-./bin/funnel-server version
-```
+- [getting started](https://funnel.karolbroda.com/docs/getting-started/installation)
+- [architecture](https://funnel.karolbroda.com/docs/core-concepts/architecture)
+- [client cli](https://funnel.karolbroda.com/docs/reference/client-cli)
+- [server cli](https://funnel.karolbroda.com/docs/reference/server-cli)
+- [server api](https://funnel.karolbroda.com/docs/reference/server-api)
+- [deployment](https://funnel.karolbroda.com/docs/server/deployment)
+- [security](https://funnel.karolbroda.com/docs/server/security)
 
-### client commands
+## development
 
 ```bash
-# tunnel using port only (connects to localhost:PORT)
-funnel http 3000 --server http://localhost:8080
-
-# tunnel using full address
-funnel http localhost:3000 --server http://localhost:8080
-funnel http 0.0.0.0:8080 --server http://localhost:8080
-
-# use custom tunnel id
-funnel http 3000 --server http://localhost:8080 --id my-custom-tunnel
-
-# show version info
-funnel version
-```
-
-### authentication
-
-<details>
-<summary><strong>securing your server with tokens</strong></summary>
-
-1. **start server with authentication:**
-   ```bash
-   ./bin/funnel-server --require-auth
-   ```
-
-2. **create a token:**
-   ```bash
-   ./bin/funnel-server token create --name my-laptop
-   # outputs: sk_xxx... (save this!)
-   ```
-
-3. **configure client:**
-   ```bash
-   funnel config set-server http://localhost:8080
-   funnel config set-token sk_xxx...
-   ```
-
-4. **connect (token is used automatically):**
-   ```bash
-   funnel http 3000
-   ```
-
-or pass the token directly:
-```bash
-funnel http 3000 --server http://localhost:8080 --token sk_xxx...
-```
-
-</details>
-
-### configuration
-
-use `funnel-server --help` and `funnel --help` for current options
-
-## 🔧 development
-
-<details>
-<summary><strong>🔨 building</strong></summary>
-
-```bash
-# build both client and server
+git clone https://github.com/karol-broda/funnel.git
+cd funnel
+make dev-setup
 make build
-
-# build individual components
-make build-client
-make build-server
-
-# show available commands
-make help
-```
-
-</details>
-
-<details>
-<summary><strong>🧪 testing</strong></summary>
-
-```bash
-# run all tests
 make test
-
-# verbose test output
-make test-verbose
-
-# test with coverage
-make test-coverage
-
-# test with race detection
-make test-race
 ```
 
-</details>
+`make help` for all commands.
 
-<details>
-<summary><strong>📦 dependency management</strong></summary>
+## contributing
 
-### quick reference
-```bash
-# fix go.mod files and ide errors
-make tidy
+fork, branch, `make dev-setup`, make changes, `make build && make test`, `make fmt && make lint`, open a pr.
 
-# complete dependency setup (fresh install)
-make deps-install
+## license
 
-# show all modules
-make list-modules
-```
-
-### when to use what
-- **`make tidy`** - quick dependency cleanup, fixes ide linting errors
-- **`make deps-install`** - complete setup for fresh installations, downloads everything
-- use `tidy` for regular maintenance, `deps-install` for first-time setup
-
-</details>
-
-<details>
-<summary><strong>🚀 release process</strong></summary>
-
-```bash
-# create release binaries for all platforms
-make release
-
-# platforms: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
-# output: dist/ directory
-```
-
-</details>
-
-<details>
-<summary><strong>🧹 maintenance</strong></summary>
-
-```bash
-# format code
-make fmt
-
-# run linter
-make lint
-
-# clean build artifacts
-make clean
-
-# show version info
-make version
-```
-
-</details>
-
-## 🔌 protocol details
-
-### websocket communication
-- client establishes websocket connection to `/ws` endpoint with tunnel id
-- server creates subdomain routing (`tunnel-id.server:port`)
-- http requests to subdomain are proxied through websocket to client
-- client forwards requests to local app and returns responses
-
-### tunnel id requirements
-- 3-63 characters long
-- lowercase letters, numbers, and hyphens only
-- cannot start or end with hyphen
-- auto-generated ids use domain-safe alphabet
-
-## 🗺️ roadmap
-
-### what works now
-
-- **http tunneling** - expose local web services through websocket tunnels
-- **custom tunnel ids** - use your own subdomain names or auto-generate them  
-- **auto-reconnection** - clients automatically reconnect with exponential backoff
-- **cross-platform support** - builds for linux, macos, windows (amd64/arm64)
-- **custom domains** - works with any domain, not just localhost
-- **server api** - comprehensive rest api for tunnel management and monitoring
-- **tunnel statistics** - detailed metrics, historical data, and performance monitoring
-- **openapi documentation** - interactive api docs with swagger ui integration
-- **client authentication** - api key-based authentication for secure access
-
-### working on next
-
-- **web dashboard** - browser-based tunnel monitoring and control interface
-
-### planned improvements
-
-- **client api** - programmatic client control and configuration sdk
-- **https by default** - automatic tls for all tunnel endpoints
-- **oauth integration** - secure tunnels with tokens generated via oauth
-- **tcp forwarding** - tunnel any tcp service, not just http
-- **multiple tunnels per client** - run multiple services through single client
-- **rate limiting** - protection against abuse
-
-### 🤝 contributing
-
-contributions welcome! please:
-
-1. fork the repository
-2. create feature branch: `git checkout -b feature/your-awesome-feature`
-3. set up development: `make dev-setup`
-4. make changes and test: `make build && make test`
-5. format and lint: `make fmt && make lint`
-6. commit changes: `git commit -m "description"`
-7. push and create pull request
-
-## 📄 license
-
-licensed under the [mit license](./LICENSE.md)
+[mit](./LICENSE.md)
