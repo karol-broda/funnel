@@ -1,0 +1,10 @@
+[package]
+name = "funnel-web"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+funnel-core = { path = "../funnel-core" }
+
+leptos = { version = "0.7", features = ["csr"] }
+serde = { version = "1", features = ["derive"] }
