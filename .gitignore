@@ -1,62 +1,28 @@
-# binaries
-bin/
-dist/
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock
 
-# test binary, built with `go test -c`
-*.test
+# Environment
+.env
+.direnv
+result
 
-# output of the go coverage tool
-*.out
-
-# dependency directories
-vendor/
-
-# IDE files
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS files
+# OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# logs
+# Logs
 *.log
 
-# temporary files
+# Temporary
 *.tmp
 *.temp
-
-# Built binaries
-client_main
-server_main
-/client_main
-/server_main
-tunneling-client
-tunneling-server
-
-# Coverage reports
-coverage.out
-coverage.html
-
-# Profiling data
-*.prof
-*.pprof
-
-# Debug files
-debug
-*.debug 
-
 /tmp
