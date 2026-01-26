@@ -18,7 +18,6 @@ pub struct TunnelSession {
     pub requests: i64,
 }
 
-/// Record a new tunnel connection.
 pub async fn create(
     pool: &PgPool,
     user_id: Uuid,
@@ -39,7 +38,6 @@ pub async fn create(
     .await
 }
 
-/// Mark a tunnel session as disconnected and record final stats.
 pub async fn disconnect(
     pool: &PgPool,
     session_id: Uuid,
@@ -64,7 +62,6 @@ pub async fn disconnect(
     Ok(result.rows_affected() > 0)
 }
 
-/// List recent tunnel sessions for a user, most recent first.
 pub async fn list_for_user(
     pool: &PgPool,
     user_id: Uuid,
@@ -84,7 +81,6 @@ pub async fn list_for_user(
     .await
 }
 
-/// List currently active (not disconnected) sessions.
 pub async fn list_active(pool: &PgPool) -> Result<Vec<TunnelSession>, sqlx::Error> {
     sqlx::query_as::<_, TunnelSession>(
         "SELECT * FROM tunnel_sessions WHERE disconnected_at IS NULL ORDER BY connected_at DESC",
@@ -144,7 +140,6 @@ mod tests {
         let s1 = create(&pool, user.id, "active-1", None).await.unwrap();
         let s2 = create(&pool, user.id, "active-2", None).await.unwrap();
 
-        // Disconnect one
         disconnect(&pool, s1.id, 0, 0, 0).await.unwrap();
 
         let active = list_active(&pool).await.unwrap();

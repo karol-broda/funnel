@@ -16,7 +16,6 @@ pub struct ApiKey {
     pub revoked_at: Option<DateTime<Utc>>,
 }
 
-/// A view of an API key safe for returning in API responses (no hash).
 #[derive(Debug, Clone, Serialize)]
 pub struct ApiKeyView {
     pub id: Uuid,
@@ -38,7 +37,6 @@ impl From<ApiKey> for ApiKeyView {
     }
 }
 
-/// Create a new API key for a user. Returns the full plaintext key (show once) and the DB record.
 pub async fn create(
     pool: &PgPool,
     user_id: Uuid,
@@ -65,7 +63,6 @@ pub async fn create(
     Ok((plaintext, key))
 }
 
-/// Find the user ID associated with a plaintext API key, if it's valid and not revoked.
 pub async fn validate(pool: &PgPool, plaintext: &str) -> Result<Option<ApiKey>, sqlx::Error> {
     let hash = auth::hash_token(plaintext);
 
@@ -77,7 +74,6 @@ pub async fn validate(pool: &PgPool, plaintext: &str) -> Result<Option<ApiKey>, 
     .await
 }
 
-/// List all active (non-revoked) API keys for a user.
 pub async fn list_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<ApiKey>, sqlx::Error> {
     sqlx::query_as::<_, ApiKey>(
         "SELECT * FROM api_keys WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC",
@@ -87,7 +83,6 @@ pub async fn list_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<ApiKey>, 
     .await
 }
 
-/// Revoke an API key by setting its `revoked_at` timestamp.
 pub async fn revoke(pool: &PgPool, key_id: Uuid, user_id: Uuid) -> Result<bool, sqlx::Error> {
     let result = sqlx::query(
         "UPDATE api_keys SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",

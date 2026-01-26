@@ -9,7 +9,6 @@ use tower_http::trace::TraceLayer;
 
 use crate::api;
 
-/// Shared application state, available in all handlers via `State<Arc<AppState>>`.
 pub struct AppState {
     pub db: PgPool,
     pub start_time: Instant,
@@ -24,7 +23,6 @@ impl AppState {
     }
 }
 
-/// Build the complete Axum router with all routes and middleware.
 pub fn build_router(state: Arc<AppState>) -> Router {
     let api_routes = Router::new()
         .route("/health", get(api::health::handler))

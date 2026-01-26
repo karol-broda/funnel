@@ -23,7 +23,6 @@ pub struct NewUser {
     pub provider_id: String,
 }
 
-/// Find a user by their unique ID.
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<User>, sqlx::Error> {
     sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1")
         .bind(id)
@@ -31,7 +30,6 @@ pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<User>, sqlx::E
         .await
 }
 
-/// Find a user by email address.
 pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<User>, sqlx::Error> {
     sqlx::query_as::<_, User>("SELECT * FROM users WHERE email = $1")
         .bind(email)
@@ -39,7 +37,6 @@ pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<User>, s
         .await
 }
 
-/// Find a user by their OAuth provider and provider-specific ID.
 pub async fn find_by_provider(
     pool: &PgPool,
     provider: &str,
@@ -54,7 +51,6 @@ pub async fn find_by_provider(
     .await
 }
 
-/// Create a new user, returning the created record.
 pub async fn create(pool: &PgPool, new_user: NewUser) -> Result<User, sqlx::Error> {
     sqlx::query_as::<_, User>(
         r#"
@@ -72,10 +68,8 @@ pub async fn create(pool: &PgPool, new_user: NewUser) -> Result<User, sqlx::Erro
     .await
 }
 
-/// Upsert a user based on OAuth provider identity.
-///
-/// If a user with the same (provider, provider_id) exists, update their profile.
-/// Otherwise, create a new user. Returns the user in either case.
+/// if a user with the same (provider, provider_id) exists, updates their profile.
+/// otherwise creates a new row.
 pub async fn upsert_from_oauth(pool: &PgPool, new_user: NewUser) -> Result<User, sqlx::Error> {
     sqlx::query_as::<_, User>(
         r#"
@@ -113,8 +107,7 @@ mod tests {
         }
     }
 
-    // Integration tests require a running Postgres instance.
-    // Run with: DATABASE_URL=postgres://... cargo test -- --ignored
+    // run with: DATABASE_URL=postgres://... cargo test -- --ignored
     #[tokio::test]
     #[ignore = "requires database"]
     async fn create_and_find_user() {
@@ -180,9 +173,7 @@ mod tests {
         .await
         .unwrap();
 
-        // Same user row
         assert_eq!(first.id, second.id);
-        // But fields updated
         assert_eq!(second.name.as_deref(), Some("Updated"));
         assert!(second.avatar_url.is_some());
     }

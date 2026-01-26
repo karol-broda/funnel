@@ -10,27 +10,24 @@ const DOMAIN_SAFE_ALPHABET: &[char] = &[
     'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
-const DEFAULT_ID_LENGTH: usize = 8;
+const DEFAULT_LENGTH: usize = 8;
+const MIN_LENGTH: usize = 3;
+const MAX_LENGTH: usize = 63;
 
-/// A validated tunnel identifier.
-///
-/// Guaranteed to be 3-63 characters, lowercase alphanumeric with hyphens,
-/// and not starting or ending with a hyphen. Safe for use as a DNS subdomain label.
+/// a validated tunnel identifier, guaranteed to be a valid dns subdomain label.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct TunnelId(String);
 
 impl TunnelId {
-    /// Parse and validate a raw string as a tunnel ID.
     pub fn new(raw: impl Into<String>) -> Result<Self, ValidationError> {
         let s = raw.into();
         Self::validate(&s)?;
         Ok(Self(s))
     }
 
-    /// Generate a random domain-safe tunnel ID.
     pub fn generate() -> Self {
-        let id = nanoid::nanoid!(DEFAULT_ID_LENGTH, DOMAIN_SAFE_ALPHABET);
+        let id = nanoid::nanoid!(DEFAULT_LENGTH, DOMAIN_SAFE_ALPHABET);
         Self(id)
     }
 
@@ -38,19 +35,16 @@ impl TunnelId {
         if s.is_empty() {
             return Err(ValidationError::Empty);
         }
-        if s.len() < 3 {
+        if s.len() < MIN_LENGTH {
             return Err(ValidationError::TooShort(s.len()));
         }
-        if s.len() > 63 {
+        if s.len() > MAX_LENGTH {
             return Err(ValidationError::TooLong(s.len()));
         }
-
-        let lower = s.to_lowercase();
-        if s != lower {
+        if s != s.to_lowercase() {
             return Err(ValidationError::NotLowercase);
         }
 
-        // Must match: starts and ends with alnum, middle can have hyphens
         let re = Regex::new(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$").expect("valid regex");
         if !re.is_match(s) {
             return Err(ValidationError::InvalidFormat);
@@ -96,7 +90,7 @@ mod tests {
         assert!(TunnelId::new("my-tunnel").is_ok());
         assert!(TunnelId::new("test-123").is_ok());
         assert!(TunnelId::new("a1b").is_ok());
-        assert!(TunnelId::new("a".repeat(63)).is_ok());
+        assert!(TunnelId::new("a".repeat(MAX_LENGTH)).is_ok());
     }
 
     #[test]
@@ -112,8 +106,11 @@ mod tests {
 
     #[test]
     fn too_long() {
-        let long = "a".repeat(64);
-        assert!(matches!(TunnelId::new(long), Err(ValidationError::TooLong(64))));
+        let long = "a".repeat(MAX_LENGTH + 1);
+        assert!(matches!(
+            TunnelId::new(long),
+            Err(ValidationError::TooLong(64))
+        ));
     }
 
     #[test]
@@ -126,29 +123,17 @@ mod tests {
 
     #[test]
     fn invalid_format() {
-        assert!(matches!(
-            TunnelId::new("-abc"),
-            Err(ValidationError::InvalidFormat)
-        ));
-        assert!(matches!(
-            TunnelId::new("abc-"),
-            Err(ValidationError::InvalidFormat)
-        ));
-        assert!(matches!(
-            TunnelId::new("ab_c"),
-            Err(ValidationError::InvalidFormat)
-        ));
-        assert!(matches!(
-            TunnelId::new("ab c"),
-            Err(ValidationError::InvalidFormat)
-        ));
+        assert!(matches!(TunnelId::new("-abc"), Err(ValidationError::InvalidFormat)));
+        assert!(matches!(TunnelId::new("abc-"), Err(ValidationError::InvalidFormat)));
+        assert!(matches!(TunnelId::new("ab_c"), Err(ValidationError::InvalidFormat)));
+        assert!(matches!(TunnelId::new("ab c"), Err(ValidationError::InvalidFormat)));
     }
 
     #[test]
     fn generate_produces_valid_id() {
         for _ in 0..100 {
             let id = TunnelId::generate();
-            assert_eq!(id.as_ref().len(), DEFAULT_ID_LENGTH);
+            assert_eq!(id.as_ref().len(), DEFAULT_LENGTH);
             assert!(TunnelId::new(id.as_ref()).is_ok());
         }
     }

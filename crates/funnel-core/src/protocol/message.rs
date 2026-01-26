@@ -5,7 +5,6 @@ use uuid::Uuid;
 
 use crate::tunnel::TunnelId;
 
-/// HTTP request payload forwarded through the tunnel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestPayload {
     pub method: String,
@@ -15,7 +14,6 @@ pub struct RequestPayload {
     pub body: Vec<u8>,
 }
 
-/// HTTP response payload returned through the tunnel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponsePayload {
     pub status: u16,
@@ -24,10 +22,6 @@ pub struct ResponsePayload {
     pub body: Vec<u8>,
 }
 
-/// A message sent over the WebSocket tunnel connection.
-///
-/// Uses a tagged enum (`"type"` field) for clean pattern matching
-/// instead of stringly-typed message kinds.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TunnelMessage {
@@ -47,7 +41,6 @@ pub enum TunnelMessage {
     },
 }
 
-/// Serde helper for encoding `Vec<u8>` as base64 strings in JSON.
 mod base64_bytes {
     use base64::prelude::*;
     use serde::{Deserialize, Deserializer, Serializer};
