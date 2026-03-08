@@ -2,37 +2,47 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{Path, State};
-use serde::Serialize;
+
+use funnel_core::tunnel::TunnelId;
 
 use crate::app::AppState;
 use crate::error::AppError;
+use crate::tunnel::manager::TunnelInfo;
 
-#[derive(Serialize)]
-pub struct TunnelInfo {
-    pub id: String,
-    pub status: &'static str,
+pub async fn list(State(state): State<Arc<AppState>>) -> Json<Vec<TunnelInfo>> {
+    Json(state.tunnels.list())
 }
 
-/// List all active tunnels.
-pub async fn list(State(_state): State<Arc<AppState>>) -> Json<Vec<TunnelInfo>> {
-    // TODO: wire to TunnelManager once tunnel module is implemented
-    Json(vec![])
-}
-
-/// Get a specific tunnel by ID.
 pub async fn get_tunnel(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<TunnelInfo>, AppError> {
-    // TODO: wire to TunnelManager
-    Err(AppError::TunnelNotFound(id))
+    let tunnel_id = TunnelId::new(id.clone())?;
+
+    let tunnel = state
+        .tunnels
+        .get(&tunnel_id)
+        .ok_or_else(|| AppError::TunnelNotFound(id))?;
+
+    Ok(Json(TunnelInfo {
+        id: tunnel.id().to_string(),
+        uptime_secs: tunnel.connected_at().elapsed().as_secs_f64(),
+        stats: tunnel.stats(),
+    }))
 }
 
-/// Delete (force-close) a tunnel.
 pub async fn delete(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // TODO: wire to TunnelManager
-    Err(AppError::TunnelNotFound(id))
+    let tunnel_id = TunnelId::new(id.clone())?;
+
+    let tunnel = state
+        .tunnels
+        .remove(&tunnel_id)
+        .ok_or_else(|| AppError::TunnelNotFound(id))?;
+
+    tunnel.close();
+
+    Ok(Json(serde_json::json!({ "deleted": true })))
 }
