@@ -1,5 +1,3 @@
-use std::net::IpAddr;
-
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
@@ -10,7 +8,7 @@ pub struct TunnelSession {
     pub id: Uuid,
     pub user_id: Uuid,
     pub tunnel_id: String,
-    pub client_ip: Option<IpAddr>,
+    pub client_ip: Option<String>,
     pub connected_at: DateTime<Utc>,
     pub disconnected_at: Option<DateTime<Utc>>,
     pub bytes_in: i64,
@@ -22,13 +20,13 @@ pub async fn create(
     pool: &PgPool,
     user_id: Uuid,
     tunnel_id: &str,
-    client_ip: Option<IpAddr>,
+    client_ip: Option<&str>,
 ) -> Result<TunnelSession, sqlx::Error> {
     sqlx::query_as::<_, TunnelSession>(
         r#"
         INSERT INTO tunnel_sessions (user_id, tunnel_id, client_ip)
-        VALUES ($1, $2, $3)
-        RETURNING *
+        VALUES ($1, $2, $3::inet)
+        RETURNING id, user_id, tunnel_id, client_ip::text, connected_at, disconnected_at, bytes_in, bytes_out, requests
         "#,
     )
     .bind(user_id)
@@ -69,7 +67,8 @@ pub async fn list_for_user(
 ) -> Result<Vec<TunnelSession>, sqlx::Error> {
     sqlx::query_as::<_, TunnelSession>(
         r#"
-        SELECT * FROM tunnel_sessions
+        SELECT id, user_id, tunnel_id, client_ip::text, connected_at, disconnected_at, bytes_in, bytes_out, requests
+        FROM tunnel_sessions
         WHERE user_id = $1
         ORDER BY connected_at DESC
         LIMIT $2
@@ -83,7 +82,10 @@ pub async fn list_for_user(
 
 pub async fn list_active(pool: &PgPool) -> Result<Vec<TunnelSession>, sqlx::Error> {
     sqlx::query_as::<_, TunnelSession>(
-        "SELECT * FROM tunnel_sessions WHERE disconnected_at IS NULL ORDER BY connected_at DESC",
+        r#"
+        SELECT id, user_id, tunnel_id, client_ip::text, connected_at, disconnected_at, bytes_in, bytes_out, requests
+        FROM tunnel_sessions WHERE disconnected_at IS NULL ORDER BY connected_at DESC
+        "#,
     )
     .fetch_all(pool)
     .await

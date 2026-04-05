@@ -57,7 +57,7 @@ pub fn save(config: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn get_inlet(config: &Config, name: &str) -> Option<&Inlet> {
+pub fn get_inlet<'a>(config: &'a Config, name: &str) -> Option<&'a Inlet> {
     config.inlets.get(name)
 }
 

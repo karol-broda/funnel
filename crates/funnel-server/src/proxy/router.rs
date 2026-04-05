@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{ConnectInfo, Host, State};
+use axum::extract::State;
 use axum::http::{Request, Response, StatusCode};
 
 use funnel_core::protocol::RequestPayload;
@@ -16,16 +16,20 @@ const MAX_BODY_SIZE: usize = 10 * 1024 * 1024; // 10 mb
 /// requests to `{tunnel_id}.{base_domain}` are forwarded through the matching tunnel.
 pub async fn handle_tunnel_request(
     State(state): State<Arc<AppState>>,
-    Host(host): Host,
-    ConnectInfo(remote_addr): ConnectInfo<std::net::SocketAddr>,
     request: Request<Body>,
 ) -> Response<Body> {
-    let subdomain = match extract_subdomain(&host) {
-        Some(s) => s,
+    let host = request
+        .headers()
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    let subdomain = match extract_subdomain(host) {
+        Some(s) => s.to_string(),
         None => return not_found("tunnel not found"),
     };
 
-    let tunnel_id = match TunnelId::new(subdomain) {
+    let tunnel_id = match TunnelId::new(&subdomain) {
         Ok(id) => id,
         Err(_) => return not_found("tunnel not found"),
     };
@@ -37,9 +41,21 @@ pub async fn handle_tunnel_request(
 
     let method = request.method().to_string();
     let path = request.uri().to_string();
-    let is_tls = false; // will be determined by tls termination layer later
 
-    let headers = prepare_forwarding_headers(request.headers(), &host, remote_addr, is_tls);
+    let remote_addr = request
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|ci| ci.0);
+
+    let headers = match remote_addr {
+        Some(addr) => prepare_forwarding_headers(request.headers(), host, addr, false),
+        None => prepare_forwarding_headers(
+            request.headers(),
+            host,
+            std::net::SocketAddr::from(([0, 0, 0, 0], 0)),
+            false,
+        ),
+    };
 
     let body_bytes = match axum::body::to_bytes(request.into_body(), MAX_BODY_SIZE).await {
         Ok(b) => b.to_vec(),
@@ -64,12 +80,7 @@ pub async fn handle_tunnel_request(
     }
 }
 
-/// extract the first subdomain label from a host string.
-/// `"my-tunnel.example.com"` -> `Some("my-tunnel")`
-/// `"example.com"` -> `None` (no subdomain)
-/// `"localhost:8080"` -> `None`
 fn extract_subdomain(host: &str) -> Option<&str> {
-    // strip port if present
     let host = host.split(':').next().unwrap_or(host);
 
     let dot = host.find('.')?;
@@ -80,8 +91,6 @@ fn extract_subdomain(host: &str) -> Option<&str> {
     let subdomain = &host[..dot];
     let rest = &host[dot + 1..];
 
-    // need at least one more dot for it to be a real subdomain
-    // (subdomain.domain.tld), not just (domain.tld)
     if rest.contains('.') {
         Some(subdomain)
     } else {
@@ -152,7 +161,6 @@ mod tests {
 
     #[test]
     fn extract_subdomain_deep_nesting() {
-        // only extracts the first label
         assert_eq!(extract_subdomain("a.b.example.com"), Some("a"));
     }
 }

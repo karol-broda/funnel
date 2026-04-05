@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-use axum::http::{HeaderMap, HeaderValue};
+use axum::http::HeaderMap;
 
 /// copy request headers and add standard proxy headers (X-Forwarded-For, etc).
 pub fn prepare_forwarding_headers(
@@ -45,6 +45,7 @@ pub fn prepare_forwarding_headers(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::http::HeaderValue;
     use std::net::{IpAddr, Ipv4Addr};
 
     fn test_addr() -> SocketAddr {

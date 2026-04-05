@@ -14,7 +14,6 @@ use crate::forwarder::Forwarder;
 
 const CHANNEL_BUFFER: usize = 128;
 const PING_INTERVAL: Duration = Duration::from_secs(30);
-const PONG_TIMEOUT: Duration = Duration::from_secs(90);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_CONCURRENT_REQUESTS: usize = 128;
 
