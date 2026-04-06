@@ -28,6 +28,7 @@ impl TunnelStats {
         self.bytes_in.fetch_add(n, Ordering::Relaxed);
     }
 
+    #[allow(dead_code)]
     pub fn add_bytes_out(&self, n: u64) {
         self.bytes_out.fetch_add(n, Ordering::Relaxed);
     }

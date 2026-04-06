@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use ipnetwork::IpNetwork;
 use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -8,7 +9,7 @@ pub struct TunnelSession {
     pub id: Uuid,
     pub user_id: Uuid,
     pub tunnel_id: String,
-    pub client_ip: Option<String>,
+    pub client_ip: Option<IpNetwork>,
     pub connected_at: DateTime<Utc>,
     pub disconnected_at: Option<DateTime<Utc>>,
     pub bytes_in: i64,
@@ -20,13 +21,13 @@ pub async fn create(
     pool: &PgPool,
     user_id: Uuid,
     tunnel_id: &str,
-    client_ip: Option<&str>,
+    client_ip: Option<IpNetwork>,
 ) -> Result<TunnelSession, sqlx::Error> {
     sqlx::query_as::<_, TunnelSession>(
         r#"
         INSERT INTO tunnel_sessions (user_id, tunnel_id, client_ip)
-        VALUES ($1, $2, $3::inet)
-        RETURNING id, user_id, tunnel_id, client_ip::text, connected_at, disconnected_at, bytes_in, bytes_out, requests
+        VALUES ($1, $2, $3)
+        RETURNING *
         "#,
     )
     .bind(user_id)
@@ -67,8 +68,7 @@ pub async fn list_for_user(
 ) -> Result<Vec<TunnelSession>, sqlx::Error> {
     sqlx::query_as::<_, TunnelSession>(
         r#"
-        SELECT id, user_id, tunnel_id, client_ip::text, connected_at, disconnected_at, bytes_in, bytes_out, requests
-        FROM tunnel_sessions
+        SELECT * FROM tunnel_sessions
         WHERE user_id = $1
         ORDER BY connected_at DESC
         LIMIT $2
@@ -82,10 +82,7 @@ pub async fn list_for_user(
 
 pub async fn list_active(pool: &PgPool) -> Result<Vec<TunnelSession>, sqlx::Error> {
     sqlx::query_as::<_, TunnelSession>(
-        r#"
-        SELECT id, user_id, tunnel_id, client_ip::text, connected_at, disconnected_at, bytes_in, bytes_out, requests
-        FROM tunnel_sessions WHERE disconnected_at IS NULL ORDER BY connected_at DESC
-        "#,
+        "SELECT * FROM tunnel_sessions WHERE disconnected_at IS NULL ORDER BY connected_at DESC",
     )
     .fetch_all(pool)
     .await
@@ -119,11 +116,15 @@ mod tests {
             .unwrap();
 
         let user = setup_user(&pool).await;
-        let session = create(&pool, user.id, "test-tunnel", None).await.unwrap();
+        let ip: IpNetwork = "192.168.1.1".parse::<std::net::IpAddr>().unwrap().into();
+        let session = create(&pool, user.id, "test-tunnel", Some(ip))
+            .await
+            .unwrap();
 
         assert_eq!(session.tunnel_id, "test-tunnel");
         assert!(session.disconnected_at.is_none());
         assert_eq!(session.bytes_in, 0);
+        assert!(session.client_ip.is_some());
 
         let disconnected = disconnect(&pool, session.id, 1024, 2048, 10)
             .await

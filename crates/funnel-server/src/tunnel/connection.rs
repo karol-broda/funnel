@@ -38,6 +38,7 @@ impl ActiveTunnel {
         self.connected_at
     }
 
+    #[allow(dead_code)]
     pub fn is_alive(&self) -> bool {
         !self.cancel.is_cancelled()
     }
