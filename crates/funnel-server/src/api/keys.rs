@@ -26,7 +26,7 @@ pub struct CreateKeyResponse {
 pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Vec<ApiKeyView>>, AppError> {
     // TODO: get user_id from auth middleware
     // For now, return empty
-    let _pool = &state.db;
+    let _pool = state.require_db()?;
     Ok(Json(vec![]))
 }
 
@@ -35,7 +35,8 @@ pub async fn create(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateKeyRequest>,
 ) -> Result<Json<CreateKeyResponse>, AppError> {
-    let (plaintext, key) = api_keys::create(&state.db, req.user_id, &req.name).await?;
+    let db = state.require_db()?;
+    let (plaintext, key) = api_keys::create(db, req.user_id, &req.name).await?;
 
     Ok(Json(CreateKeyResponse {
         key: plaintext,
@@ -51,7 +52,8 @@ pub async fn revoke(
     // TODO: get user_id from auth middleware
     let user_id = Uuid::nil(); // placeholder
 
-    let revoked = api_keys::revoke(&state.db, id, user_id).await?;
+    let db = state.require_db()?;
+    let revoked = api_keys::revoke(db, id, user_id).await?;
     if !revoked {
         return Err(AppError::NotFound("api key not found".into()));
     }

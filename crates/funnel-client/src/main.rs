@@ -105,6 +105,7 @@ async fn run_http(
     let server_url = server_flag
         .or_else(|| inlet.map(|i| i.server.clone()))
         .filter(|s| !s.is_empty())
+        .map(|s| if s.contains("://") { s } else { format!("http://{s}") })
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "no server configured. use --server or run: funnel config set-server <url>"

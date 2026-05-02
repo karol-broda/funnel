@@ -95,18 +95,17 @@ impl TunnelClient {
     > {
         let mut url = Url::parse(&self.server_url)?;
 
-        match url.scheme() {
-            "https" => url.set_scheme("wss").unwrap(),
-            _ => url.set_scheme("ws").unwrap(),
-        };
+        let ws_scheme = if url.scheme() == "https" { "wss" } else { "ws" };
+        url.set_scheme(ws_scheme)
+            .map_err(|_| anyhow::anyhow!("failed to set websocket scheme on url: {url}"))?;
 
         url.set_path("/ws");
         url.query_pairs_mut()
             .append_pair("id", self.tunnel_id.as_ref());
 
-        let mut request = tokio_tungstenite::tungstenite::http::Request::builder()
-            .uri(url.as_str())
-            .body(())?;
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+
+        let mut request = url.as_str().into_client_request()?;
 
         if let Some(token) = &self.token {
             request.headers_mut().insert(

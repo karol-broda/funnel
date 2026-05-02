@@ -13,18 +13,26 @@ use crate::ws;
 use crate::proxy;
 
 pub struct AppState {
-    pub db: PgPool,
+    pub db: Option<PgPool>,
     pub tunnels: TunnelManager,
     pub start_time: Instant,
+    pub is_tls: bool,
 }
 
 impl AppState {
-    pub fn new(db: PgPool) -> Self {
+    pub fn new(db: Option<PgPool>, is_tls: bool) -> Self {
         Self {
             db,
             tunnels: TunnelManager::new(),
             start_time: Instant::now(),
+            is_tls,
         }
+    }
+
+    pub fn require_db(&self) -> Result<&PgPool, crate::error::AppError> {
+        self.db
+            .as_ref()
+            .ok_or_else(|| crate::error::AppError::BadRequest("database not configured".into()))
     }
 }
 

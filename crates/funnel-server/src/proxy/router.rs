@@ -48,12 +48,12 @@ pub async fn handle_tunnel_request(
         .map(|ci| ci.0);
 
     let headers = match remote_addr {
-        Some(addr) => prepare_forwarding_headers(request.headers(), host, addr, false),
+        Some(addr) => prepare_forwarding_headers(request.headers(), host, addr, state.is_tls),
         None => prepare_forwarding_headers(
             request.headers(),
             host,
             std::net::SocketAddr::from(([0, 0, 0, 0], 0)),
-            false,
+            state.is_tls,
         ),
     };
 

@@ -27,6 +27,17 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1", features = ["v7", "serde"] }
 
+# tls
+aws-config = "1"
+aws-sdk-route53 = "1"
+axum-server = { version = "0.8", features = ["tls-rustls"] }
+instant-acme = { version = "0.8", features = ["rcgen"] }
+lru = "0.16"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "query"] }
+rustls = "0.23"
+rustls-pemfile = "2"
+x509-parser = "0.18"
+
 [dev-dependencies]
 axum-test = "16"
 pretty_assertions = "1"
