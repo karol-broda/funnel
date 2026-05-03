@@ -5,8 +5,8 @@ use axum::extract::State;
 use axum::http::{Request, Response, StatusCode};
 use tokio_util::io::ReaderStream;
 
-use funnel_core::protocol::{RequestMeta, ResponseMeta};
-use funnel_core::tunnel::TunnelId;
+use funnel_core::protocol::request::{RequestMeta, ResponseMeta};
+use funnel_core::tunnel::id::TunnelId;
 
 use crate::app::AppState;
 use crate::tunnel::connection::{CountedRecvStream, SendError};

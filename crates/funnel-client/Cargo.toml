@@ -1,23 +1,23 @@
 [package]
 name = "funnel-client"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
 
 [dependencies]
-funnel-core = { path = "../funnel-core" }
+funnel-core.workspace = true
 
-anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
 dirs = "6"
-http = "1"
-quinn = "0.11"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
-serde = { version = "1", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
-tokio-util = { version = "0.7", features = ["io"] }
+http.workspace = true
+quinn.workspace = true
+reqwest = { workspace = true, features = ["rustls", "stream"] }
+rustls = { workspace = true, default-features = false, features = ["ring", "std"] }
+serde.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
 toml = "0.8"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
 url = "2"
 webpki-roots = "1"

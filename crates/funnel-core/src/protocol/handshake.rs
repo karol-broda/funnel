@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::tunnel::TunnelId;
+use crate::tunnel::id::TunnelId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Handshake {
@@ -9,33 +9,29 @@ pub struct Handshake {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HandshakeResponse {
-    success: bool,
-    error: Option<String>,
+#[serde(tag = "status")]
+pub enum HandshakeResponse {
+    #[serde(rename = "ok")]
+    Ok,
+    #[serde(rename = "rejected")]
+    Rejected { reason: String },
 }
 
 impl HandshakeResponse {
     pub fn ok() -> Self {
-        Self {
-            success: true,
-            error: None,
-        }
+        Self::Ok
     }
 
     pub fn rejected(reason: impl Into<String>) -> Self {
-        Self {
-            success: false,
-            error: Some(reason.into()),
+        Self::Rejected {
+            reason: reason.into(),
         }
     }
 
     pub fn into_result(self) -> Result<(), HandshakeRejected> {
-        if self.success {
-            Ok(())
-        } else {
-            Err(HandshakeRejected {
-                reason: self.error.unwrap_or_else(|| "unknown error".to_string()),
-            })
+        match self {
+            Self::Ok => Ok(()),
+            Self::Rejected { reason } => Err(HandshakeRejected { reason }),
         }
     }
 }

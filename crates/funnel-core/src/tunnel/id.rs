@@ -1,13 +1,24 @@
 use std::fmt;
-use std::sync::LazyLock;
 
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::error::TunnelIdError;
+#[derive(Debug, thiserror::Error)]
+pub enum TunnelIdError {
+    #[error("tunnel ID cannot be empty")]
+    Empty,
 
-static TUNNEL_ID_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$").expect("valid regex"));
+    #[error("tunnel ID must be at least 3 characters, got {0}")]
+    TooShort(usize),
+
+    #[error("tunnel ID must be at most 63 characters, got {0}")]
+    TooLong(usize),
+
+    #[error("tunnel ID must be lowercase")]
+    NotLowercase,
+
+    #[error("tunnel ID must contain only lowercase letters, numbers, and hyphens, and cannot start or end with a hyphen")]
+    InvalidFormat,
+}
 
 const DOMAIN_SAFE_ALPHABET: &[char] = &[
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
@@ -49,7 +60,14 @@ impl TunnelId {
             return Err(TunnelIdError::NotLowercase);
         }
 
-        if !TUNNEL_ID_REGEX.is_match(s) {
+        let bytes = s.as_bytes();
+        let is_alnum = |b: u8| b.is_ascii_lowercase() || b.is_ascii_digit();
+        let is_label_char = |b: u8| is_alnum(b) || b == b'-';
+
+        if !is_alnum(bytes[0])
+            || !is_alnum(bytes[bytes.len() - 1])
+            || !bytes[1..bytes.len() - 1].iter().all(|&b| is_label_char(b))
+        {
             return Err(TunnelIdError::InvalidFormat);
         }
 

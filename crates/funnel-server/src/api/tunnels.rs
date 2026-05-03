@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::Json;
 use axum::extract::{Path, State};
 
-use funnel_core::tunnel::TunnelId;
+use funnel_core::tunnel::id::TunnelId;
 
 use crate::app::AppState;
 use crate::error::AppError;

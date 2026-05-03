@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
-use funnel_core::tunnel::TunnelId;
+use funnel_core::tunnel::id::TunnelId;
 
 use crate::tunnel::TunnelClient;
 

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use funnel_core::protocol::{self, Handshake, HandshakeResponse};
+use funnel_core::protocol::frame;
+use funnel_core::protocol::handshake::{Handshake, HandshakeResponse};
 use crate::app::AppState;
 use crate::tunnel::connection::ActiveTunnel;
 
@@ -10,7 +11,7 @@ pub enum ConnectionError {
     Connection(#[from] quinn::ConnectionError),
 
     #[error("frame error: {0}")]
-    Frame(#[from] protocol::FrameError),
+    Frame(#[from] frame::FrameError),
 
     #[error("tunnel id conflict: {0}")]
     Conflict(String),
@@ -25,7 +26,7 @@ pub async fn handle_connection(
         .await
         .map_err(ConnectionError::Connection)?;
 
-    let handshake: Handshake = protocol::read_meta(&mut recv).await?;
+    let handshake: Handshake = frame::read_meta(&mut recv).await?;
     let tunnel_id = handshake.tunnel_id;
 
     let tunnel = Arc::new(ActiveTunnel::new(tunnel_id.clone(), conn.clone()));
@@ -36,11 +37,11 @@ pub async fn handle_connection(
         .is_err()
     {
         let resp = HandshakeResponse::rejected(format!("tunnel id already in use: {tunnel_id}"));
-        let _ = protocol::write_meta(&mut send, &resp).await;
+        let _ = frame::write_meta(&mut send, &resp).await;
         return Err(ConnectionError::Conflict(tunnel_id.to_string()));
     }
 
-    protocol::write_meta(&mut send, &HandshakeResponse::ok()).await?;
+    frame::write_meta(&mut send, &HandshakeResponse::ok()).await?;
 
     tracing::info!(tunnel_id = %tunnel_id, "tunnel connected via quic");
 

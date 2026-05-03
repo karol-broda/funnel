@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 use serde::Serialize;
 
-use funnel_core::tunnel::TunnelId;
+use funnel_core::tunnel::id::TunnelId;
 
 use super::connection::ActiveTunnel;
 use super::stats::TunnelStatsSnapshot;

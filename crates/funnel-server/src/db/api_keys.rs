@@ -3,7 +3,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use funnel_core::auth;
+use funnel_core::auth::token as auth;
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct ApiKey {

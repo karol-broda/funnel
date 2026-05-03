@@ -6,8 +6,9 @@ use std::time::Duration;
 use http_body_util::BodyExt;
 use tokio::io::{AsyncRead, ReadBuf};
 
-use funnel_core::protocol::{self, FrameError, RequestMeta, ResponseMeta};
-use funnel_core::tunnel::TunnelId;
+use funnel_core::protocol::frame::{self as frame, FrameError};
+use funnel_core::protocol::request::{RequestMeta, ResponseMeta};
+use funnel_core::tunnel::id::TunnelId;
 
 use super::stats::TunnelStats;
 
@@ -60,7 +61,7 @@ impl ActiveTunnel {
                 .await
                 .map_err(SendError::OpenStream)?;
 
-            protocol::write_meta(&mut send, &meta)
+            frame::write_meta(&mut send, &meta)
                 .await
                 .map_err(SendError::SendMeta)?;
 
@@ -82,7 +83,7 @@ impl ActiveTunnel {
             metrics::counter!("funnel_bytes_out_total").increment(bytes_sent);
             metrics::histogram!("funnel_request_body_bytes").record(bytes_sent as f64);
 
-            let resp_meta: ResponseMeta = protocol::read_meta(&mut recv)
+            let resp_meta: ResponseMeta = frame::read_meta(&mut recv)
                 .await
                 .map_err(SendError::ReadResponse)?;
 

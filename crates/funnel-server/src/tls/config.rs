@@ -8,12 +8,20 @@ pub struct ProviderConfig {
     pub providers: Vec<DnsProviderEntry>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProviderType {
+    Cloudflare,
+    Route53,
+    Exec,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct DnsProviderEntry {
     #[allow(dead_code)]
     pub name: String,
     #[serde(rename = "type")]
-    pub provider_type: String,
+    pub provider_type: ProviderType,
     pub domains: Vec<String>,
     pub config: HashMap<String, String>,
 }

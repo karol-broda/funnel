@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use funnel_core::protocol::{RequestMeta, ResponseMeta};
+use funnel_core::protocol::request::{RequestMeta, ResponseMeta};
 
 const HOP_BY_HOP_HEADERS: &[&str] = &[
     "connection",

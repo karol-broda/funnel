@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 
-use funnel_core::tunnel::TunnelId;
+use funnel_core::tunnel::id::TunnelId;
 
 #[derive(Parser)]
 #[command(name = "funnel", about = "tunnel client for exposing local services")]

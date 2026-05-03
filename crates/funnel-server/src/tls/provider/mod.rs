@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use self::cloudflare::CloudflareProvider;
 use self::exec::ExecProvider;
 use self::route53::Route53Provider;
-use super::config::ProviderConfig;
+use super::config::{ProviderConfig, ProviderType};
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -37,26 +37,25 @@ impl ProviderMux {
         let mut mux = Self::new();
 
         for entry in &config.providers {
-            let provider: Arc<dyn DnsChallenger> = match entry.provider_type.as_str() {
-                "cloudflare" => {
+            let provider: Arc<dyn DnsChallenger> = match entry.provider_type {
+                ProviderType::Cloudflare => {
                     let api_token = entry
                         .config
                         .get("api_token")
                         .context("cloudflare provider requires 'api_token' in config")?;
                     Arc::new(CloudflareProvider::new(api_token.clone()))
                 }
-                "route53" => {
+                ProviderType::Route53 => {
                     let region = entry.config.get("region").cloned();
                     Arc::new(Route53Provider::new(region).await)
                 }
-                "exec" => {
+                ProviderType::Exec => {
                     let command = entry
                         .config
                         .get("command")
                         .context("exec provider requires 'command' in config")?;
                     Arc::new(ExecProvider::new(command.clone()))
                 }
-                other => anyhow::bail!("unsupported DNS provider type: {other}"),
             };
 
             for domain in &entry.domains {

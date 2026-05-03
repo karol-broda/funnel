@@ -6,8 +6,11 @@ use tokio_util::io::ReaderStream;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
-use funnel_core::protocol::{self, Handshake, HandshakeResponse, RequestMeta, QUIC_ALPN};
-use funnel_core::tunnel::TunnelId;
+use funnel_core::protocol::frame;
+use funnel_core::protocol::handshake::{Handshake, HandshakeResponse};
+use funnel_core::protocol::request::RequestMeta;
+use funnel_core::protocol::QUIC_ALPN;
+use funnel_core::tunnel::id::TunnelId;
 
 use crate::forwarder::Forwarder;
 
@@ -121,9 +124,9 @@ impl TunnelClient {
             token: self.token.clone(),
         };
 
-        protocol::write_meta(&mut send, &handshake).await?;
+        frame::write_meta(&mut send, &handshake).await?;
 
-        let resp: HandshakeResponse = protocol::read_meta(&mut recv).await?;
+        let resp: HandshakeResponse = frame::read_meta(&mut recv).await?;
         resp.into_result()?;
 
         tracing::info!(tunnel_id = %self.tunnel_id, "quic tunnel connected");
@@ -145,7 +148,7 @@ async fn handle_stream(
     mut recv: quinn::RecvStream,
     forwarder: &Forwarder,
 ) -> anyhow::Result<()> {
-    let meta: RequestMeta = protocol::read_meta(&mut recv).await?;
+    let meta: RequestMeta = frame::read_meta(&mut recv).await?;
 
     tracing::debug!(
         method = %meta.method,
@@ -159,7 +162,7 @@ async fn handle_stream(
 
     let (resp_meta, resp_body) = forwarder.forward(meta, body).await;
 
-    protocol::write_meta(&mut send, &resp_meta).await?;
+    frame::write_meta(&mut send, &resp_meta).await?;
     send.write_all(&resp_body).await?;
     send.finish()?;
 

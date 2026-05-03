@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use funnel_core::error::TunnelIdError;
+use funnel_core::tunnel::id::TunnelIdError;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
