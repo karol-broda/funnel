@@ -15,7 +15,7 @@ use x509_parser::prelude::*;
 
 use super::provider::ProviderMux;
 
-const LRU_CACHE_SIZE: usize = 512;
+const LRU_CACHE_SIZE: std::num::NonZeroUsize = std::num::NonZeroUsize::new(512).unwrap();
 const RENEWAL_CHECK_INTERVAL: Duration = Duration::from_secs(3600);
 const RENEWAL_WINDOW: Duration = Duration::from_secs(30 * 24 * 3600);
 const ACME_POLL_TIMEOUT: Duration = Duration::from_secs(300);
@@ -54,9 +54,7 @@ impl CertificateManager {
             .context("failed to create certificate directory")?;
 
         let account = load_or_create_account(&cert_dir, email, staging).await?;
-        let cache = Mutex::new(LruCache::new(
-            std::num::NonZeroUsize::new(LRU_CACHE_SIZE).unwrap(),
-        ));
+        let cache = Mutex::new(LruCache::new(LRU_CACHE_SIZE));
 
         Ok(Self {
             cache,
@@ -72,7 +70,7 @@ impl CertificateManager {
             match self.load_from_disk(&domain).await {
                 Ok(Some((certified_key, not_after))) => {
                     tracing::info!(domain = %domain, "loaded certificate from disk");
-                    let mut cache = self.cache.lock().unwrap();
+                    let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
                     cache.put(
                         domain,
                         CachedCert {
@@ -103,7 +101,7 @@ impl CertificateManager {
 
         // double check cache after acquiring lock
         {
-            let cache = self.cache.lock().unwrap();
+            let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(cached) = cache.peek(domain) {
                 if cached.not_after > SystemTime::now() + RENEWAL_WINDOW {
                     return Ok(());
@@ -201,7 +199,7 @@ impl CertificateManager {
         let not_after = parse_cert_expiry(&cert_pem)?;
 
         {
-            let mut cache = self.cache.lock().unwrap();
+            let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
             cache.put(
                 domain.to_string(),
                 CachedCert {
@@ -257,7 +255,7 @@ impl CertificateManager {
 
     async fn check_renewals(&self) {
         let domains_to_renew: Vec<String> = {
-            let cache = self.cache.lock().unwrap();
+            let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
             cache
                 .iter()
                 .filter(|(_, cert)| {
@@ -285,7 +283,7 @@ impl ResolvesServerCert for CertificateManager {
         client_hello: rustls::server::ClientHello<'_>,
     ) -> Option<Arc<CertifiedKey>> {
         let sni = client_hello.server_name()?;
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         let cached = cache.peek(sni)?;
 
         if cached.not_after > SystemTime::now() {
@@ -306,7 +304,8 @@ fn load_certified_key(cert_pem: &str, key_pem: &str) -> Result<CertifiedKey> {
         .context("no private key found")?;
 
     let signing_key = rustls::crypto::ring::sign::any_supported_type(&key)
-        .map_err(|e| anyhow::anyhow!("unsupported private key type: {e}"))?;
+        .map_err(|e| anyhow::anyhow!(e))
+        .context("unsupported private key type")?;
 
     Ok(CertifiedKey::new(certs, signing_key))
 }
@@ -316,7 +315,8 @@ fn parse_cert_expiry(cert_pem: &str) -> Result<SystemTime> {
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let cert = certs.first().context("no certificate found")?;
     let (_, parsed) = X509Certificate::from_der(cert.as_ref())
-        .map_err(|e| anyhow::anyhow!("failed to parse x509 certificate: {e}"))?;
+        .map_err(|e| anyhow::anyhow!(e.to_string()))
+        .context("failed to parse x509 certificate")?;
 
     let not_after = parsed.validity().not_after;
     Ok(not_after.to_datetime().into())

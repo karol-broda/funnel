@@ -13,10 +13,6 @@ pub async fn setup(
     email: &str,
     acme_staging: bool,
 ) -> Result<axum_server::tls_rustls::RustlsConfig> {
-    rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("failed to install default crypto provider");
-
     let provider_config = config::ProviderConfig::load(providers_config_path).await?;
     let provider_mux = provider::ProviderMux::from_config(&provider_config).await?;
 

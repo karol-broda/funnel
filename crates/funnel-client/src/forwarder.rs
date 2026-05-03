@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use funnel_core::protocol::{RequestPayload, ResponsePayload};
+use funnel_core::protocol::{RequestMeta, ResponseMeta};
 
 const HOP_BY_HOP_HEADERS: &[&str] = &[
     "connection",
@@ -31,23 +31,31 @@ impl Forwarder {
         Self { client, local_addr }
     }
 
-    pub async fn forward(&self, req: RequestPayload) -> ResponsePayload {
-        match self.try_forward(&req).await {
+    pub async fn forward(
+        &self,
+        meta: RequestMeta,
+        body: reqwest::Body,
+    ) -> (ResponseMeta, Vec<u8>) {
+        match self.try_forward(&meta, body).await {
             Ok(resp) => resp,
             Err(e) => {
-                tracing::error!(error = %e, method = %req.method, path = %req.path, "forwarding failed");
+                tracing::error!(error = %e, method = %meta.method, path = %meta.path, "forwarding failed");
                 error_response(502, &format!("local service error: {e}"))
             }
         }
     }
 
-    async fn try_forward(&self, req: &RequestPayload) -> anyhow::Result<ResponsePayload> {
-        let url = format!("http://{}{}", self.local_addr, req.path);
+    async fn try_forward(
+        &self,
+        meta: &RequestMeta,
+        body: reqwest::Body,
+    ) -> anyhow::Result<(ResponseMeta, Vec<u8>)> {
+        let url = format!("http://{}{}", self.local_addr, meta.path);
 
-        let method: http::Method = req.method.parse()?;
+        let method: http::Method = meta.method.parse()?;
         let mut builder = self.client.request(method, &url);
 
-        for (name, values) in &req.headers {
+        for (name, values) in &meta.headers {
             if is_hop_by_hop(name) || name.eq_ignore_ascii_case("host") {
                 continue;
             }
@@ -57,7 +65,7 @@ impl Forwarder {
         }
 
         builder = builder.header("host", &self.local_addr);
-        builder = builder.body(req.body.clone());
+        builder = builder.body(body);
 
         let resp = builder.send().await?;
 
@@ -65,17 +73,14 @@ impl Forwarder {
         let headers = collect_response_headers(resp.headers());
         let body = resp.bytes().await?.to_vec();
 
-        Ok(ResponsePayload {
-            status,
-            headers,
-            body,
-        })
+        Ok((ResponseMeta { status, headers }, body))
     }
 }
 
 fn is_hop_by_hop(name: &str) -> bool {
-    let lower = name.to_ascii_lowercase();
-    HOP_BY_HOP_HEADERS.iter().any(|h| *h == lower)
+    HOP_BY_HOP_HEADERS
+        .iter()
+        .any(|h| h.eq_ignore_ascii_case(name))
 }
 
 fn collect_response_headers(headers: &reqwest::header::HeaderMap) -> HashMap<String, Vec<String>> {
@@ -90,14 +95,13 @@ fn collect_response_headers(headers: &reqwest::header::HeaderMap) -> HashMap<Str
     map
 }
 
-fn error_response(status: u16, msg: &str) -> ResponsePayload {
+fn error_response(status: u16, msg: &str) -> (ResponseMeta, Vec<u8>) {
     let mut headers = HashMap::new();
     headers.insert("content-type".to_string(), vec!["text/plain".to_string()]);
-    ResponsePayload {
-        status,
-        headers,
-        body: msg.as_bytes().to_vec(),
-    }
+    (
+        ResponseMeta { status, headers },
+        msg.as_bytes().to_vec(),
+    )
 }
 
 #[cfg(test)]
@@ -115,9 +119,9 @@ mod tests {
 
     #[test]
     fn error_response_has_correct_status() {
-        let resp = error_response(502, "test error");
-        assert_eq!(resp.status, 502);
-        assert_eq!(resp.body, b"test error");
-        assert!(resp.headers.contains_key("content-type"));
+        let (meta, body) = error_response(502, "test error");
+        assert_eq!(meta.status, 502);
+        assert_eq!(body, b"test error");
+        assert!(meta.headers.contains_key("content-type"));
     }
 }

@@ -10,26 +10,13 @@ use crate::tunnel::TunnelClient;
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
-pub async fn run(
-    tunnel_id: TunnelId,
-    server_url: String,
-    local_addr: String,
-    token: Option<String>,
-    shutdown: CancellationToken,
-) {
+pub async fn run(client: &TunnelClient, shutdown: CancellationToken) {
     let mut attempt: u32 = 0;
 
     loop {
         if shutdown.is_cancelled() {
             break;
         }
-
-        let client = TunnelClient::new(
-            tunnel_id.clone(),
-            server_url.clone(),
-            local_addr.clone(),
-            token.clone(),
-        );
 
         tracing::info!(attempt = attempt + 1, "connecting to server");
 
@@ -95,21 +82,21 @@ mod tests {
 
     #[test]
     fn public_url_http() {
-        let id = TunnelId::new("my-tunnel").unwrap();
+        let id = TunnelId::new("my-tunnel").expect("valid tunnel id");
         let url = build_public_url("http://tunnel.example.com", &id);
         assert_eq!(url.as_deref(), Some("http://my-tunnel.tunnel.example.com"));
     }
 
     #[test]
     fn public_url_https() {
-        let id = TunnelId::new("my-tunnel").unwrap();
+        let id = TunnelId::new("my-tunnel").expect("valid tunnel id");
         let url = build_public_url("https://tunnel.example.com", &id);
         assert_eq!(url.as_deref(), Some("https://my-tunnel.tunnel.example.com"));
     }
 
     #[test]
     fn public_url_with_port() {
-        let id = TunnelId::new("abc").unwrap();
+        let id = TunnelId::new("abc").expect("valid tunnel id");
         let url = build_public_url("http://localhost:8080", &id);
         assert_eq!(url.as_deref(), Some("http://abc.localhost:8080"));
     }

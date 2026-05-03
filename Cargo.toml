@@ -5,6 +5,7 @@ members = [
     "crates/funnel-server",
     "crates/funnel-client",
     "crates/funnel-web",
+    "crates/funnel-e2e",
 ]
 
 [workspace.package]

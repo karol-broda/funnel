@@ -3,14 +3,14 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::extract::State;
 use axum::http::{Request, Response, StatusCode};
+use tokio_util::io::ReaderStream;
 
-use funnel_core::protocol::RequestPayload;
+use funnel_core::protocol::{RequestMeta, ResponseMeta};
 use funnel_core::tunnel::TunnelId;
 
 use crate::app::AppState;
+use crate::tunnel::connection::{CountedRecvStream, SendError};
 use super::headers::prepare_forwarding_headers;
-
-const MAX_BODY_SIZE: usize = 10 * 1024 * 1024; // 10 mb
 
 /// axum fallback handler that routes requests based on subdomain.
 /// requests to `{tunnel_id}.{base_domain}` are forwarded through the matching tunnel.
@@ -42,40 +42,35 @@ pub async fn handle_tunnel_request(
     let method = request.method().to_string();
     let path = request.uri().to_string();
 
+    let fallback_addr = std::net::SocketAddr::from(([0, 0, 0, 0], 0));
     let remote_addr = request
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-        .map(|ci| ci.0);
+        .map(|ci| ci.0)
+        .unwrap_or(fallback_addr);
 
-    let headers = match remote_addr {
-        Some(addr) => prepare_forwarding_headers(request.headers(), host, addr, state.is_tls),
-        None => prepare_forwarding_headers(
-            request.headers(),
-            host,
-            std::net::SocketAddr::from(([0, 0, 0, 0], 0)),
-            state.is_tls,
-        ),
-    };
+    let headers = prepare_forwarding_headers(request.headers(), host, remote_addr, state.is_tls);
 
-    let body_bytes = match axum::body::to_bytes(request.into_body(), MAX_BODY_SIZE).await {
-        Ok(b) => b.to_vec(),
-        Err(_) => return error_response(StatusCode::BAD_REQUEST, "request body too large"),
-    };
-
-    let payload = RequestPayload {
+    let meta = RequestMeta {
         method,
         path,
         headers,
-        body: body_bytes,
     };
 
-    match tunnel.send_request(payload).await {
-        Ok(response) => build_response(response),
-        Err(crate::tunnel::connection::SendError::Timeout) => {
+    let body = request.into_body();
+
+    match tunnel.send_request(meta, body).await {
+        Ok((resp_meta, recv_stream)) => build_response(resp_meta, recv_stream),
+        Err(SendError::Timeout) => {
             error_response(StatusCode::GATEWAY_TIMEOUT, "request timed out")
         }
-        Err(crate::tunnel::connection::SendError::TunnelClosed) => {
-            error_response(StatusCode::BAD_GATEWAY, "tunnel connection lost")
+        Err(SendError::ReadBody(e)) => {
+            tracing::debug!(error = %e, "failed to read request body");
+            error_response(StatusCode::BAD_REQUEST, "failed to read request body")
+        }
+        Err(e) => {
+            tracing::debug!(error = %e, "tunnel request failed");
+            error_response(StatusCode::BAD_GATEWAY, "tunnel error")
         }
     }
 }
@@ -91,18 +86,18 @@ fn extract_subdomain(host: &str) -> Option<&str> {
     let subdomain = &host[..dot];
     let rest = &host[dot + 1..];
 
-    if rest.contains('.') {
-        Some(subdomain)
-    } else {
+    if rest.is_empty() {
         None
+    } else {
+        Some(subdomain)
     }
 }
 
-fn build_response(payload: funnel_core::protocol::ResponsePayload) -> Response<Body> {
-    let mut builder = Response::builder().status(payload.status);
+fn build_response(meta: ResponseMeta, recv: CountedRecvStream) -> Response<Body> {
+    let mut builder = Response::builder().status(meta.status);
 
     if let Some(headers) = builder.headers_mut() {
-        for (name, values) in &payload.headers {
+        for (name, values) in &meta.headers {
             for value in values {
                 if let (Ok(name), Ok(value)) = (
                     axum::http::HeaderName::try_from(name.as_str()),
@@ -114,8 +109,11 @@ fn build_response(payload: funnel_core::protocol::ResponsePayload) -> Response<B
         }
     }
 
+    let body_stream = ReaderStream::new(recv);
+    let body = Body::from_stream(body_stream);
+
     builder
-        .body(Body::from(payload.body))
+        .body(body)
         .unwrap_or_else(|_| error_response(StatusCode::INTERNAL_SERVER_ERROR, "internal error"))
 }
 
@@ -128,7 +126,7 @@ fn error_response(status: StatusCode, msg: &str) -> Response<Body> {
         .status(status)
         .header("content-type", "text/plain")
         .body(Body::from(msg.to_string()))
-        .unwrap()
+        .expect("hardcoded error response must be valid")
 }
 
 #[cfg(test)]
@@ -147,8 +145,13 @@ mod tests {
     }
 
     #[test]
+    fn extract_subdomain_single_label() {
+        assert_eq!(extract_subdomain("abc.localhost"), Some("abc"));
+        assert_eq!(extract_subdomain("abc.localhost:8080"), Some("abc"));
+    }
+
+    #[test]
     fn extract_subdomain_no_subdomain() {
-        assert_eq!(extract_subdomain("example.com"), None);
         assert_eq!(extract_subdomain("localhost"), None);
         assert_eq!(extract_subdomain("localhost:8080"), None);
     }

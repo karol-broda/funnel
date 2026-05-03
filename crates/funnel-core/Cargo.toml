@@ -11,11 +11,13 @@ hex = "0.4"
 http = "1"
 nanoid = "0.4"
 regex = "1"
+rmp-serde = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 thiserror = "2"
-uuid = { version = "1", features = ["v7", "serde"] }
+tokio = { version = "1", features = ["io-util"] }
 
 [dev-dependencies]
 pretty_assertions = "1"
+tokio = { version = "1", features = ["io-util", "rt", "macros"] }

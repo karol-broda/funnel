@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum ValidationError {
+pub enum TunnelIdError {
     #[error("tunnel ID cannot be empty")]
     Empty,
 

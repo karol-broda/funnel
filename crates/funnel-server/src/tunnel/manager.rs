@@ -45,10 +45,6 @@ impl TunnelManager {
         self.tunnels.get(id).map(|r| Arc::clone(r.value()))
     }
 
-    pub fn exists(&self, id: &TunnelId) -> bool {
-        self.tunnels.contains_key(id)
-    }
-
     pub fn list(&self) -> Vec<TunnelInfo> {
         self.tunnels
             .iter()
@@ -77,13 +73,6 @@ mod tests {
         let mgr = TunnelManager::new();
         assert_eq!(mgr.count(), 0);
         assert!(mgr.list().is_empty());
-    }
-
-    #[test]
-    fn exists_returns_false_for_missing() {
-        let mgr = TunnelManager::new();
-        let id = TunnelId::new("test-abc").unwrap();
-        assert!(!mgr.exists(&id));
     }
 
     #[test]

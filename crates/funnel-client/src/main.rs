@@ -38,6 +38,14 @@ enum Command {
         /// authentication token (overrides config)
         #[arg(short, long)]
         token: Option<String>,
+
+        /// quic port on the server
+        #[arg(long, default_value_t = 4433)]
+        quic_port: u16,
+
+        /// skip tls certificate verification (for development with self signed certs)
+        #[arg(long)]
+        insecure: bool,
     },
     /// manage client configuration
     Config {
@@ -68,6 +76,10 @@ enum ConfigAction {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("failed to install default crypto provider");
+
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
@@ -83,7 +95,9 @@ async fn main() -> anyhow::Result<()> {
             id,
             inlet,
             token,
-        } => run_http(address, server, id, inlet, token).await?,
+            quic_port,
+            insecure,
+        } => run_http(address, server, id, inlet, token, quic_port, insecure).await?,
         Command::Config { action } => run_config(action)?,
     }
 
@@ -96,6 +110,8 @@ async fn run_http(
     id_flag: Option<String>,
     inlet_name: String,
     token_flag: Option<String>,
+    quic_port: u16,
+    insecure: bool,
 ) -> anyhow::Result<()> {
     let local_addr = normalize_address(&address);
 
@@ -128,6 +144,15 @@ async fn run_http(
         );
     }
 
+    let client = tunnel::TunnelClient::new(
+        tunnel_id,
+        server_url,
+        local_addr,
+        token,
+        quic_port,
+        insecure,
+    )?;
+
     let shutdown = CancellationToken::new();
     let shutdown_signal = shutdown.clone();
 
@@ -137,7 +162,7 @@ async fn run_http(
         shutdown_signal.cancel();
     });
 
-    runner::run(tunnel_id, server_url, local_addr, token, shutdown).await;
+    runner::run(&client, shutdown).await;
 
     Ok(())
 }

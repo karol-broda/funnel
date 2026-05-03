@@ -1,9 +1,13 @@
 use std::fmt;
+use std::sync::LazyLock;
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::error::ValidationError;
+use crate::error::TunnelIdError;
+
+static TUNNEL_ID_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$").expect("valid regex"));
 
 const DOMAIN_SAFE_ALPHABET: &[char] = &[
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
@@ -20,7 +24,7 @@ const MAX_LENGTH: usize = 63;
 pub struct TunnelId(String);
 
 impl TunnelId {
-    pub fn new(raw: impl Into<String>) -> Result<Self, ValidationError> {
+    pub fn new(raw: impl Into<String>) -> Result<Self, TunnelIdError> {
         let s = raw.into();
         Self::validate(&s)?;
         Ok(Self(s))
@@ -31,23 +35,22 @@ impl TunnelId {
         Self(id)
     }
 
-    fn validate(s: &str) -> Result<(), ValidationError> {
+    fn validate(s: &str) -> Result<(), TunnelIdError> {
         if s.is_empty() {
-            return Err(ValidationError::Empty);
+            return Err(TunnelIdError::Empty);
         }
         if s.len() < MIN_LENGTH {
-            return Err(ValidationError::TooShort(s.len()));
+            return Err(TunnelIdError::TooShort(s.len()));
         }
         if s.len() > MAX_LENGTH {
-            return Err(ValidationError::TooLong(s.len()));
+            return Err(TunnelIdError::TooLong(s.len()));
         }
         if s != s.to_lowercase() {
-            return Err(ValidationError::NotLowercase);
+            return Err(TunnelIdError::NotLowercase);
         }
 
-        let re = Regex::new(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$").expect("valid regex");
-        if !re.is_match(s) {
-            return Err(ValidationError::InvalidFormat);
+        if !TUNNEL_ID_REGEX.is_match(s) {
+            return Err(TunnelIdError::InvalidFormat);
         }
 
         Ok(())
@@ -73,7 +76,7 @@ impl From<TunnelId> for String {
 }
 
 impl TryFrom<String> for TunnelId {
-    type Error = ValidationError;
+    type Error = TunnelIdError;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
         Self::new(s)
@@ -95,13 +98,13 @@ mod tests {
 
     #[test]
     fn empty_id() {
-        assert!(matches!(TunnelId::new(""), Err(ValidationError::Empty)));
+        assert!(matches!(TunnelId::new(""), Err(TunnelIdError::Empty)));
     }
 
     #[test]
     fn too_short() {
-        assert!(matches!(TunnelId::new("ab"), Err(ValidationError::TooShort(2))));
-        assert!(matches!(TunnelId::new("a"), Err(ValidationError::TooShort(1))));
+        assert!(matches!(TunnelId::new("ab"), Err(TunnelIdError::TooShort(2))));
+        assert!(matches!(TunnelId::new("a"), Err(TunnelIdError::TooShort(1))));
     }
 
     #[test]
@@ -109,7 +112,7 @@ mod tests {
         let long = "a".repeat(MAX_LENGTH + 1);
         assert!(matches!(
             TunnelId::new(long),
-            Err(ValidationError::TooLong(64))
+            Err(TunnelIdError::TooLong(64))
         ));
     }
 
@@ -117,16 +120,16 @@ mod tests {
     fn uppercase_rejected() {
         assert!(matches!(
             TunnelId::new("MyTunnel"),
-            Err(ValidationError::NotLowercase)
+            Err(TunnelIdError::NotLowercase)
         ));
     }
 
     #[test]
     fn invalid_format() {
-        assert!(matches!(TunnelId::new("-abc"), Err(ValidationError::InvalidFormat)));
-        assert!(matches!(TunnelId::new("abc-"), Err(ValidationError::InvalidFormat)));
-        assert!(matches!(TunnelId::new("ab_c"), Err(ValidationError::InvalidFormat)));
-        assert!(matches!(TunnelId::new("ab c"), Err(ValidationError::InvalidFormat)));
+        assert!(matches!(TunnelId::new("-abc"), Err(TunnelIdError::InvalidFormat)));
+        assert!(matches!(TunnelId::new("abc-"), Err(TunnelIdError::InvalidFormat)));
+        assert!(matches!(TunnelId::new("ab_c"), Err(TunnelIdError::InvalidFormat)));
+        assert!(matches!(TunnelId::new("ab c"), Err(TunnelIdError::InvalidFormat)));
     }
 
     #[test]

@@ -1,31 +1,35 @@
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
-use axum::extract::ws::{Message, WebSocket};
-use dashmap::DashMap;
-use futures::{SinkExt, StreamExt};
-use tokio::sync::{mpsc, oneshot};
-use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
+use http_body_util::BodyExt;
+use tokio::io::{AsyncRead, ReadBuf};
 
-use funnel_core::protocol::{ResponsePayload, TunnelMessage};
+use funnel_core::protocol::{self, FrameError, RequestMeta, ResponseMeta};
 use funnel_core::tunnel::TunnelId;
 
 use super::stats::TunnelStats;
 
-const CHANNEL_BUFFER: usize = 128;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct ActiveTunnel {
     id: TunnelId,
-    outgoing_tx: mpsc::Sender<TunnelMessage>,
-    pending_requests: DashMap<Uuid, oneshot::Sender<ResponsePayload>>,
-    stats: TunnelStats,
+    conn: quinn::Connection,
+    stats: Arc<TunnelStats>,
     connected_at: tokio::time::Instant,
-    cancel: CancellationToken,
 }
 
 impl ActiveTunnel {
+    pub fn new(id: TunnelId, conn: quinn::Connection) -> Self {
+        Self {
+            id,
+            conn,
+            stats: Arc::new(TunnelStats::new()),
+            connected_at: tokio::time::Instant::now(),
+        }
+    }
+
     pub fn id(&self) -> &TunnelId {
         &self.id
     }
@@ -38,191 +42,158 @@ impl ActiveTunnel {
         self.connected_at
     }
 
-    #[allow(dead_code)]
-    pub fn is_alive(&self) -> bool {
-        !self.cancel.is_cancelled()
-    }
-
-    /// wait until the tunnel connection has been closed.
-    pub async fn cancelled(&self) {
-        self.cancel.cancelled().await;
-    }
-
-    /// send a request through the tunnel and wait for the client's response.
+    /// open a quic bidirectional stream, send the request, and return the
+    /// response metadata along with a counted recv stream for body streaming.
     pub async fn send_request(
         &self,
-        payload: funnel_core::protocol::RequestPayload,
-    ) -> Result<ResponsePayload, SendError> {
-        let request_id = Uuid::now_v7();
-        let (tx, rx) = oneshot::channel();
-
-        self.pending_requests.insert(request_id, tx);
+        meta: RequestMeta,
+        body: axum::body::Body,
+    ) -> Result<(ResponseMeta, CountedRecvStream), SendError> {
         self.stats.inc_requests();
 
-        let msg = TunnelMessage::Request {
-            tunnel_id: self.id.clone(),
-            request_id,
-            payload,
-        };
+        let start = std::time::Instant::now();
 
-        if self.outgoing_tx.send(msg).await.is_err() {
-            self.pending_requests.remove(&request_id);
-            return Err(SendError::TunnelClosed);
-        }
+        let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
+            let (mut send, mut recv) = self
+                .conn
+                .open_bi()
+                .await
+                .map_err(SendError::OpenStream)?;
 
-        let result = tokio::time::timeout(REQUEST_TIMEOUT, rx).await;
+            protocol::write_meta(&mut send, &meta)
+                .await
+                .map_err(SendError::SendMeta)?;
 
-        // clean up regardless of outcome
-        self.pending_requests.remove(&request_id);
+            let mut body = body;
+            let mut bytes_sent: u64 = 0;
+            while let Some(frame) = body.frame().await {
+                let frame = frame.map_err(SendError::ReadBody)?;
+                if let Ok(data) = frame.into_data() {
+                    bytes_sent += data.len() as u64;
+                    send.write_all(&data)
+                        .await
+                        .map_err(SendError::WriteBody)?;
+                }
+            }
+
+            send.finish().map_err(SendError::FinishStream)?;
+
+            self.stats.add_bytes_out(bytes_sent);
+            metrics::counter!("funnel_bytes_out_total").increment(bytes_sent);
+            metrics::histogram!("funnel_request_body_bytes").record(bytes_sent as f64);
+
+            let resp_meta: ResponseMeta = protocol::read_meta(&mut recv)
+                .await
+                .map_err(SendError::ReadResponse)?;
+
+            let counted_recv = CountedRecvStream::new(recv, Arc::clone(&self.stats));
+            Ok::<_, SendError>((resp_meta, counted_recv))
+        })
+        .await;
+
+        let duration = start.elapsed().as_secs_f64();
+        metrics::histogram!("funnel_request_duration_seconds").record(duration);
 
         match result {
-            Ok(Ok(response)) => Ok(response),
-            Ok(Err(_)) => Err(SendError::TunnelClosed),
+            Ok(Ok(response)) => {
+                metrics::counter!("funnel_requests_total", "outcome" => "success").increment(1);
+                Ok(response)
+            }
+            Ok(Err(e)) => {
+                metrics::counter!("funnel_requests_total", "outcome" => e.outcome_label()).increment(1);
+                Err(e)
+            }
             Err(_) => {
-                // send cancel so the client can stop working on this request
-                let _ = self.outgoing_tx.send(TunnelMessage::RequestCancel { request_id }).await;
+                metrics::counter!("funnel_requests_total", "outcome" => "timeout").increment(1);
                 Err(SendError::Timeout)
             }
         }
     }
 
-    /// shut down the tunnel connection.
     pub fn close(&self) {
-        self.cancel.cancel();
+        self.conn
+            .close(quinn::VarInt::from_u32(0), b"tunnel closed");
     }
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
-    #[error("tunnel connection closed")]
-    TunnelClosed,
+    #[error("failed to open tunnel stream")]
+    OpenStream(#[source] quinn::ConnectionError),
+
+    #[error("failed to send request metadata")]
+    SendMeta(#[source] FrameError),
+
+    #[error("failed to read request body")]
+    ReadBody(#[source] axum::Error),
+
+    #[error("failed to write body to tunnel")]
+    WriteBody(#[source] quinn::WriteError),
+
+    #[error("failed to finish send stream")]
+    FinishStream(#[source] quinn::ClosedStream),
+
+    #[error("failed to read response metadata")]
+    ReadResponse(#[source] FrameError),
+
     #[error("request timed out")]
     Timeout,
 }
 
-/// spawn the read/write tasks for a websocket connection and return the active tunnel.
-/// the returned tunnel is live immediately; the background tasks run until the
-/// connection drops or `close()` is called.
-pub fn spawn(id: TunnelId, ws: WebSocket) -> Arc<ActiveTunnel> {
-    let (ws_sink, ws_stream) = ws.split();
-    let (outgoing_tx, outgoing_rx) = mpsc::channel(CHANNEL_BUFFER);
-    let cancel = CancellationToken::new();
-
-    let tunnel = Arc::new(ActiveTunnel {
-        id: id.clone(),
-        outgoing_tx,
-        pending_requests: DashMap::new(),
-        stats: TunnelStats::new(),
-        connected_at: tokio::time::Instant::now(),
-        cancel: cancel.clone(),
-    });
-
-    let read_tunnel = Arc::clone(&tunnel);
-    let read_cancel = cancel.clone();
-    tokio::spawn(async move {
-        read_loop(ws_stream, &read_tunnel, read_cancel).await;
-    });
-
-    let write_cancel = cancel.clone();
-    tokio::spawn(async move {
-        write_loop(ws_sink, outgoing_rx, write_cancel).await;
-    });
-
-    tunnel
-}
-
-async fn read_loop(
-    mut stream: futures::stream::SplitStream<WebSocket>,
-    tunnel: &ActiveTunnel,
-    cancel: CancellationToken,
-) {
-    loop {
-        let msg = tokio::select! {
-            msg = stream.next() => msg,
-            _ = cancel.cancelled() => break,
-        };
-
-        let Some(result) = msg else { break };
-
-        let frame = match result {
-            Ok(frame) => frame,
-            Err(e) => {
-                tracing::debug!(tunnel_id = %tunnel.id, error = %e, "websocket read error");
-                break;
-            }
-        };
-
-        match frame {
-            Message::Text(text) => {
-                tunnel.stats.add_bytes_in(text.len() as u64);
-                handle_incoming_text(tunnel, &text);
-            }
-            Message::Close(_) => break,
-            _ => {}
+impl SendError {
+    pub fn outcome_label(&self) -> &'static str {
+        match self {
+            Self::OpenStream(_) => "stream_open_failed",
+            Self::SendMeta(_) => "send_meta_failed",
+            Self::ReadBody(_) => "read_body_failed",
+            Self::WriteBody(_) => "write_body_failed",
+            Self::FinishStream(_) => "finish_stream_failed",
+            Self::ReadResponse(_) => "read_response_failed",
+            Self::Timeout => "timeout",
         }
     }
 
-    tracing::debug!(tunnel_id = %tunnel.id, "read loop exiting");
-    cancel.cancel();
 }
 
-fn handle_incoming_text(tunnel: &ActiveTunnel, text: &str) {
-    let msg: TunnelMessage = match serde_json::from_str(text) {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::warn!(tunnel_id = %tunnel.id, error = %e, "malformed message from client");
-            return;
-        }
-    };
+/// wraps a quinn::RecvStream and tracks bytes read for metrics and per tunnel stats.
+/// on drop, records funnel_bytes_in_total and funnel_response_body_bytes.
+pub struct CountedRecvStream {
+    inner: quinn::RecvStream,
+    bytes_read: u64,
+    stats: Arc<TunnelStats>,
+}
 
-    match msg {
-        TunnelMessage::Response {
-            request_id,
-            payload,
-        } => {
-            if let Some((_, tx)) = tunnel.pending_requests.remove(&request_id) {
-                let _ = tx.send(payload);
-            }
-        }
-        TunnelMessage::Pong => {}
-        other => {
-            tracing::debug!(
-                tunnel_id = %tunnel.id,
-                msg_type = ?other,
-                "unexpected message type from client"
-            );
+impl CountedRecvStream {
+    fn new(inner: quinn::RecvStream, stats: Arc<TunnelStats>) -> Self {
+        Self {
+            inner,
+            bytes_read: 0,
+            stats,
         }
     }
 }
 
-async fn write_loop(
-    mut sink: futures::stream::SplitSink<WebSocket, Message>,
-    mut rx: mpsc::Receiver<TunnelMessage>,
-    cancel: CancellationToken,
-) {
-    loop {
-        let msg = tokio::select! {
-            msg = rx.recv() => msg,
-            _ = cancel.cancelled() => break,
-        };
-
-        let Some(msg) = msg else { break };
-
-        let json = match serde_json::to_string(&msg) {
-            Ok(j) => j,
-            Err(e) => {
-                tracing::error!(error = %e, "failed to serialize tunnel message");
-                continue;
-            }
-        };
-
-        if sink.send(Message::text(json)).await.is_err() {
-            break;
-        }
+impl AsyncRead for CountedRecvStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        let before = buf.filled().len();
+        let result = Pin::new(&mut this.inner).poll_read(cx, buf);
+        let after = buf.filled().len();
+        this.bytes_read += (after - before) as u64;
+        result
     }
+}
 
-    tracing::debug!("write loop exiting");
-    cancel.cancel();
+impl Drop for CountedRecvStream {
+    fn drop(&mut self) {
+        self.stats.add_bytes_in(self.bytes_read);
+        metrics::counter!("funnel_bytes_in_total").increment(self.bytes_read);
+        metrics::histogram!("funnel_response_body_bytes").record(self.bytes_read as f64);
+    }
 }
 
 #[cfg(test)]
@@ -231,7 +202,12 @@ mod tests {
 
     #[test]
     fn send_error_display() {
-        assert_eq!(SendError::TunnelClosed.to_string(), "tunnel connection closed");
         assert_eq!(SendError::Timeout.to_string(), "request timed out");
     }
+
+    #[test]
+    fn send_error_outcome_labels() {
+        assert_eq!(SendError::Timeout.outcome_label(), "timeout");
+    }
+
 }
