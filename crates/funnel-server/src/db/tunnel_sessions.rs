@@ -24,11 +24,11 @@ pub async fn create(
     client_ip: Option<IpNetwork>,
 ) -> Result<TunnelSession, sqlx::Error> {
     sqlx::query_as::<_, TunnelSession>(
-        r#"
+        r"
         INSERT INTO tunnel_sessions (user_id, tunnel_id, client_ip)
         VALUES ($1, $2, $3)
         RETURNING *
-        "#,
+        ",
     )
     .bind(user_id)
     .bind(tunnel_id)
@@ -45,11 +45,11 @@ pub async fn disconnect(
     requests: i64,
 ) -> Result<bool, sqlx::Error> {
     let result = sqlx::query(
-        r#"
+        r"
         UPDATE tunnel_sessions
         SET disconnected_at = now(), bytes_in = $2, bytes_out = $3, requests = $4
         WHERE id = $1 AND disconnected_at IS NULL
-        "#,
+        ",
     )
     .bind(session_id)
     .bind(bytes_in)
@@ -67,12 +67,12 @@ pub async fn list_for_user(
     limit: i64,
 ) -> Result<Vec<TunnelSession>, sqlx::Error> {
     sqlx::query_as::<_, TunnelSession>(
-        r#"
+        r"
         SELECT * FROM tunnel_sessions
         WHERE user_id = $1
         ORDER BY connected_at DESC
         LIMIT $2
-        "#,
+        ",
     )
     .bind(user_id)
     .bind(limit)
@@ -93,7 +93,9 @@ mod tests {
     use super::*;
     use crate::db::users;
 
-    async fn setup_user(pool: &PgPool) -> users::User {
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    async fn setup_user(pool: &PgPool) -> Result<users::User, sqlx::Error> {
         users::create(
             pool,
             users::NewUser {
@@ -105,49 +107,44 @@ mod tests {
             },
         )
         .await
-        .unwrap()
     }
 
     #[tokio::test]
     #[ignore = "requires database"]
-    async fn create_and_disconnect_session() {
-        let pool = PgPool::connect(&std::env::var("DATABASE_URL").unwrap())
-            .await
-            .unwrap();
+    async fn create_and_disconnect_session() -> TestResult {
+        let pool = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
 
-        let user = setup_user(&pool).await;
-        let ip: IpNetwork = "192.168.1.1".parse::<std::net::IpAddr>().unwrap().into();
-        let session = create(&pool, user.id, "test-tunnel", Some(ip))
-            .await
-            .unwrap();
+        let user = setup_user(&pool).await?;
+        let ip: IpNetwork = "192.168.1.1".parse::<std::net::IpAddr>()?.into();
+        let session = create(&pool, user.id, "test-tunnel", Some(ip)).await?;
 
         assert_eq!(session.tunnel_id, "test-tunnel");
         assert!(session.disconnected_at.is_none());
         assert_eq!(session.bytes_in, 0);
         assert!(session.client_ip.is_some());
 
-        let disconnected = disconnect(&pool, session.id, 1024, 2048, 10)
-            .await
-            .unwrap();
+        let disconnected = disconnect(&pool, session.id, 1024, 2048, 10).await?;
         assert!(disconnected);
+
+        Ok(())
     }
 
     #[tokio::test]
     #[ignore = "requires database"]
-    async fn list_active_sessions() {
-        let pool = PgPool::connect(&std::env::var("DATABASE_URL").unwrap())
-            .await
-            .unwrap();
+    async fn list_active_sessions() -> TestResult {
+        let pool = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
 
-        let user = setup_user(&pool).await;
-        let s1 = create(&pool, user.id, "active-1", None).await.unwrap();
-        let s2 = create(&pool, user.id, "active-2", None).await.unwrap();
+        let user = setup_user(&pool).await?;
+        let s1 = create(&pool, user.id, "active-1", None).await?;
+        let s2 = create(&pool, user.id, "active-2", None).await?;
 
-        disconnect(&pool, s1.id, 0, 0, 0).await.unwrap();
+        disconnect(&pool, s1.id, 0, 0, 0).await?;
 
-        let active = list_active(&pool).await.unwrap();
+        let active = list_active(&pool).await?;
         let active_ids: Vec<Uuid> = active.iter().map(|s| s.id).collect();
         assert!(active_ids.contains(&s2.id));
         assert!(!active_ids.contains(&s1.id));
+
+        Ok(())
     }
 }

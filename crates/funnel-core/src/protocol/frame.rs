@@ -1,8 +1,8 @@
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-const MAX_META_SIZE: u32 = 1_048_576; // 1mb
-
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum FrameError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -10,16 +10,18 @@ pub enum FrameError {
     #[error("frame too large: {size} bytes (max {max})")]
     TooLarge { size: u32, max: u32 },
 
-    #[error("encode error: {0}")]
-    Encode(#[from] rmp_serde::encode::Error),
+    #[error("empty frame")]
+    Empty,
 
     #[error("decode error: {0}")]
     Decode(#[from] rmp_serde::decode::Error),
+
+    #[error("encode error: {0}")]
+    Encode(#[from] rmp_serde::encode::Error),
 }
 
-/// write a length prefixed frame: [4 bytes big endian u32 length][data]
-pub async fn write_frame<W: AsyncWrite + Unpin>(
-    writer: &mut W,
+pub async fn write_frame(
+    writer: &mut (impl AsyncWrite + Unpin),
     data: &[u8],
 ) -> Result<(), FrameError> {
     let len = data.len() as u32;
@@ -28,14 +30,17 @@ pub async fn write_frame<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
-/// read a length prefixed frame, rejecting frames larger than max_size
-pub async fn read_frame<R: AsyncRead + Unpin>(
-    reader: &mut R,
+pub async fn read_frame(
+    reader: &mut (impl AsyncRead + Unpin),
     max_size: u32,
 ) -> Result<Vec<u8>, FrameError> {
     let mut len_buf = [0u8; 4];
     reader.read_exact(&mut len_buf).await?;
     let len = u32::from_be_bytes(len_buf);
+
+    if len == 0 {
+        return Err(FrameError::Empty);
+    }
 
     if len > max_size {
         return Err(FrameError::TooLarge {
@@ -49,62 +54,69 @@ pub async fn read_frame<R: AsyncRead + Unpin>(
     Ok(buf)
 }
 
-/// serialize T as msgpack and write as a length prefixed frame
-pub async fn write_meta<W: AsyncWrite + Unpin, T: serde::Serialize>(
-    writer: &mut W,
-    meta: &T,
+pub async fn write_meta(
+    writer: &mut (impl AsyncWrite + Unpin),
+    value: &impl Serialize,
 ) -> Result<(), FrameError> {
-    let data = rmp_serde::to_vec_named(meta)?;
+    let data = rmp_serde::to_vec_named(value)?;
     write_frame(writer, &data).await
 }
 
-/// read a length prefixed frame and deserialize as msgpack
-pub async fn read_meta<R: AsyncRead + Unpin, T: serde::de::DeserializeOwned>(
-    reader: &mut R,
+const MAX_META_SIZE: u32 = 1024 * 1024;
+
+pub async fn read_meta<T: for<'de> Deserialize<'de>>(
+    reader: &mut (impl AsyncRead + Unpin),
 ) -> Result<T, FrameError> {
     let data = read_frame(reader, MAX_META_SIZE).await?;
-    let value = rmp_serde::from_slice(&data)?;
-    Ok(value)
+    Ok(rmp_serde::from_slice(&data)?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
     #[tokio::test]
-    async fn frame_roundtrip() {
+    async fn frame_roundtrip() -> TestResult {
         let data = b"hello world";
         let mut buf = Vec::new();
-        write_frame(&mut buf, data).await.unwrap();
+        write_frame(&mut buf, data).await?;
 
         let mut cursor = std::io::Cursor::new(buf);
-        let result = read_frame(&mut cursor, 1024).await.unwrap();
+        let result = read_frame(&mut cursor, 1024).await?;
         assert_eq!(result, data);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn frame_too_large() {
+    async fn frame_too_large() -> TestResult {
         let data = vec![0u8; 100];
         let mut buf = Vec::new();
-        write_frame(&mut buf, &data).await.unwrap();
+        write_frame(&mut buf, &data).await?;
 
         let mut cursor = std::io::Cursor::new(buf);
         let result = read_frame(&mut cursor, 50).await;
-        assert!(matches!(result, Err(FrameError::TooLarge { size: 100, max: 50 })));
+        assert!(matches!(
+            result,
+            Err(FrameError::TooLarge { size: 100, max: 50 })
+        ));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn meta_roundtrip() {
+    async fn meta_roundtrip() -> TestResult {
         use std::collections::HashMap;
 
         let original: HashMap<String, String> =
-            [("key".into(), "value".into())].into_iter().collect();
+            std::iter::once(("key".into(), "value".into())).collect();
 
         let mut buf = Vec::new();
-        write_meta(&mut buf, &original).await.unwrap();
+        write_meta(&mut buf, &original).await?;
 
         let mut cursor = std::io::Cursor::new(buf);
-        let decoded: HashMap<String, String> = read_meta(&mut cursor).await.unwrap();
+        let decoded: HashMap<String, String> = read_meta(&mut cursor).await?;
         assert_eq!(decoded, original);
+        Ok(())
     }
 }

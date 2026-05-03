@@ -16,13 +16,15 @@ pub enum TunnelIdError {
     #[error("tunnel ID must be lowercase")]
     NotLowercase,
 
-    #[error("tunnel ID must contain only lowercase letters, numbers, and hyphens, and cannot start or end with a hyphen")]
+    #[error(
+        "tunnel ID must contain only lowercase letters, numbers, and hyphens, and cannot start or end with a hyphen"
+    )]
     InvalidFormat,
 }
 
 const DOMAIN_SAFE_ALPHABET: &[char] = &[
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h',
-    'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
+    'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
 const DEFAULT_LENGTH: usize = 8;
@@ -121,8 +123,14 @@ mod tests {
 
     #[test]
     fn too_short() {
-        assert!(matches!(TunnelId::new("ab"), Err(TunnelIdError::TooShort(2))));
-        assert!(matches!(TunnelId::new("a"), Err(TunnelIdError::TooShort(1))));
+        assert!(matches!(
+            TunnelId::new("ab"),
+            Err(TunnelIdError::TooShort(2))
+        ));
+        assert!(matches!(
+            TunnelId::new("a"),
+            Err(TunnelIdError::TooShort(1))
+        ));
     }
 
     #[test]
@@ -144,10 +152,22 @@ mod tests {
 
     #[test]
     fn invalid_format() {
-        assert!(matches!(TunnelId::new("-abc"), Err(TunnelIdError::InvalidFormat)));
-        assert!(matches!(TunnelId::new("abc-"), Err(TunnelIdError::InvalidFormat)));
-        assert!(matches!(TunnelId::new("ab_c"), Err(TunnelIdError::InvalidFormat)));
-        assert!(matches!(TunnelId::new("ab c"), Err(TunnelIdError::InvalidFormat)));
+        assert!(matches!(
+            TunnelId::new("-abc"),
+            Err(TunnelIdError::InvalidFormat)
+        ));
+        assert!(matches!(
+            TunnelId::new("abc-"),
+            Err(TunnelIdError::InvalidFormat)
+        ));
+        assert!(matches!(
+            TunnelId::new("ab_c"),
+            Err(TunnelIdError::InvalidFormat)
+        ));
+        assert!(matches!(
+            TunnelId::new("ab c"),
+            Err(TunnelIdError::InvalidFormat)
+        ));
     }
 
     #[test]
@@ -159,22 +179,26 @@ mod tests {
         }
     }
 
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
     #[test]
-    fn display_and_into_string() {
-        let id = TunnelId::new("my-tunnel").unwrap();
+    fn display_and_into_string() -> TestResult {
+        let id = TunnelId::new("my-tunnel")?;
         assert_eq!(id.to_string(), "my-tunnel");
         let s: String = id.into();
         assert_eq!(s, "my-tunnel");
+        Ok(())
     }
 
     #[test]
-    fn serde_roundtrip() {
-        let id = TunnelId::new("test-123").unwrap();
-        let json = serde_json::to_string(&id).unwrap();
+    fn serde_roundtrip() -> TestResult {
+        let id = TunnelId::new("test-123")?;
+        let json = serde_json::to_string(&id)?;
         assert_eq!(json, "\"test-123\"");
 
-        let parsed: TunnelId = serde_json::from_str(&json).unwrap();
+        let parsed: TunnelId = serde_json::from_str(&json)?;
         assert_eq!(parsed.as_ref(), "test-123");
+        Ok(())
     }
 
     #[test]

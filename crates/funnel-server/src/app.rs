@@ -48,10 +48,7 @@ pub fn build_router(state: Arc<AppState>, metrics_handle: PrometheusHandle) -> R
         )
         .route("/keys", get(api::keys::list).post(api::keys::create))
         .route("/keys/{id}", axum::routing::delete(api::keys::revoke))
-        .route(
-            "/metrics",
-            get(metrics::handler).with_state(metrics_handle),
-        );
+        .route("/metrics", get(metrics::handler).with_state(metrics_handle));
 
     Router::new()
         .nest("/api", api_routes)

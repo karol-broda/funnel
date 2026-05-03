@@ -78,7 +78,7 @@ enum ConfigAction {
 async fn main() -> anyhow::Result<()> {
     rustls::crypto::ring::default_provider()
         .install_default()
-        .expect("failed to install default crypto provider");
+        .map_err(|_| anyhow::anyhow!("failed to install default crypto provider"))?;
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -115,13 +115,25 @@ async fn run_http(
 ) -> anyhow::Result<()> {
     let local_addr = normalize_address(&address);
 
-    let cfg = config::load().unwrap_or_default();
+    let cfg = match config::load() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to load config, using defaults");
+            config::Config::default()
+        }
+    };
     let inlet = config::get_inlet(&cfg, &inlet_name);
 
     let server_url = server_flag
         .or_else(|| inlet.map(|i| i.server.clone()))
         .filter(|s| !s.is_empty())
-        .map(|s| if s.contains("://") { s } else { format!("http://{s}") })
+        .map(|s| {
+            if s.contains("://") {
+                s
+            } else {
+                format!("http://{s}")
+            }
+        })
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "no server configured. use --server or run: funnel config set-server <url>"
@@ -146,7 +158,7 @@ async fn run_http(
 
     let client = tunnel::TunnelClient::new(
         tunnel_id,
-        server_url,
+        &server_url,
         local_addr,
         token,
         quic_port,

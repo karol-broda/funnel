@@ -42,22 +42,20 @@ pub async fn find_by_provider(
     provider: &str,
     provider_id: &str,
 ) -> Result<Option<User>, sqlx::Error> {
-    sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE provider = $1 AND provider_id = $2",
-    )
-    .bind(provider)
-    .bind(provider_id)
-    .fetch_optional(pool)
-    .await
+    sqlx::query_as::<_, User>("SELECT * FROM users WHERE provider = $1 AND provider_id = $2")
+        .bind(provider)
+        .bind(provider_id)
+        .fetch_optional(pool)
+        .await
 }
 
 pub async fn create(pool: &PgPool, new_user: NewUser) -> Result<User, sqlx::Error> {
     sqlx::query_as::<_, User>(
-        r#"
+        r"
         INSERT INTO users (email, name, avatar_url, provider, provider_id)
         VALUES ($1, $2, $3, $4, $5)
         RETURNING *
-        "#,
+        ",
     )
     .bind(&new_user.email)
     .bind(&new_user.name)
@@ -72,7 +70,7 @@ pub async fn create(pool: &PgPool, new_user: NewUser) -> Result<User, sqlx::Erro
 /// otherwise creates a new row.
 pub async fn upsert_from_oauth(pool: &PgPool, new_user: NewUser) -> Result<User, sqlx::Error> {
     sqlx::query_as::<_, User>(
-        r#"
+        r"
         INSERT INTO users (email, name, avatar_url, provider, provider_id)
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (provider, provider_id)
@@ -82,7 +80,7 @@ pub async fn upsert_from_oauth(pool: &PgPool, new_user: NewUser) -> Result<User,
             avatar_url = EXCLUDED.avatar_url,
             updated_at = now()
         RETURNING *
-        "#,
+        ",
     )
     .bind(&new_user.email)
     .bind(&new_user.name)
@@ -97,6 +95,8 @@ pub async fn upsert_from_oauth(pool: &PgPool, new_user: NewUser) -> Result<User,
 mod tests {
     use super::*;
 
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
     fn test_new_user() -> NewUser {
         NewUser {
             email: format!("test-{}@example.com", Uuid::now_v7()),
@@ -110,40 +110,38 @@ mod tests {
     // run with: DATABASE_URL=postgres://... cargo test -- --ignored
     #[tokio::test]
     #[ignore = "requires database"]
-    async fn create_and_find_user() {
-        let pool = PgPool::connect(&std::env::var("DATABASE_URL").unwrap())
-            .await
-            .unwrap();
+    async fn create_and_find_user() -> TestResult {
+        let pool = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
 
         let new = test_new_user();
         let email = new.email.clone();
 
-        let created = create(&pool, new).await.unwrap();
+        let created = create(&pool, new).await?;
         assert_eq!(created.email, email);
         assert!(created.id != Uuid::nil());
 
-        let found = find_by_id(&pool, created.id).await.unwrap();
+        let found = find_by_id(&pool, created.id).await?;
         assert!(found.is_some());
-        assert_eq!(found.unwrap().email, email);
+        assert_eq!(found.ok_or("expected Some")?.email, email);
+
+        Ok(())
     }
 
     #[tokio::test]
     #[ignore = "requires database"]
-    async fn find_nonexistent_user() {
-        let pool = PgPool::connect(&std::env::var("DATABASE_URL").unwrap())
-            .await
-            .unwrap();
+    async fn find_nonexistent_user() -> TestResult {
+        let pool = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
 
-        let found = find_by_id(&pool, Uuid::now_v7()).await.unwrap();
+        let found = find_by_id(&pool, Uuid::now_v7()).await?;
         assert!(found.is_none());
+
+        Ok(())
     }
 
     #[tokio::test]
     #[ignore = "requires database"]
-    async fn upsert_creates_then_updates() {
-        let pool = PgPool::connect(&std::env::var("DATABASE_URL").unwrap())
-            .await
-            .unwrap();
+    async fn upsert_creates_then_updates() -> TestResult {
+        let pool = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
 
         let provider_id = Uuid::now_v7().to_string();
 
@@ -157,8 +155,7 @@ mod tests {
                 provider_id: provider_id.clone(),
             },
         )
-        .await
-        .unwrap();
+        .await?;
 
         let second = upsert_from_oauth(
             &pool,
@@ -170,11 +167,12 @@ mod tests {
                 provider_id: provider_id.clone(),
             },
         )
-        .await
-        .unwrap();
+        .await?;
 
         assert_eq!(first.id, second.id);
         assert_eq!(second.name.as_deref(), Some("Updated"));
         assert!(second.avatar_url.is_some());
+
+        Ok(())
     }
 }

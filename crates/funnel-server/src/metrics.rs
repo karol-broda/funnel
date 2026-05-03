@@ -2,11 +2,9 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use metrics_exporter_prometheus::PrometheusHandle;
 
-pub fn setup() -> PrometheusHandle {
+pub fn setup() -> anyhow::Result<PrometheusHandle> {
     let builder = metrics_exporter_prometheus::PrometheusBuilder::new();
-    builder
-        .install_recorder()
-        .expect("failed to install prometheus recorder")
+    Ok(builder.install_recorder()?)
 }
 
 pub async fn handler(

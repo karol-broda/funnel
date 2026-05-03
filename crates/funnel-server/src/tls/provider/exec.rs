@@ -7,7 +7,7 @@ pub struct ExecProvider {
 }
 
 impl ExecProvider {
-    pub fn new(command: String) -> Self {
+    pub const fn new(command: String) -> Self {
         Self { command }
     }
 
@@ -20,11 +20,7 @@ impl ExecProvider {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!(
-                "command exited with {}: {}",
-                output.status,
-                stderr.trim()
-            );
+            anyhow::bail!("command exited with {}: {}", output.status, stderr.trim());
         }
         Ok(())
     }

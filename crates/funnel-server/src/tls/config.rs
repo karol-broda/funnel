@@ -29,7 +29,7 @@ pub struct DnsProviderEntry {
 impl ProviderConfig {
     pub async fn load(path: &Path) -> anyhow::Result<Self> {
         let contents = tokio::fs::read_to_string(path).await?;
-        let config: ProviderConfig = serde_json::from_str(&contents)?;
+        let config: Self = serde_json::from_str(&contents)?;
         Ok(config)
     }
 }

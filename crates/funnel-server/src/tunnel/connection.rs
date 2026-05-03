@@ -31,7 +31,7 @@ impl ActiveTunnel {
         }
     }
 
-    pub fn id(&self) -> &TunnelId {
+    pub const fn id(&self) -> &TunnelId {
         &self.id
     }
 
@@ -39,7 +39,7 @@ impl ActiveTunnel {
         self.stats.snapshot()
     }
 
-    pub fn connected_at(&self) -> tokio::time::Instant {
+    pub const fn connected_at(&self) -> tokio::time::Instant {
         self.connected_at
     }
 
@@ -55,11 +55,7 @@ impl ActiveTunnel {
         let start = std::time::Instant::now();
 
         let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
-            let (mut send, mut recv) = self
-                .conn
-                .open_bi()
-                .await
-                .map_err(SendError::OpenStream)?;
+            let (mut send, mut recv) = self.conn.open_bi().await.map_err(SendError::OpenStream)?;
 
             frame::write_meta(&mut send, &meta)
                 .await
@@ -71,9 +67,7 @@ impl ActiveTunnel {
                 let frame = frame.map_err(SendError::ReadBody)?;
                 if let Ok(data) = frame.into_data() {
                     bytes_sent += data.len() as u64;
-                    send.write_all(&data)
-                        .await
-                        .map_err(SendError::WriteBody)?;
+                    send.write_all(&data).await.map_err(SendError::WriteBody)?;
                 }
             }
 
@@ -101,7 +95,8 @@ impl ActiveTunnel {
                 Ok(response)
             }
             Ok(Err(e)) => {
-                metrics::counter!("funnel_requests_total", "outcome" => e.outcome_label()).increment(1);
+                metrics::counter!("funnel_requests_total", "outcome" => e.outcome_label())
+                    .increment(1);
                 Err(e)
             }
             Err(_) => {
@@ -142,7 +137,7 @@ pub enum SendError {
 }
 
 impl SendError {
-    pub fn outcome_label(&self) -> &'static str {
+    pub const fn outcome_label(&self) -> &'static str {
         match self {
             Self::OpenStream(_) => "stream_open_failed",
             Self::SendMeta(_) => "send_meta_failed",
@@ -153,7 +148,6 @@ impl SendError {
             Self::Timeout => "timeout",
         }
     }
-
 }
 
 /// wraps a quinn::RecvStream and tracks bytes read for metrics and per tunnel stats.
@@ -165,7 +159,7 @@ pub struct CountedRecvStream {
 }
 
 impl CountedRecvStream {
-    fn new(inner: quinn::RecvStream, stats: Arc<TunnelStats>) -> Self {
+    const fn new(inner: quinn::RecvStream, stats: Arc<TunnelStats>) -> Self {
         Self {
             inner,
             bytes_read: 0,
@@ -210,5 +204,4 @@ mod tests {
     fn send_error_outcome_labels() {
         assert_eq!(SendError::Timeout.outcome_label(), "timeout");
     }
-
 }

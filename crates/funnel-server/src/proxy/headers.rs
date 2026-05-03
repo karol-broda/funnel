@@ -12,7 +12,7 @@ pub fn prepare_forwarding_headers(
 ) -> HashMap<String, Vec<String>> {
     let mut headers: HashMap<String, Vec<String>> = HashMap::new();
 
-    for (name, value) in original.iter() {
+    for (name, value) in original {
         let key = name.as_str().to_string();
         let val = value.to_str().unwrap_or("").to_string();
         headers.entry(key).or_default().push(val);
@@ -55,7 +55,8 @@ mod tests {
     #[test]
     fn adds_forwarding_headers() {
         let headers = HeaderMap::new();
-        let result = prepare_forwarding_headers(&headers, "my-tunnel.example.com", test_addr(), false);
+        let result =
+            prepare_forwarding_headers(&headers, "my-tunnel.example.com", test_addr(), false);
 
         assert_eq!(result["x-forwarded-for"], vec!["192.168.1.100"]);
         assert_eq!(result["x-forwarded-host"], vec!["my-tunnel.example.com"]);

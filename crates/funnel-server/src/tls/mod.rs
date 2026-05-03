@@ -17,14 +17,9 @@ pub async fn setup(
     let provider_mux = provider::ProviderMux::from_config(&provider_config).await?;
 
     let cert_manager = Arc::new(
-        manager::CertificateManager::new(
-            cert_dir.to_path_buf(),
-            provider_mux,
-            email,
-            acme_staging,
-        )
-        .await
-        .context("failed to create certificate manager")?,
+        manager::CertificateManager::new(cert_dir.to_path_buf(), provider_mux, email, acme_staging)
+            .await
+            .context("failed to create certificate manager")?,
     );
 
     cert_manager.preload_certificates().await?;

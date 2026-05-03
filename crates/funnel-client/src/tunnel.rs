@@ -6,10 +6,10 @@ use tokio_util::io::ReaderStream;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+use funnel_core::protocol::QUIC_ALPN;
 use funnel_core::protocol::frame;
 use funnel_core::protocol::handshake::{Handshake, HandshakeResponse};
 use funnel_core::protocol::request::RequestMeta;
-use funnel_core::protocol::QUIC_ALPN;
 use funnel_core::tunnel::id::TunnelId;
 
 use crate::forwarder::Forwarder;
@@ -29,13 +29,13 @@ pub struct TunnelClient {
 impl TunnelClient {
     pub fn new(
         tunnel_id: TunnelId,
-        server_url: String,
+        server_url: &str,
         local_addr: String,
         token: Option<String>,
         quic_port: u16,
         insecure: bool,
     ) -> anyhow::Result<Self> {
-        let url = Url::parse(&server_url)?;
+        let url = Url::parse(server_url)?;
         let host = url
             .host_str()
             .ok_or_else(|| anyhow::anyhow!("no host in server url"))?
@@ -67,7 +67,7 @@ impl TunnelClient {
     /// connect to the server via quic and run the tunnel until it disconnects.
     pub async fn run(&self, cancel: CancellationToken) -> anyhow::Result<()> {
         let conn = self.connect().await?;
-        let forwarder = Arc::new(Forwarder::new(self.local_addr.clone()));
+        let forwarder = Arc::new(Forwarder::new(self.local_addr.clone())?);
         let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
 
         loop {
@@ -91,7 +91,7 @@ impl TunnelClient {
                                 Ok(p) => p,
                                 Err(_) => return,
                             },
-                            _ = cancel.cancelled() => return,
+                            () = cancel.cancelled() => return,
                         };
 
                         if let Err(e) = handle_stream(send, recv, &fwd).await {
@@ -99,7 +99,7 @@ impl TunnelClient {
                         }
                     });
                 }
-                _ = cancel.cancelled() => break,
+                () = cancel.cancelled() => break,
             }
         }
 
@@ -114,7 +114,7 @@ impl TunnelClient {
 
         let conn = tokio::time::timeout(HANDSHAKE_TIMEOUT, connecting)
             .await
-            .map_err(|_| anyhow::anyhow!("connection timed out"))
+            .map_err(|_| anyhow::anyhow!("quic handshake timed out after {HANDSHAKE_TIMEOUT:?}"))
             .and_then(|r| r.map_err(Into::into))?;
 
         let (mut send, mut recv) = conn.open_bi().await?;

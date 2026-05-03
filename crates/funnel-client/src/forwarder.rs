@@ -20,22 +20,17 @@ pub struct Forwarder {
 }
 
 impl Forwarder {
-    pub fn new(local_addr: String) -> Self {
+    pub fn new(local_addr: String) -> Result<Self, reqwest::Error> {
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(std::time::Duration::from_secs(30))
             .pool_max_idle_per_host(10)
-            .build()
-            .expect("failed to build http client");
+            .build()?;
 
-        Self { client, local_addr }
+        Ok(Self { client, local_addr })
     }
 
-    pub async fn forward(
-        &self,
-        meta: RequestMeta,
-        body: reqwest::Body,
-    ) -> (ResponseMeta, Vec<u8>) {
+    pub async fn forward(&self, meta: RequestMeta, body: reqwest::Body) -> (ResponseMeta, Vec<u8>) {
         match self.try_forward(&meta, body).await {
             Ok(resp) => resp,
             Err(e) => {
@@ -85,7 +80,7 @@ fn is_hop_by_hop(name: &str) -> bool {
 
 fn collect_response_headers(headers: &reqwest::header::HeaderMap) -> HashMap<String, Vec<String>> {
     let mut map: HashMap<String, Vec<String>> = HashMap::new();
-    for (name, value) in headers.iter() {
+    for (name, value) in headers {
         if is_hop_by_hop(name.as_str()) {
             continue;
         }
@@ -98,10 +93,7 @@ fn collect_response_headers(headers: &reqwest::header::HeaderMap) -> HashMap<Str
 fn error_response(status: u16, msg: &str) -> (ResponseMeta, Vec<u8>) {
     let mut headers = HashMap::new();
     headers.insert("content-type".to_string(), vec!["text/plain".to_string()]);
-    (
-        ResponseMeta { status, headers },
-        msg.as_bytes().to_vec(),
-    )
+    (ResponseMeta { status, headers }, msg.as_bytes().to_vec())
 }
 
 #[cfg(test)]

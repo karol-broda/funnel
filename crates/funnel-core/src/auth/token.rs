@@ -30,10 +30,14 @@ impl fmt::Display for ApiKeyPrefix {
     }
 }
 
-pub fn generate_api_key() -> String {
+pub fn generate_api_key() -> Result<String, getrandom::Error> {
     let mut bytes = [0u8; RANDOM_BYTES];
-    getrandom::fill(&mut bytes).expect("failed to generate random bytes");
-    format!("{}{}", PREFIX, BASE64_URL_SAFE_NO_PAD.encode(bytes))
+    getrandom::fill(&mut bytes)?;
+    Ok(format!(
+        "{}{}",
+        PREFIX,
+        BASE64_URL_SAFE_NO_PAD.encode(bytes)
+    ))
 }
 
 /// sha256 is fine here since api keys are high entropy random tokens,
@@ -49,23 +53,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generate_key_has_prefix() {
-        let key = generate_api_key();
+    fn generate_key_has_prefix() -> Result<(), getrandom::Error> {
+        let key = generate_api_key()?;
         assert!(key.starts_with(PREFIX));
+        Ok(())
     }
 
     #[test]
-    fn generate_key_has_sufficient_length() {
-        let key = generate_api_key();
+    fn generate_key_has_sufficient_length() -> Result<(), getrandom::Error> {
+        let key = generate_api_key()?;
         // prefix (3) + base64 of 32 bytes (43) = 46 chars
         assert!(key.len() >= 40);
+        Ok(())
     }
 
     #[test]
-    fn generated_keys_are_unique() {
-        let a = generate_api_key();
-        let b = generate_api_key();
+    fn generated_keys_are_unique() -> Result<(), getrandom::Error> {
+        let a = generate_api_key()?;
+        let b = generate_api_key()?;
         assert_ne!(a, b);
+        Ok(())
     }
 
     #[test]
@@ -88,17 +95,18 @@ mod tests {
     }
 
     #[test]
-    fn prefix_from_key() {
-        let key = generate_api_key();
+    fn prefix_from_key() -> Result<(), getrandom::Error> {
+        let key = generate_api_key()?;
         let prefix = ApiKeyPrefix::from_key(&key);
         assert_eq!(prefix.as_ref().len(), VISIBLE_PREFIX_LEN);
         assert!(key.starts_with(prefix.as_ref()));
+        Ok(())
     }
 
     #[test]
     fn prefix_display() {
         let prefix = ApiKeyPrefix::from_key("sk_abcdefghij_rest");
-        assert_eq!(format!("{}", prefix), "sk_abcdefg...");
+        assert_eq!(format!("{prefix}"), "sk_abcdefg...");
     }
 
     #[test]

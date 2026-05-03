@@ -16,9 +16,9 @@ use x509_parser::prelude::*;
 use super::provider::ProviderMux;
 
 const LRU_CACHE_SIZE: std::num::NonZeroUsize = std::num::NonZeroUsize::new(512).unwrap();
-const RENEWAL_CHECK_INTERVAL: Duration = Duration::from_secs(3600);
-const RENEWAL_WINDOW: Duration = Duration::from_secs(30 * 24 * 3600);
-const ACME_POLL_TIMEOUT: Duration = Duration::from_secs(300);
+const RENEWAL_CHECK_INTERVAL: Duration = Duration::from_hours(1);
+const RENEWAL_WINDOW: Duration = Duration::from_hours(720);
+const ACME_POLL_TIMEOUT: Duration = Duration::from_mins(5);
 const DNS_PROPAGATION_DELAY: Duration = Duration::from_secs(10);
 
 struct CachedCert {
@@ -70,7 +70,10 @@ impl CertificateManager {
             match self.load_from_disk(&domain).await {
                 Ok(Some((certified_key, not_after))) => {
                     tracing::info!(domain = %domain, "loaded certificate from disk");
-                    let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+                    let mut cache = self
+                        .cache
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     cache.put(
                         domain,
                         CachedCert {
@@ -101,11 +104,14 @@ impl CertificateManager {
 
         // double check cache after acquiring lock
         {
-            let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(cached) = cache.peek(domain) {
-                if cached.not_after > SystemTime::now() + RENEWAL_WINDOW {
-                    return Ok(());
-                }
+            let cache = self
+                .cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(cached) = cache.peek(domain)
+                && cached.not_after > SystemTime::now() + RENEWAL_WINDOW
+            {
+                return Ok(());
             }
         }
 
@@ -199,7 +205,10 @@ impl CertificateManager {
         let not_after = parse_cert_expiry(&cert_pem)?;
 
         {
-            let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            let mut cache = self
+                .cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             cache.put(
                 domain.to_string(),
                 CachedCert {
@@ -213,7 +222,10 @@ impl CertificateManager {
 
         // clean up DNS records (best effort, after everything succeeded)
         for cleanup in &cleanups {
-            if let Err(e) = provider.cleanup(&cleanup.record_name, &cleanup.dns_value).await {
+            if let Err(e) = provider
+                .cleanup(&cleanup.record_name, &cleanup.dns_value)
+                .await
+            {
                 tracing::warn!(
                     record = %cleanup.record_name,
                     error = %e,
@@ -255,7 +267,10 @@ impl CertificateManager {
 
     async fn check_renewals(&self) {
         let domains_to_renew: Vec<String> = {
-            let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            let cache = self
+                .cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             cache
                 .iter()
                 .filter(|(_, cert)| {
@@ -278,16 +293,19 @@ impl CertificateManager {
 }
 
 impl ResolvesServerCert for CertificateManager {
-    fn resolve(
-        &self,
-        client_hello: rustls::server::ClientHello<'_>,
-    ) -> Option<Arc<CertifiedKey>> {
+    fn resolve(&self, client_hello: rustls::server::ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
         let sni = client_hello.server_name()?;
-        let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+        let cache = self
+            .cache
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let cached = cache.peek(sni)?;
+        let not_after = cached.not_after;
+        let key = Arc::clone(&cached.certified_key);
+        drop(cache);
 
-        if cached.not_after > SystemTime::now() {
-            Some(Arc::clone(&cached.certified_key))
+        if not_after > SystemTime::now() {
+            Some(key)
         } else {
             None
         }
@@ -315,18 +333,13 @@ fn parse_cert_expiry(cert_pem: &str) -> Result<SystemTime> {
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let cert = certs.first().context("no certificate found")?;
     let (_, parsed) = X509Certificate::from_der(cert.as_ref())
-        .map_err(|e| anyhow::anyhow!(e.to_string()))
-        .context("failed to parse x509 certificate")?;
+        .map_err(|e| anyhow::anyhow!("failed to parse x509 certificate: {e}"))?;
 
     let not_after = parsed.validity().not_after;
     Ok(not_after.to_datetime().into())
 }
 
-async fn load_or_create_account(
-    cert_dir: &Path,
-    email: &str,
-    staging: bool,
-) -> Result<Account> {
+async fn load_or_create_account(cert_dir: &Path, email: &str, staging: bool) -> Result<Account> {
     let account_json_path = cert_dir.join("account.json");
 
     if account_json_path.exists() {

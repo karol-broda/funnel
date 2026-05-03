@@ -75,17 +75,21 @@ mod tests {
         assert!(mgr.list().is_empty());
     }
 
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
     #[test]
-    fn get_returns_none_for_missing() {
+    fn get_returns_none_for_missing() -> TestResult {
         let mgr = TunnelManager::new();
-        let id = TunnelId::new("test-abc").unwrap();
+        let id = TunnelId::new("test-abc")?;
         assert!(mgr.get(&id).is_none());
+        Ok(())
     }
 
     #[test]
-    fn remove_returns_none_for_missing() {
+    fn remove_returns_none_for_missing() -> TestResult {
         let mgr = TunnelManager::new();
-        let id = TunnelId::new("test-abc").unwrap();
+        let id = TunnelId::new("test-abc")?;
         assert!(mgr.remove(&id).is_none());
+        Ok(())
     }
 }

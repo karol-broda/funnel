@@ -85,7 +85,9 @@ impl CloudflareProvider {
 
         for record_id in matching_records {
             self.client
-                .delete(format!("{API_BASE}/zones/{zone_id}/dns_records/{record_id}"))
+                .delete(format!(
+                    "{API_BASE}/zones/{zone_id}/dns_records/{record_id}"
+                ))
                 .bearer_auth(&self.api_token)
                 .send()
                 .await?;
@@ -100,8 +102,7 @@ impl DnsChallenger for CloudflareProvider {
         let value = value.to_string();
         Box::pin(async move {
             let zone_id = self.find_zone_id(&record_name).await?;
-            self.create_txt_record(&zone_id, &record_name, &value)
-                .await
+            self.create_txt_record(&zone_id, &record_name, &value).await
         })
     }
 

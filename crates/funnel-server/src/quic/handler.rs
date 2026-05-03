@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use funnel_core::protocol::frame;
-use funnel_core::protocol::handshake::{Handshake, HandshakeResponse};
 use crate::app::AppState;
 use crate::tunnel::connection::ActiveTunnel;
+use funnel_core::protocol::frame;
+use funnel_core::protocol::handshake::{Handshake, HandshakeResponse};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConnectionError {

@@ -18,7 +18,7 @@ pub enum HandshakeResponse {
 }
 
 impl HandshakeResponse {
-    pub fn ok() -> Self {
+    pub const fn ok() -> Self {
         Self::Ok
     }
 

@@ -3,66 +3,55 @@ mod harness;
 use harness::TestEnv;
 use reqwest::Method;
 
+type TestResult = Result<(), Box<dyn std::error::Error>>;
+
 #[tokio::test(flavor = "multi_thread")]
-async fn e2e() {
-    let env = TestEnv::start().await;
+async fn basic_get() -> TestResult {
+    let env = TestEnv::start().await?;
 
-    basic_get(&env).await;
-    post_echo(&env).await;
-    large_body(&env).await;
-    concurrent_requests(&env).await;
-    response_headers(&env).await;
-    metrics_endpoint(&env).await;
-    unknown_tunnel_404(&env).await;
+    let resp = env.tunnel_request(Method::GET, "/hello").send().await?;
+
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.text().await?, "hello from local service");
+    Ok(())
 }
 
-async fn basic_get(env: &TestEnv) {
-    let resp = env
-        .tunnel_request(Method::GET, "/hello")
-        .send()
-        .await
-        .unwrap();
+#[tokio::test(flavor = "multi_thread")]
+async fn post_echo() -> TestResult {
+    let env = TestEnv::start().await?;
 
-    assert_eq!(resp.status(), 200, "basic_get: expected 200");
-    assert_eq!(
-        resp.text().await.unwrap(),
-        "hello from local service",
-        "basic_get: unexpected body"
-    );
-}
-
-async fn post_echo(env: &TestEnv) {
     let resp = env
         .tunnel_request(Method::POST, "/echo")
         .body("test body")
         .send()
-        .await
-        .unwrap();
+        .await?;
 
-    assert_eq!(resp.status(), 200, "post_echo: expected 200");
-    assert_eq!(
-        resp.text().await.unwrap(),
-        "echo: test body",
-        "post_echo: unexpected body"
-    );
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.text().await?, "echo: test body");
+    Ok(())
 }
 
-async fn large_body(env: &TestEnv) {
+#[tokio::test(flavor = "multi_thread")]
+async fn large_body() -> TestResult {
+    let env = TestEnv::start().await?;
     let size = 2_500_000;
     let payload = vec![b'x'; size];
+
     let resp = env
         .tunnel_request(Method::POST, "/large")
         .body(payload)
         .send()
-        .await
-        .unwrap();
+        .await?;
 
-    assert_eq!(resp.status(), 200, "large_body: expected 200");
-    let body = resp.bytes().await.unwrap();
-    assert_eq!(body.len(), size, "large_body: response size mismatch");
+    assert_eq!(resp.status(), 200);
+    let body = resp.bytes().await?;
+    assert_eq!(body.len(), size);
+    Ok(())
 }
 
-async fn concurrent_requests(env: &TestEnv) {
+#[tokio::test(flavor = "multi_thread")]
+async fn concurrent_requests() -> TestResult {
+    let env = TestEnv::start().await?;
     let mut set = tokio::task::JoinSet::new();
 
     for _ in 0..10 {
@@ -70,67 +59,59 @@ async fn concurrent_requests(env: &TestEnv) {
         let url = format!("http://127.0.0.1:{}/hello", env.http_port);
         let host = env.host_header.clone();
 
-        set.spawn(async move {
-            client
-                .get(&url)
-                .header("host", &host)
-                .send()
-                .await
-                .unwrap()
-        });
+        set.spawn(async move { client.get(&url).header("host", &host).send().await });
     }
 
     let mut ok_count = 0;
     while let Some(result) = set.join_next().await {
-        let resp = result.unwrap();
-        assert_eq!(resp.status(), 200, "concurrent_requests: expected 200");
+        let resp = result??;
+        assert_eq!(resp.status(), 200);
         ok_count += 1;
     }
-    assert_eq!(ok_count, 10, "concurrent_requests: expected 10 responses");
+    assert_eq!(ok_count, 10);
+    Ok(())
 }
 
-async fn response_headers(env: &TestEnv) {
-    let resp = env
-        .tunnel_request(Method::GET, "/headers")
-        .send()
-        .await
-        .unwrap();
+#[tokio::test(flavor = "multi_thread")]
+async fn response_headers() -> TestResult {
+    let env = TestEnv::start().await?;
 
-    assert_eq!(resp.status(), 200, "response_headers: expected 200");
+    let resp = env.tunnel_request(Method::GET, "/headers").send().await?;
 
+    assert_eq!(resp.status(), 200);
     let custom = resp.headers().get("x-custom-header");
-    assert_eq!(
-        custom.and_then(|v| v.to_str().ok()),
-        Some("test-value"),
-        "response_headers: missing or wrong x-custom-header"
-    );
+    assert_eq!(custom.and_then(|v| v.to_str().ok()), Some("test-value"));
+    Ok(())
 }
 
-async fn metrics_endpoint(env: &TestEnv) {
+#[tokio::test(flavor = "multi_thread")]
+async fn metrics_endpoint() -> TestResult {
+    let env = TestEnv::start().await?;
+
     let resp = env
         .client
-        .get(&env.server_url("/api/metrics"))
+        .get(env.server_url("/api/metrics"))
         .send()
-        .await
-        .unwrap();
+        .await?;
 
-    assert_eq!(resp.status(), 200, "metrics_endpoint: expected 200");
-    let body = resp.text().await.unwrap();
-    assert!(
-        body.contains("funnel_requests_total"),
-        "metrics_endpoint: expected funnel_requests_total in prometheus output"
-    );
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().await?;
+    assert!(body.contains("funnel_requests_total"));
+    Ok(())
 }
 
-async fn unknown_tunnel_404(env: &TestEnv) {
+#[tokio::test(flavor = "multi_thread")]
+async fn unknown_tunnel_returns_404() -> TestResult {
+    let env = TestEnv::start().await?;
     let url = format!("http://127.0.0.1:{}/hello", env.http_port);
+
     let resp = env
         .client
         .get(&url)
         .header("host", format!("nonexistent.localhost:{}", env.http_port))
         .send()
-        .await
-        .unwrap();
+        .await?;
 
-    assert_eq!(resp.status(), 404, "unknown_tunnel_404: expected 404");
+    assert_eq!(resp.status(), 404);
+    Ok(())
 }

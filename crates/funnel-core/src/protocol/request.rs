@@ -19,8 +19,10 @@ pub struct ResponseMeta {
 mod tests {
     use super::*;
 
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
     #[test]
-    fn request_meta_roundtrip() {
+    fn request_meta_roundtrip() -> TestResult {
         let meta = RequestMeta {
             method: "POST".into(),
             path: "/api/data".into(),
@@ -31,21 +33,23 @@ mod tests {
             },
         };
 
-        let encoded = rmp_serde::to_vec_named(&meta).unwrap();
-        let decoded: RequestMeta = rmp_serde::from_slice(&encoded).unwrap();
+        let encoded = rmp_serde::to_vec_named(&meta)?;
+        let decoded: RequestMeta = rmp_serde::from_slice(&encoded)?;
         assert_eq!(decoded.method, "POST");
         assert_eq!(decoded.path, "/api/data");
+        Ok(())
     }
 
     #[test]
-    fn response_meta_roundtrip() {
+    fn response_meta_roundtrip() -> TestResult {
         let meta = ResponseMeta {
             status: 200,
             headers: HashMap::new(),
         };
 
-        let encoded = rmp_serde::to_vec_named(&meta).unwrap();
-        let decoded: ResponseMeta = rmp_serde::from_slice(&encoded).unwrap();
+        let encoded = rmp_serde::to_vec_named(&meta)?;
+        let decoded: ResponseMeta = rmp_serde::from_slice(&encoded)?;
         assert_eq!(decoded.status, 200);
+        Ok(())
     }
 }

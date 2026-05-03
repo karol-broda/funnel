@@ -1,6 +1,6 @@
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use funnel_core::tunnel::id::TunnelIdError;
 use serde::Serialize;
 
@@ -33,10 +33,12 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {
-            Self::TunnelNotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
-            Self::NotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
-            Self::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
-            Self::InvalidTunnelId(_) => (StatusCode::BAD_REQUEST, self.to_string()),
+            Self::TunnelNotFound(_) | Self::NotFound(_) => {
+                (StatusCode::NOT_FOUND, self.to_string())
+            }
+            Self::BadRequest(_) | Self::InvalidTunnelId(_) => {
+                (StatusCode::BAD_REQUEST, self.to_string())
+            }
             Self::Database(e) => {
                 tracing::error!(error = %e, "database error");
                 (

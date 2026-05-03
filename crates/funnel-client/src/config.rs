@@ -85,8 +85,10 @@ mod tests {
         assert!(config.inlets.is_empty());
     }
 
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
     #[test]
-    fn roundtrip_toml() {
+    fn roundtrip_toml() -> TestResult {
         let mut config = Config::default();
         config.inlets.insert(
             "default".to_string(),
@@ -97,13 +99,17 @@ mod tests {
             },
         );
 
-        let serialized = toml::to_string_pretty(&config).unwrap();
-        let parsed: Config = toml::from_str(&serialized).unwrap();
+        let serialized = toml::to_string_pretty(&config)?;
+        let parsed: Config = toml::from_str(&serialized)?;
 
-        let inlet = parsed.inlets.get("default").unwrap();
+        let inlet = parsed
+            .inlets
+            .get("default")
+            .ok_or("expected default inlet")?;
         assert_eq!(inlet.server, "https://tunnel.example.com");
         assert_eq!(inlet.token.as_deref(), Some("sk_test123"));
         assert!(inlet.domain.is_none());
+        Ok(())
     }
 
     #[test]

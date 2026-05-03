@@ -37,8 +37,8 @@ pub async fn run(client: &TunnelClient, shutdown: CancellationToken) {
         tracing::info!(delay_secs = delay.as_secs_f64(), "reconnecting");
 
         tokio::select! {
-            _ = tokio::time::sleep(delay) => {},
-            _ = shutdown.cancelled() => break,
+            () = tokio::time::sleep(delay) => {},
+            () = shutdown.cancelled() => break,
         }
     }
 
@@ -54,7 +54,11 @@ fn backoff_delay(attempt: u32) -> Duration {
 pub fn build_public_url(server_url: &str, tunnel_id: &TunnelId) -> Option<String> {
     let url = Url::parse(server_url).ok()?;
     let host = url.host_str()?;
-    let scheme = if url.scheme() == "https" { "https" } else { "http" };
+    let scheme = if url.scheme() == "https" {
+        "https"
+    } else {
+        "http"
+    };
 
     match url.port() {
         Some(port) => Some(format!("{scheme}://{tunnel_id}.{host}:{port}")),
@@ -80,24 +84,29 @@ mod tests {
         assert_eq!(backoff_delay(20), MAX_BACKOFF);
     }
 
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
     #[test]
-    fn public_url_http() {
-        let id = TunnelId::new("my-tunnel").expect("valid tunnel id");
+    fn public_url_http() -> TestResult {
+        let id = TunnelId::new("my-tunnel")?;
         let url = build_public_url("http://tunnel.example.com", &id);
         assert_eq!(url.as_deref(), Some("http://my-tunnel.tunnel.example.com"));
+        Ok(())
     }
 
     #[test]
-    fn public_url_https() {
-        let id = TunnelId::new("my-tunnel").expect("valid tunnel id");
+    fn public_url_https() -> TestResult {
+        let id = TunnelId::new("my-tunnel")?;
         let url = build_public_url("https://tunnel.example.com", &id);
         assert_eq!(url.as_deref(), Some("https://my-tunnel.tunnel.example.com"));
+        Ok(())
     }
 
     #[test]
-    fn public_url_with_port() {
-        let id = TunnelId::new("abc").expect("valid tunnel id");
+    fn public_url_with_port() -> TestResult {
+        let id = TunnelId::new("abc")?;
         let url = build_public_url("http://localhost:8080", &id);
         assert_eq!(url.as_deref(), Some("http://abc.localhost:8080"));
+        Ok(())
     }
 }

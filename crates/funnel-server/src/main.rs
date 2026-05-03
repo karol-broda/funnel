@@ -14,9 +14,9 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::Router;
 use axum::extract::Request;
 use axum::response::Redirect;
-use axum::Router;
 use clap::Parser;
 use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::EnvFilter;
@@ -24,7 +24,7 @@ use tracing_subscriber::EnvFilter;
 use funnel_core::protocol::QUIC_ALPN;
 
 const QUIC_KEEP_ALIVE: Duration = Duration::from_secs(15);
-const QUIC_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+const QUIC_IDLE_TIMEOUT: Duration = Duration::from_mins(1);
 
 #[derive(Parser)]
 #[command(name = "funnel-server", about = "Funnel tunnel server")]
@@ -78,7 +78,7 @@ struct Cli {
 async fn main() -> anyhow::Result<()> {
     rustls::crypto::ring::default_provider()
         .install_default()
-        .expect("failed to install default crypto provider");
+        .map_err(|_| anyhow::anyhow!("failed to install default crypto provider"))?;
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -99,9 +99,7 @@ async fn main() -> anyhow::Result<()> {
 
         tracing::info!("connected to database");
 
-        sqlx::migrate!("../../migrations")
-            .run(&pool)
-            .await?;
+        sqlx::migrate!("../../migrations").run(&pool).await?;
 
         tracing::info!("database migrations applied");
         Some(pool)
@@ -118,7 +116,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
-    let metrics_handle = metrics::setup();
+    let metrics_handle = metrics::setup()?;
     let state = Arc::new(app::AppState::new(pool, false));
     let router = app::build_router(Arc::clone(&state), metrics_handle);
 
@@ -129,8 +127,10 @@ async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
 
     tracing::info!(addr = %addr, "http server listening");
 
-    let http_server =
-        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>());
+    let http_server = axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    );
 
     tokio::select! {
         res = http_server => { res?; }
@@ -150,11 +150,15 @@ async fn run_with_tls(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("--dns-providers-config required when TLS is enabled"))?;
 
-    let rustls_config =
-        tls::setup(Path::new(&cli.cert_dir), Path::new(config_path), email, cli.acme_staging)
-            .await?;
+    let rustls_config = tls::setup(
+        Path::new(&cli.cert_dir),
+        Path::new(config_path),
+        email,
+        cli.acme_staging,
+    )
+    .await?;
 
-    let metrics_handle = metrics::setup();
+    let metrics_handle = metrics::setup()?;
     let state = Arc::new(app::AppState::new(pool, true));
     let router = app::build_router(Arc::clone(&state), metrics_handle);
 
@@ -216,9 +220,7 @@ fn build_self_signed_quic_config() -> anyhow::Result<quinn::ServerConfig> {
 
     let mut transport = quinn::TransportConfig::default();
     transport.keep_alive_interval(Some(QUIC_KEEP_ALIVE));
-    transport.max_idle_timeout(Some(
-        quinn::IdleTimeout::try_from(QUIC_IDLE_TIMEOUT)?,
-    ));
+    transport.max_idle_timeout(Some(quinn::IdleTimeout::try_from(QUIC_IDLE_TIMEOUT)?));
 
     server_config.transport_config(Arc::new(transport));
 
@@ -262,8 +264,7 @@ fn https_redirect_router(tls_port: u16) -> Router {
         let path = request
             .uri()
             .path_and_query()
-            .map(|pq| pq.as_str())
-            .unwrap_or("/");
+            .map_or("/", axum::http::uri::PathAndQuery::as_str);
 
         let location = if tls_port == 443 {
             format!("https://{host_without_port}{path}")

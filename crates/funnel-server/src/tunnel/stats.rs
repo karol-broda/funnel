@@ -16,7 +16,7 @@ pub struct TunnelStatsSnapshot {
 }
 
 impl TunnelStats {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             bytes_in: AtomicU64::new(0),
             bytes_out: AtomicU64::new(0),
