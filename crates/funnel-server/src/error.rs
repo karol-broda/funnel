@@ -4,6 +4,8 @@ use axum::response::{IntoResponse, Response};
 use funnel_core::tunnel::id::TunnelIdError;
 use serde::Serialize;
 
+use crate::store::StoreError;
+
 #[derive(Debug, Serialize)]
 struct ApiErrorBody {
     error: String,
@@ -17,14 +19,11 @@ pub enum AppError {
     #[error("not found: {0}")]
     NotFound(String),
 
-    #[error("bad request: {0}")]
-    BadRequest(String),
-
     #[error("invalid tunnel id: {0}")]
     InvalidTunnelId(#[from] TunnelIdError),
 
-    #[error("database error")]
-    Database(#[from] sqlx::Error),
+    #[error("store error: {0}")]
+    Store(#[from] StoreError),
 
     #[error("internal error: {0}")]
     Internal(#[from] anyhow::Error),
@@ -36,16 +35,27 @@ impl IntoResponse for AppError {
             Self::TunnelNotFound(_) | Self::NotFound(_) => {
                 (StatusCode::NOT_FOUND, self.to_string())
             }
-            Self::BadRequest(_) | Self::InvalidTunnelId(_) => {
+            Self::InvalidTunnelId(_) => {
                 (StatusCode::BAD_REQUEST, self.to_string())
             }
-            Self::Database(e) => {
-                tracing::error!(error = %e, "database error");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "internal error".to_string(),
-                )
-            }
+            Self::Store(e) => match e {
+                StoreError::NotFound => (StatusCode::NOT_FOUND, "not found".to_string()),
+                StoreError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+                StoreError::Database(db_err) => {
+                    tracing::error!(error = %db_err, "database error");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "internal error".to_string(),
+                    )
+                }
+                StoreError::Other(msg) => {
+                    tracing::error!(error = %msg, "store error");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "internal error".to_string(),
+                    )
+                }
+            },
             Self::Internal(e) => {
                 tracing::error!(error = %e, "internal error");
                 (

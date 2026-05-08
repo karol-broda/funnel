@@ -23,7 +23,8 @@ pub fn prepare_forwarding_headers(
     // append to existing X-Forwarded-For or create new
     match headers.get("x-forwarded-for") {
         Some(existing) if !existing.is_empty() => {
-            let combined = format!("{}, {}", existing[0], client_ip);
+            let all = existing.join(", ");
+            let combined = format!("{all}, {client_ip}");
             headers.insert("x-forwarded-for".to_string(), vec![combined]);
         }
         _ => {
@@ -72,6 +73,20 @@ mod tests {
         let result = prepare_forwarding_headers(&headers, "t.example.com", test_addr(), false);
 
         assert_eq!(result["x-forwarded-for"], vec!["10.0.0.1, 192.168.1.100"]);
+    }
+
+    #[test]
+    fn appends_to_multi_value_forwarded_for() {
+        let mut headers = HeaderMap::new();
+        headers.append("x-forwarded-for", HeaderValue::from_static("10.0.0.1"));
+        headers.append("x-forwarded-for", HeaderValue::from_static("172.16.0.1"));
+
+        let result = prepare_forwarding_headers(&headers, "t.example.com", test_addr(), false);
+
+        assert_eq!(
+            result["x-forwarded-for"],
+            vec!["10.0.0.1, 172.16.0.1, 192.168.1.100"]
+        );
     }
 
     #[test]

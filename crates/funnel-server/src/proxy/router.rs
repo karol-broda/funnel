@@ -5,7 +5,7 @@ use axum::extract::State;
 use axum::http::{Request, Response, StatusCode};
 use tokio_util::io::ReaderStream;
 
-use funnel_core::protocol::request::{RequestMeta, ResponseMeta};
+use funnel_core::protocol::request::{self as proto, RequestMeta, ResponseMeta};
 use funnel_core::tunnel::id::TunnelId;
 
 use super::headers::prepare_forwarding_headers;
@@ -89,19 +89,11 @@ fn extract_subdomain(host: &str) -> Option<&str> {
 }
 
 fn build_response(meta: &ResponseMeta, recv: CountedRecvStream) -> Response<Body> {
-    let mut builder = Response::builder().status(meta.status);
+    let status = meta.http_status().unwrap_or(StatusCode::BAD_GATEWAY);
+    let mut builder = Response::builder().status(status);
 
     if let Some(headers) = builder.headers_mut() {
-        for (name, values) in &meta.headers {
-            for value in values {
-                if let (Ok(name), Ok(value)) = (
-                    axum::http::HeaderName::try_from(name.as_str()),
-                    axum::http::HeaderValue::from_str(value),
-                ) {
-                    headers.append(name, value);
-                }
-            }
-        }
+        *headers = proto::to_header_map(&meta.headers);
     }
 
     let body_stream = ReaderStream::new(recv);

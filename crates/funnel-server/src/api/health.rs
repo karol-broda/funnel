@@ -14,7 +14,7 @@ pub struct HealthResponse {
 
 pub async fn handler(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     Json(HealthResponse {
-        status: "healthy",
-        uptime_secs: state.start_time.elapsed().as_secs(),
+        status: state.health.status(),
+        uptime_secs: state.health.uptime_secs(),
     })
 }

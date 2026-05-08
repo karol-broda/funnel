@@ -1,6 +1,9 @@
+mod acme;
+mod cache;
 pub mod config;
 pub mod manager;
 pub mod provider;
+pub mod redirect;
 
 use std::path::Path;
 use std::sync::Arc;

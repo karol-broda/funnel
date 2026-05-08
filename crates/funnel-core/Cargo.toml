@@ -10,6 +10,7 @@ workspace = true
 base64 = "0.22"
 getrandom = "0.3"
 hex = "0.4"
+http.workspace = true
 nanoid = "0.4"
 rmp-serde.workspace = true
 serde.workspace = true

@@ -8,6 +8,7 @@ use funnel_core::tunnel::id::TunnelId;
 
 use super::connection::ActiveTunnel;
 use super::stats::TunnelStatsSnapshot;
+use crate::store::tunnel_registry::TunnelRegistry;
 
 pub struct TunnelManager {
     tunnels: DashMap<TunnelId, Arc<ActiveTunnel>>,
@@ -61,6 +62,28 @@ impl TunnelManager {
 
     pub fn count(&self) -> usize {
         self.tunnels.len()
+    }
+}
+
+impl TunnelRegistry for TunnelManager {
+    fn insert(&self, id: TunnelId, tunnel: Arc<ActiveTunnel>) -> Result<(), Arc<ActiveTunnel>> {
+        self.insert(id, tunnel)
+    }
+
+    fn remove(&self, id: &TunnelId) -> Option<Arc<ActiveTunnel>> {
+        self.remove(id)
+    }
+
+    fn get(&self, id: &TunnelId) -> Option<Arc<ActiveTunnel>> {
+        self.get(id)
+    }
+
+    fn list(&self) -> Vec<TunnelInfo> {
+        self.list()
+    }
+
+    fn count(&self) -> usize {
+        self.count()
     }
 }
 
