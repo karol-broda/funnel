@@ -99,11 +99,11 @@ impl Drop for TestEnv {
     }
 }
 
-fn free_port() -> Result<u16, std::io::Error> {
+pub fn free_port() -> Result<u16, std::io::Error> {
     Ok(TcpListener::bind("127.0.0.1:0")?.local_addr()?.port())
 }
 
-fn binary_path(name: &str) -> Result<PathBuf, String> {
+pub fn binary_path(name: &str) -> Result<PathBuf, String> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let workspace_root = manifest_dir
         .parent()
@@ -119,7 +119,7 @@ fn binary_path(name: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn log_file(name: &str) -> Result<(File, PathBuf), std::io::Error> {
+pub fn log_file(name: &str) -> Result<(File, PathBuf), std::io::Error> {
     let path = std::env::temp_dir().join(format!("funnel-{name}-{}.log", std::process::id()));
     let file = File::create(&path)?;
     Ok((file, path))
@@ -215,7 +215,7 @@ fn start_client_process(
     Ok((child, log_path))
 }
 
-async fn wait_for_tcp(port: u16) {
+pub async fn wait_for_tcp(port: u16) {
     let deadline = tokio::time::Instant::now() + READY_TIMEOUT;
     loop {
         assert!(

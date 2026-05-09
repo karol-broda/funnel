@@ -69,6 +69,10 @@ struct Cli {
     /// Use Let's Encrypt staging environment
     #[arg(long)]
     acme_staging: bool,
+
+    /// Create a seed API key at startup and print it to stdout
+    #[arg(long)]
+    seed_api_key: bool,
 }
 
 #[tokio::main]
@@ -81,6 +85,7 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
+        .with_writer(std::io::stderr)
         .json()
         .init();
 
@@ -147,6 +152,15 @@ async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
     let metrics_handle = metrics::setup()?;
     let state = build_state(pool, false);
     let router = app::build_router(Arc::clone(&state), metrics_handle);
+
+    if cli.seed_api_key {
+        let (plaintext, _) = state
+            .api_keys
+            .create(uuid::Uuid::nil(), "seed")
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to create seed api key: {e}"))?;
+        println!("{plaintext}");
+    }
 
     let quic_handle = quic::config::spawn_listener(&cli.host, cli.quic_port, Arc::clone(&state))?;
 

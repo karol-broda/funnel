@@ -8,5 +8,6 @@ workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
-reqwest = { workspace = true, features = ["rustls"] }
+reqwest = { workspace = true, features = ["rustls", "json"] }
+serde_json.workspace = true
 axum.workspace = true

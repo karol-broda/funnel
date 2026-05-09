@@ -1,3 +1,4 @@
+mod auth;
 mod harness;
 
 use harness::TestEnv;

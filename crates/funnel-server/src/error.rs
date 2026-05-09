@@ -25,6 +25,9 @@ pub enum AppError {
     #[error("store error: {0}")]
     Store(#[from] StoreError),
 
+    #[error("unauthorized")]
+    Unauthorized,
+
     #[error("internal error: {0}")]
     Internal(#[from] anyhow::Error),
 }
@@ -32,6 +35,7 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {
+            Self::Unauthorized => (StatusCode::UNAUTHORIZED, self.to_string()),
             Self::TunnelNotFound(_) | Self::NotFound(_) => {
                 (StatusCode::NOT_FOUND, self.to_string())
             }

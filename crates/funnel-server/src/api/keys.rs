@@ -6,14 +6,13 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::app::AppState;
+use crate::auth::AuthUser;
 use crate::db::api_keys::ApiKeyView;
 use crate::error::AppError;
 
 #[derive(Deserialize)]
 pub struct CreateKeyRequest {
     pub name: String,
-    // TODO: extract user_id from auth middleware instead
-    pub user_id: Uuid,
 }
 
 #[derive(Serialize)]
@@ -22,19 +21,20 @@ pub struct CreateKeyResponse {
     pub info: ApiKeyView,
 }
 
-/// List all active API keys for a user.
-pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Vec<ApiKeyView>>, AppError> {
-    // TODO: get user_id from auth middleware
-    let _keys = state.api_keys.list_for_user(Uuid::nil()).await?;
-    Ok(Json(vec![]))
+pub async fn list(
+    State(state): State<Arc<AppState>>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<Vec<ApiKeyView>>, AppError> {
+    let keys = state.api_keys.list_for_user(user_id).await?;
+    Ok(Json(keys))
 }
 
-/// Create a new API key.
 pub async fn create(
     State(state): State<Arc<AppState>>,
+    AuthUser(user_id): AuthUser,
     Json(req): Json<CreateKeyRequest>,
 ) -> Result<Json<CreateKeyResponse>, AppError> {
-    let (plaintext, info) = state.api_keys.create(req.user_id, &req.name).await?;
+    let (plaintext, info) = state.api_keys.create(user_id, &req.name).await?;
 
     Ok(Json(CreateKeyResponse {
         key: plaintext,
@@ -42,14 +42,11 @@ pub async fn create(
     }))
 }
 
-/// Revoke an API key.
 pub async fn revoke(
     State(state): State<Arc<AppState>>,
+    AuthUser(user_id): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // TODO: get user_id from auth middleware
-    let user_id = Uuid::nil();
-
     let revoked = state.api_keys.revoke(id, user_id).await?;
     if !revoked {
         return Err(AppError::NotFound("api key not found".into()));
