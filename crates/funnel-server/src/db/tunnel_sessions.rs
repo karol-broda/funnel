@@ -102,8 +102,6 @@ mod tests {
                 email: format!("session-test-{}@example.com", Uuid::now_v7()),
                 name: Some("Session Test".into()),
                 avatar_url: None,
-                provider: "github".into(),
-                provider_id: Uuid::now_v7().to_string(),
             },
         )
         .await

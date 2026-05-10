@@ -17,35 +17,31 @@ impl PgUserStore {
 
 impl UserStore for PgUserStore {
     fn find_by_id(&self, id: Uuid) -> BoxFuture<'_, Result<Option<User>, StoreError>> {
-        Box::pin(async move {
-            Ok(users::find_by_id(&self.pool, id).await?)
-        })
+        Box::pin(async move { Ok(users::find_by_id(&self.pool, id).await?) })
     }
 
     fn find_by_email(&self, email: &str) -> BoxFuture<'_, Result<Option<User>, StoreError>> {
         let email = email.to_string();
-        Box::pin(async move {
-            Ok(users::find_by_email(&self.pool, &email).await?)
-        })
-    }
-
-    fn find_by_provider(&self, provider: &str, provider_id: &str) -> BoxFuture<'_, Result<Option<User>, StoreError>> {
-        let provider = provider.to_string();
-        let provider_id = provider_id.to_string();
-        Box::pin(async move {
-            Ok(users::find_by_provider(&self.pool, &provider, &provider_id).await?)
-        })
+        Box::pin(async move { Ok(users::find_by_email(&self.pool, &email).await?) })
     }
 
     fn create(&self, new_user: NewUser) -> BoxFuture<'_, Result<User, StoreError>> {
-        Box::pin(async move {
-            Ok(users::create(&self.pool, new_user).await?)
-        })
+        Box::pin(async move { Ok(users::create(&self.pool, new_user).await?) })
     }
 
-    fn upsert_from_oauth(&self, new_user: NewUser) -> BoxFuture<'_, Result<User, StoreError>> {
+    fn update_profile(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        avatar_url: Option<&str>,
+    ) -> BoxFuture<'_, Result<User, StoreError>> {
+        let name = name.map(ToString::to_string);
+        let avatar_url = avatar_url.map(ToString::to_string);
         Box::pin(async move {
-            Ok(users::upsert_from_oauth(&self.pool, new_user).await?)
+            Ok(
+                users::update_profile(&self.pool, id, name.as_deref(), avatar_url.as_deref())
+                    .await?,
+            )
         })
     }
 }

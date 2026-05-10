@@ -35,15 +35,6 @@ impl UserStore for InMemoryUserStore {
         })
     }
 
-    fn find_by_provider(&self, provider: &str, provider_id: &str) -> BoxFuture<'_, Result<Option<User>, StoreError>> {
-        let provider = provider.to_string();
-        let provider_id = provider_id.to_string();
-        Box::pin(async move {
-            let users = self.users.read().unwrap_or_else(PoisonError::into_inner);
-            Ok(users.iter().find(|u| u.provider == provider && u.provider_id == provider_id).cloned())
-        })
-    }
-
     fn create(&self, new_user: NewUser) -> BoxFuture<'_, Result<User, StoreError>> {
         Box::pin(async move {
             let now = Utc::now();
@@ -52,8 +43,8 @@ impl UserStore for InMemoryUserStore {
                 email: new_user.email,
                 name: new_user.name,
                 avatar_url: new_user.avatar_url,
-                provider: new_user.provider,
-                provider_id: new_user.provider_id,
+                role: "user".into(),
+                metadata: serde_json::json!({}),
                 created_at: now,
                 updated_at: now,
             };
@@ -65,32 +56,26 @@ impl UserStore for InMemoryUserStore {
         })
     }
 
-    fn upsert_from_oauth(&self, new_user: NewUser) -> BoxFuture<'_, Result<User, StoreError>> {
+    fn update_profile(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        avatar_url: Option<&str>,
+    ) -> BoxFuture<'_, Result<User, StoreError>> {
+        let name = name.map(ToString::to_string);
+        let avatar_url = avatar_url.map(ToString::to_string);
         Box::pin(async move {
             let mut users = self.users.write().unwrap_or_else(PoisonError::into_inner);
-            let result = if let Some(existing) = users.iter_mut().find(|u| u.provider == new_user.provider && u.provider_id == new_user.provider_id) {
-                existing.email = new_user.email;
-                existing.name = new_user.name;
-                existing.avatar_url = new_user.avatar_url;
-                existing.updated_at = Utc::now();
-                existing.clone()
-            } else {
-                let now = Utc::now();
-                let user = User {
-                    id: Uuid::now_v7(),
-                    email: new_user.email,
-                    name: new_user.name,
-                    avatar_url: new_user.avatar_url,
-                    provider: new_user.provider,
-                    provider_id: new_user.provider_id,
-                    created_at: now,
-                    updated_at: now,
-                };
-                users.push(user.clone());
-                user
-            };
+            let user = users
+                .iter_mut()
+                .find(|u| u.id == id)
+                .ok_or(StoreError::NotFound)?;
+            user.name = name;
+            user.avatar_url = avatar_url;
+            user.updated_at = Utc::now();
+            let snapshot = user.clone();
             drop(users);
-            Ok(result)
+            Ok(snapshot)
         })
     }
 }
@@ -104,8 +89,6 @@ mod tests {
             email: email.to_string(),
             name: Some("Test User".to_string()),
             avatar_url: None,
-            provider: "github".to_string(),
-            provider_id: format!("gh_{email}"),
         }
     }
 
@@ -138,41 +121,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn find_by_provider() {
+    async fn update_profile_changes_fields() {
         let store = InMemoryUserStore::new();
-        store.create(make_new_user("c@test.com")).await.unwrap();
+        let user = store.create(make_new_user("c@test.com")).await.unwrap();
 
-        let found = store.find_by_provider("github", "gh_c@test.com").await.unwrap();
-        assert!(found.is_some());
-
-        let missing = store.find_by_provider("github", "gh_nope").await.unwrap();
-        assert!(missing.is_none());
+        let updated = store
+            .update_profile(user.id, Some("New Name"), Some("https://img.test/1.png"))
+            .await
+            .unwrap();
+        assert_eq!(updated.name, Some("New Name".into()));
+        assert_eq!(updated.avatar_url, Some("https://img.test/1.png".into()));
+        assert!(updated.updated_at > user.updated_at);
     }
 
     #[tokio::test]
-    async fn upsert_creates_new_user() {
+    async fn new_user_gets_default_role() {
         let store = InMemoryUserStore::new();
-        let user = store.upsert_from_oauth(make_new_user("d@test.com")).await.unwrap();
-        assert_eq!(user.email, "d@test.com");
-
-        let found = store.find_by_id(user.id).await.unwrap();
-        assert!(found.is_some());
-    }
-
-    #[tokio::test]
-    async fn upsert_updates_existing_user() {
-        let store = InMemoryUserStore::new();
-        let original = store.upsert_from_oauth(make_new_user("e@test.com")).await.unwrap();
-
-        let mut updated_input = make_new_user("new_e@test.com");
-        updated_input.provider = "github".to_string();
-        updated_input.provider_id = "gh_e@test.com".to_string();
-        updated_input.name = Some("Updated Name".to_string());
-
-        let updated = store.upsert_from_oauth(updated_input).await.unwrap();
-        assert_eq!(updated.id, original.id);
-        assert_eq!(updated.email, "new_e@test.com");
-        assert_eq!(updated.name, Some("Updated Name".to_string()));
-        assert!(updated.updated_at > original.updated_at);
+        let user = store.create(make_new_user("d@test.com")).await.unwrap();
+        assert_eq!(user.role, "user");
     }
 }

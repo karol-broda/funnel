@@ -1,3 +1,4 @@
+pub mod account_store;
 pub mod api_key_store;
 pub mod health;
 pub mod memory;
@@ -5,7 +6,6 @@ pub mod pg;
 #[allow(dead_code)]
 pub mod session_recorder;
 pub mod tunnel_registry;
-#[allow(dead_code)]
 pub mod user_store;
 
 use std::fmt;
