@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio_util::io::ReaderStream;
 use tokio_util::sync::CancellationToken;
@@ -12,6 +12,7 @@ use funnel_core::protocol::handshake::{Handshake, HandshakeResponse};
 use funnel_core::protocol::request::RequestMeta;
 use funnel_core::tunnel::id::TunnelId;
 
+use crate::display::{RequestResult, TunnelDisplay};
 use crate::forwarder::Forwarder;
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
@@ -42,7 +43,8 @@ impl TunnelClient {
             .to_string();
 
         let quic_addr = resolve_quic_addr(&host, quic_port)?;
-        let client_config = build_client_config(insecure)?;
+        let skip_verify = insecure || is_loopback(&host, &quic_addr);
+        let client_config = build_client_config(skip_verify)?;
 
         // bind address must match the remote address family
         let bind_addr: SocketAddr = if quic_addr.is_ipv6() {
@@ -65,10 +67,16 @@ impl TunnelClient {
     }
 
     /// connect to the server via quic and run the tunnel until it disconnects.
-    pub async fn run(&self, cancel: CancellationToken) -> anyhow::Result<()> {
+    pub async fn run(
+        &self,
+        cancel: CancellationToken,
+        display: &Arc<TunnelDisplay>,
+    ) -> anyhow::Result<()> {
         let conn = self.connect().await?;
         let forwarder = Arc::new(Forwarder::new(self.local_addr.clone())?);
         let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
+
+        display.set_message("waiting for requests...");
 
         loop {
             tokio::select! {
@@ -84,6 +92,7 @@ impl TunnelClient {
                     let fwd = Arc::clone(&forwarder);
                     let sem = Arc::clone(&semaphore);
                     let cancel = cancel.clone();
+                    let display = Arc::clone(display);
 
                     tokio::spawn(async move {
                         let _permit = tokio::select! {
@@ -94,8 +103,9 @@ impl TunnelClient {
                             () = cancel.cancelled() => return,
                         };
 
-                        if let Err(e) = handle_stream(send, recv, &fwd).await {
-                            tracing::debug!(error = %e, "stream handler error");
+                        match handle_stream(send, recv, &fwd).await {
+                            Ok(result) => display.log_request(&result),
+                            Err(e) => display.println(&format!("stream error: {e}")),
                         }
                     });
                 }
@@ -147,14 +157,12 @@ async fn handle_stream(
     mut send: quinn::SendStream,
     mut recv: quinn::RecvStream,
     forwarder: &Forwarder,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<RequestResult> {
+    let start = Instant::now();
     let meta: RequestMeta = frame::read_meta(&mut recv).await?;
 
-    tracing::debug!(
-        method = %meta.method,
-        path = %meta.path,
-        "received request"
-    );
+    let method = meta.method.clone();
+    let path = meta.path.clone();
 
     // stream body from quic directly to local service (no buffer cap)
     let body_stream = ReaderStream::new(recv);
@@ -166,7 +174,16 @@ async fn handle_stream(
     send.write_all(&resp_body).await?;
     send.finish()?;
 
-    Ok(())
+    Ok(RequestResult {
+        method,
+        path,
+        status: resp_meta.status,
+        duration: start.elapsed(),
+    })
+}
+
+fn is_loopback(host: &str, addr: &SocketAddr) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1") || addr.ip().is_loopback()
 }
 
 fn resolve_quic_addr(host: &str, port: u16) -> anyhow::Result<SocketAddr> {

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
@@ -5,12 +6,13 @@ use url::Url;
 
 use funnel_core::tunnel::id::TunnelId;
 
+use crate::display::TunnelDisplay;
 use crate::tunnel::TunnelClient;
 
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
-pub async fn run(client: &TunnelClient, shutdown: CancellationToken) {
+pub async fn run(client: &TunnelClient, shutdown: CancellationToken, display: &Arc<TunnelDisplay>) {
     let mut attempt: u32 = 0;
 
     loop {
@@ -18,31 +20,29 @@ pub async fn run(client: &TunnelClient, shutdown: CancellationToken) {
             break;
         }
 
-        tracing::info!(attempt = attempt + 1, "connecting to server");
+        display.set_message("connecting to server...");
 
         let run_cancel = shutdown.child_token();
-        match client.run(run_cancel).await {
+        match client.run(run_cancel, display).await {
             Ok(()) => {
                 attempt = 0;
-                tracing::warn!("connection lost, reconnecting");
+                display.println("connection lost, reconnecting...");
             }
             Err(e) => {
-                tracing::error!(error = %e, "connection failed");
+                display.println(&format!("connection failed: {e}"));
             }
         }
 
         let delay = backoff_delay(attempt);
         attempt = attempt.saturating_add(1);
 
-        tracing::info!(delay_secs = delay.as_secs_f64(), "reconnecting");
+        display.set_message(&format!("reconnecting in {}s...", delay.as_secs()));
 
         tokio::select! {
             () = tokio::time::sleep(delay) => {},
             () = shutdown.cancelled() => break,
         }
     }
-
-    tracing::info!("client shut down");
 }
 
 fn backoff_delay(attempt: u32) -> Duration {

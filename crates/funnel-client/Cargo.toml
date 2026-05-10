@@ -10,13 +10,18 @@ workspace = true
 funnel-core.workspace = true
 
 anyhow.workspace = true
+axum.workspace = true
 clap = { workspace = true, features = ["derive"] }
+config_rs = { package = "config", version = "0.15", default-features = false, features = ["toml"] }
 dirs = "6"
+console = "0.15"
 http.workspace = true
+indicatif = "0.17"
 quinn.workspace = true
-reqwest = { workspace = true, features = ["rustls", "stream"] }
+reqwest = { workspace = true, features = ["rustls", "stream", "json"] }
 rustls = { workspace = true, default-features = false, features = ["ring", "std"] }
 serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 toml = "0.8"

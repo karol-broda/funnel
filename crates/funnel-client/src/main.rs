@@ -1,7 +1,14 @@
+mod auth;
 mod config;
+mod display;
 mod forwarder;
+mod keys;
 mod runner;
+mod status;
 mod tunnel;
+mod whoami;
+
+use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 use tokio_util::sync::CancellationToken;
@@ -10,15 +17,22 @@ use tracing_subscriber::EnvFilter;
 use funnel_core::tunnel::id::TunnelId;
 
 #[derive(Parser)]
-#[command(name = "funnel", about = "tunnel client for exposing local services")]
+#[command(
+    name = "funnel",
+    about = "expose local services through secure tunnels"
+)]
 struct Cli {
+    /// context to use (overrides current_context in config)
+    #[arg(long, short, global = true)]
+    context: Option<String>,
+
     #[command(subcommand)]
     command: Command,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// create an http tunnel
+    /// create an http tunnel to a local service
     Http {
         /// local address or port to forward to (e.g. "3000" or "localhost:3000")
         address: String,
@@ -31,46 +45,98 @@ enum Command {
         #[arg(short, long)]
         id: Option<String>,
 
-        /// inlet configuration to use
-        #[arg(long, default_value = "default")]
-        inlet: String,
-
         /// authentication token (overrides config)
         #[arg(short, long)]
         token: Option<String>,
 
-        /// quic port on the server
-        #[arg(long, default_value_t = 4433)]
-        quic_port: u16,
+        /// quic port on the server (overrides config)
+        #[arg(long)]
+        quic_port: Option<u16>,
 
-        /// skip tls certificate verification (for development with self signed certs)
+        /// skip tls certificate verification (for development)
         #[arg(long)]
         insecure: bool,
     },
-    /// manage client configuration
+    /// log in via oauth
+    Login {
+        /// oauth provider name
+        #[arg(long, default_value = "github")]
+        provider: String,
+    },
+    /// log out (clear token for current context)
+    Logout,
+    /// show the currently authenticated user
+    Whoami,
+    /// show active tunnels on the server
+    Status,
+    /// manage api keys
+    Keys {
+        #[command(subcommand)]
+        command: KeysCommand,
+    },
+    /// manage server contexts
+    Context {
+        #[command(subcommand)]
+        command: ContextCommand,
+    },
+    /// view configuration
     Config {
         #[command(subcommand)]
-        action: ConfigAction,
+        command: ConfigCommand,
     },
 }
 
 #[derive(Subcommand)]
-enum ConfigAction {
-    /// save authentication token
-    SetToken {
-        token: String,
-        #[arg(long, default_value = "default")]
-        inlet: String,
+enum KeysCommand {
+    /// list api keys
+    List,
+    /// create a new api key
+    Create {
+        /// name for the new key
+        name: String,
+        /// comma separated scopes (defaults to management,tunnels)
+        #[arg(long)]
+        scopes: Option<String>,
     },
-    /// save server url
-    SetServer {
-        url: String,
-        #[arg(long, default_value = "default")]
-        inlet: String,
+    /// revoke an api key
+    Revoke {
+        /// key id to revoke
+        id: String,
     },
+}
+
+#[derive(Subcommand)]
+enum ContextCommand {
+    /// list all contexts
+    List,
+    /// switch to a different context
+    Use {
+        /// context name to switch to
+        name: String,
+    },
+    /// create a new context
+    Create {
+        /// context name
+        name: String,
+        /// server url
+        #[arg(long)]
+        server: String,
+        /// quic port
+        #[arg(long)]
+        quic_port: Option<u16>,
+    },
+    /// delete a context
+    Delete {
+        /// context name to delete
+        name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigCommand {
     /// show current configuration
     Show,
-    /// show config file path
+    /// print config file path
     Path,
 }
 
@@ -80,52 +146,97 @@ async fn main() -> anyhow::Result<()> {
         .install_default()
         .map_err(|_| anyhow::anyhow!("failed to install default crypto provider"))?;
 
+    let cli = Cli::parse();
+
+    let default_filter = if matches!(cli.command, Command::Http { .. }) {
+        "error"
+    } else {
+        "info"
+    };
+
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter)),
         )
         .init();
 
-    let cli = Cli::parse();
+    let ctx_override = cli.context.as_deref();
 
     match cli.command {
         Command::Http {
             address,
             server,
             id,
-            inlet,
             token,
             quic_port,
             insecure,
-        } => run_http(address, server, id, inlet, token, quic_port, insecure).await?,
-        Command::Config { action } => run_config(action)?,
+        } => {
+            run_http(
+                ctx_override,
+                address,
+                server,
+                id,
+                token,
+                quic_port,
+                insecure,
+            )
+            .await
+        }
+        Command::Login { provider } => {
+            let cfg = config::load()?;
+            let name = ctx_override.unwrap_or(&cfg.current_context).to_string();
+            auth::login(&name, &provider).await
+        }
+        Command::Logout => {
+            let cfg = config::load()?;
+            let name = ctx_override.unwrap_or(&cfg.current_context).to_string();
+            config::clear_token(&name)?;
+            println!("logged out from context '{name}'");
+            Ok(())
+        }
+        Command::Whoami => {
+            let cfg = config::load()?;
+            let (resolved, token) = config::resolve_authenticated(&cfg, ctx_override)?;
+            whoami::run(&resolved.server, &token, &resolved.name).await
+        }
+        Command::Status => {
+            let cfg = config::load()?;
+            let (resolved, token) = config::resolve_authenticated(&cfg, ctx_override)?;
+            status::run(&resolved.server, &token).await
+        }
+        Command::Keys { command } => {
+            let cfg = config::load()?;
+            let (resolved, token) = config::resolve_authenticated(&cfg, ctx_override)?;
+            match command {
+                KeysCommand::List => keys::list(&resolved.server, &token).await,
+                KeysCommand::Create { name, scopes } => {
+                    keys::create(&resolved.server, &token, &name, scopes.as_deref()).await
+                }
+                KeysCommand::Revoke { id } => keys::revoke(&resolved.server, &token, &id).await,
+            }
+        }
+        Command::Context { command } => run_context(command),
+        Command::Config { command } => run_config(&command),
     }
-
-    Ok(())
 }
 
+#[allow(clippy::fn_params_excessive_bools)]
 async fn run_http(
+    ctx_override: Option<&str>,
     address: String,
     server_flag: Option<String>,
     id_flag: Option<String>,
-    inlet_name: String,
     token_flag: Option<String>,
-    quic_port: u16,
+    quic_port_flag: Option<u16>,
     insecure: bool,
 ) -> anyhow::Result<()> {
     let local_addr = normalize_address(&address);
 
-    let cfg = match config::load() {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to load config, using defaults");
-            config::Config::default()
-        }
-    };
-    let inlet = config::get_inlet(&cfg, &inlet_name);
+    let cfg = config::load().unwrap_or_default();
+    let resolved = config::resolve(&cfg, ctx_override).ok();
 
     let server_url = server_flag
-        .or_else(|| inlet.map(|i| i.server.clone()))
+        .or_else(|| resolved.as_ref().map(|r| r.server.clone()))
         .filter(|s| !s.is_empty())
         .map(|s| {
             if s.contains("://") {
@@ -136,25 +247,32 @@ async fn run_http(
         })
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "no server configured. use --server or run: funnel config set-server <url>"
+                "no server configured. use --server or run: funnel context create default --server <url>"
             )
         })?;
 
-    let token = token_flag.or_else(|| inlet.and_then(|i| i.token.clone()));
+    let token = token_flag.or_else(|| resolved.as_ref().and_then(|r| r.token.clone()));
+    let quic_port = quic_port_flag.unwrap_or_else(|| {
+        resolved
+            .as_ref()
+            .map_or(config::DEFAULT_QUIC_PORT, |r| r.quic_port)
+    });
 
     let tunnel_id = match id_flag {
         Some(raw) => TunnelId::new(raw)?,
         None => TunnelId::generate(),
     };
 
-    if let Some(public_url) = runner::build_public_url(&server_url, &tunnel_id) {
-        tracing::info!(
-            tunnel_id = %tunnel_id,
-            local = %local_addr,
-            public_url = %public_url,
-            "starting tunnel"
-        );
-    }
+    let public_url =
+        runner::build_public_url(&server_url, &tunnel_id).unwrap_or_else(|| format!("<unknown>"));
+
+    println!("funnel\n");
+    println!("  public url  {public_url}");
+    println!("  forwarding  {local_addr}");
+    println!("  tunnel id   {tunnel_id}");
+    println!();
+
+    let display = Arc::new(display::TunnelDisplay::new());
 
     let client = tunnel::TunnelClient::new(
         tunnel_id,
@@ -170,13 +288,82 @@ async fn run_http(
 
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.ok();
-        tracing::info!("received shutdown signal");
         shutdown_signal.cancel();
     });
 
-    runner::run(&client, shutdown).await;
+    runner::run(&client, shutdown, &display).await;
+
+    display.finish();
 
     Ok(())
+}
+
+fn run_context(command: ContextCommand) -> anyhow::Result<()> {
+    match command {
+        ContextCommand::List => {
+            let cfg = config::load()?;
+            if cfg.contexts.is_empty() {
+                println!("no contexts configured");
+                println!("  create one with: funnel context create <name> --server <url>");
+                return Ok(());
+            }
+            for (name, ctx) in &cfg.contexts {
+                let marker = if name == &cfg.current_context {
+                    " *"
+                } else {
+                    ""
+                };
+                let token_status = if ctx.token.is_some() {
+                    "authenticated"
+                } else {
+                    "no token"
+                };
+                println!("{name}{marker}");
+                println!("  server: {}", ctx.server);
+                println!("  status: {token_status}");
+                if ctx.quic_port != config::DEFAULT_QUIC_PORT {
+                    println!("  quic:   {}", ctx.quic_port);
+                }
+                println!();
+            }
+            Ok(())
+        }
+        ContextCommand::Use { name } => {
+            config::set_current_context(&name)?;
+            println!("switched to context '{name}'");
+            Ok(())
+        }
+        ContextCommand::Create {
+            name,
+            server,
+            quic_port,
+        } => {
+            config::create_context(&name, &server, quic_port)?;
+            println!("created context '{name}' ({server})");
+            Ok(())
+        }
+        ContextCommand::Delete { name } => {
+            config::delete_context(&name)?;
+            println!("deleted context '{name}'");
+            Ok(())
+        }
+    }
+}
+
+fn run_config(command: &ConfigCommand) -> anyhow::Result<()> {
+    match command {
+        ConfigCommand::Show => {
+            let cfg = config::load()?;
+            let content = toml::to_string_pretty(&cfg)?;
+            println!("# {}\n", config::config_path().display());
+            println!("{content}");
+            Ok(())
+        }
+        ConfigCommand::Path => {
+            println!("{}", config::config_path().display());
+            Ok(())
+        }
+    }
 }
 
 fn normalize_address(addr: &str) -> String {
@@ -185,47 +372,6 @@ fn normalize_address(addr: &str) -> String {
     } else {
         format!("localhost:{addr}")
     }
-}
-
-fn run_config(action: ConfigAction) -> anyhow::Result<()> {
-    match action {
-        ConfigAction::SetToken { token, inlet } => {
-            config::set_token(&inlet, &token)?;
-            println!("token saved to inlet \"{inlet}\"");
-            println!("  config: {}", config::config_path().display());
-        }
-        ConfigAction::SetServer { url, inlet } => {
-            config::set_server(&inlet, &url)?;
-            println!("server saved to inlet \"{inlet}\"");
-            println!("  config: {}", config::config_path().display());
-        }
-        ConfigAction::Show => {
-            let cfg = config::load()?;
-            println!("config: {}\n", config::config_path().display());
-            if cfg.inlets.is_empty() {
-                println!("no inlets configured.");
-            } else {
-                for (name, inlet) in &cfg.inlets {
-                    println!("[{name}]");
-                    if !inlet.server.is_empty() {
-                        println!("  server: {}", inlet.server);
-                    }
-                    if let Some(domain) = &inlet.domain {
-                        println!("  domain: {domain}");
-                    }
-                    if let Some(token) = &inlet.token {
-                        let visible = &token[..token.len().min(10)];
-                        println!("  token:  {visible}...");
-                    }
-                    println!();
-                }
-            }
-        }
-        ConfigAction::Path => {
-            println!("{}", config::config_path().display());
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

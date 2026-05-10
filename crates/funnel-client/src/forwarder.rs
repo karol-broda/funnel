@@ -33,10 +33,7 @@ impl Forwarder {
     pub async fn forward(&self, meta: RequestMeta, body: reqwest::Body) -> (ResponseMeta, Vec<u8>) {
         match self.try_forward(&meta, body).await {
             Ok(resp) => resp,
-            Err(e) => {
-                tracing::error!(error = %e, method = %meta.method, path = %meta.path, "forwarding failed");
-                error_response(502, &format!("local service error: {e}"))
-            }
+            Err(e) => error_response(502, &format!("local service error: {e}")),
         }
     }
 
