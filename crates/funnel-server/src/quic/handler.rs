@@ -15,6 +15,9 @@ pub enum ConnectionError {
 
     #[error("tunnel id conflict: {0}")]
     Conflict(String),
+
+    #[error("auth error: {0}")]
+    Auth(String),
 }
 
 pub async fn handle_connection(
@@ -28,6 +31,27 @@ pub async fn handle_connection(
 
     let handshake: Handshake = frame::read_meta(&mut recv).await?;
     let tunnel_id = handshake.tunnel_id;
+
+    // validate auth token
+    let token = handshake
+        .token
+        .as_deref()
+        .ok_or_else(|| ConnectionError::Auth("missing token".into()))?;
+
+    let api_key = state
+        .api_keys
+        .validate(token)
+        .await
+        .map_err(|e| ConnectionError::Auth(format!("validation failed: {e}")))?
+        .ok_or_else(|| ConnectionError::Auth("invalid token".into()))?;
+
+    if !api_key.has_scope("tunnels") {
+        let resp = HandshakeResponse::rejected("token missing tunnels scope");
+        let _ = frame::write_meta(&mut send, &resp).await;
+        return Err(ConnectionError::Auth("missing tunnels scope".into()));
+    }
+
+    let user_id = api_key.user_id;
 
     let tunnel = Arc::new(ActiveTunnel::new(tunnel_id.clone(), conn.clone()));
 
@@ -43,10 +67,19 @@ pub async fn handle_connection(
 
     frame::write_meta(&mut send, &HandshakeResponse::ok()).await?;
 
-    tracing::info!(tunnel_id = %tunnel_id, "tunnel connected via quic");
+    tracing::info!(tunnel_id = %tunnel_id, user_id = %user_id, "tunnel connected via quic");
 
     metrics::gauge!("funnel_tunnels_active").increment(1.0);
     metrics::counter!("funnel_tunnels_total").increment(1);
+
+    let client_ip = conn.remote_address();
+    let ip_network: Option<ipnetwork::IpNetwork> = Some(client_ip.ip().into());
+
+    let session = state
+        .sessions
+        .record_connect(user_id, tunnel_id.as_ref(), ip_network)
+        .await
+        .ok();
 
     // wait until the connection closes (control stream EOF or transport error)
     let mut buf = [0u8; 1];
@@ -58,6 +91,18 @@ pub async fn handle_connection(
     let stats = tunnel.stats();
     state.tunnels.remove(&tunnel_id);
 
+    if let Some(session) = session {
+        let _ = state
+            .sessions
+            .record_disconnect(
+                session.id,
+                i64::try_from(stats.bytes_in).unwrap_or(i64::MAX),
+                i64::try_from(stats.bytes_out).unwrap_or(i64::MAX),
+                i64::try_from(stats.requests).unwrap_or(i64::MAX),
+            )
+            .await;
+    }
+
     let session_secs = tunnel.connected_at().elapsed().as_secs_f64();
 
     metrics::gauge!("funnel_tunnels_active").decrement(1.0);
@@ -65,6 +110,7 @@ pub async fn handle_connection(
 
     tracing::info!(
         tunnel_id = %tunnel_id,
+        user_id = %user_id,
         bytes_in = stats.bytes_in,
         bytes_out = stats.bytes_out,
         requests = stats.requests,
