@@ -5,21 +5,61 @@ use serde::{Deserialize, Serialize};
 
 const CONFIG_DIR: &str = "funnel";
 const CONFIG_FILE: &str = "config.toml";
+pub const DEFAULT_QUIC_PORT: u16 = 4433;
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Config {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunnelConfig {
+    #[serde(default = "default_context_name")]
+    pub current_context: String,
     #[serde(default)]
-    pub inlets: HashMap<String, Inlet>,
+    pub contexts: HashMap<String, Context>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Inlet {
+impl Default for FunnelConfig {
+    fn default() -> Self {
+        Self {
+            current_context: default_context_name(),
+            contexts: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Context {
     #[serde(default)]
     pub server: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub domain: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub domain: Option<String>,
+    #[serde(default = "default_quic_port")]
+    pub quic_port: u16,
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Self {
+            server: String::new(),
+            token: None,
+            domain: None,
+            quic_port: DEFAULT_QUIC_PORT,
+        }
+    }
+}
+
+fn default_context_name() -> String {
+    "default".into()
+}
+
+const fn default_quic_port() -> u16 {
+    DEFAULT_QUIC_PORT
+}
+
+pub struct ResolvedContext {
+    pub name: String,
+    pub server: String,
+    pub token: Option<String>,
+    pub quic_port: u16,
 }
 
 pub fn config_path() -> PathBuf {
@@ -29,17 +69,25 @@ pub fn config_path() -> PathBuf {
     PathBuf::from(CONFIG_FILE)
 }
 
-pub fn load() -> anyhow::Result<Config> {
+pub fn load() -> anyhow::Result<FunnelConfig> {
     let path = config_path();
-    if !path.exists() {
-        return Ok(Config::default());
+
+    let mut builder = config_rs::Config::builder().set_default("current_context", "default")?;
+
+    if path.exists() {
+        builder = builder.add_source(config_rs::File::from(path));
     }
-    let content = std::fs::read_to_string(&path)?;
-    let config: Config = toml::from_str(&content)?;
+
+    if let Ok(ctx) = std::env::var("FUNNEL_CONTEXT") {
+        builder = builder.set_override("current_context", ctx)?;
+    }
+
+    let settings = builder.build()?;
+    let config: FunnelConfig = settings.try_deserialize()?;
     Ok(config)
 }
 
-pub fn save(config: &Config) -> anyhow::Result<()> {
+pub fn save(config: &FunnelConfig) -> anyhow::Result<()> {
     let path = config_path();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -47,7 +95,6 @@ pub fn save(config: &Config) -> anyhow::Result<()> {
     let content = toml::to_string_pretty(config)?;
     std::fs::write(&path, content)?;
 
-    // restrict permissions on unix (file contains tokens)
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -57,21 +104,111 @@ pub fn save(config: &Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn get_inlet<'a>(config: &'a Config, name: &str) -> Option<&'a Inlet> {
-    config.inlets.get(name)
+/// resolve the active context, applying env var overrides for server and token
+pub fn resolve(
+    config: &FunnelConfig,
+    context_override: Option<&str>,
+) -> anyhow::Result<ResolvedContext> {
+    let name = context_override.unwrap_or(&config.current_context);
+
+    let ctx = config.contexts.get(name).ok_or_else(|| {
+        anyhow::anyhow!(
+            "context '{name}' not found, run: funnel context create {name} --server <url>"
+        )
+    })?;
+
+    let server = std::env::var("FUNNEL_SERVER").unwrap_or_else(|_| ctx.server.clone());
+
+    let token = std::env::var("FUNNEL_TOKEN")
+        .ok()
+        .or_else(|| ctx.token.clone());
+
+    if server.is_empty() {
+        anyhow::bail!("server not configured for context '{name}'");
+    }
+
+    Ok(ResolvedContext {
+        name: name.to_string(),
+        server,
+        token,
+        quic_port: ctx.quic_port,
+    })
 }
 
-pub fn set_token(inlet_name: &str, token: &str) -> anyhow::Result<()> {
+/// resolve context and require a valid token
+pub fn resolve_authenticated(
+    config: &FunnelConfig,
+    context_override: Option<&str>,
+) -> anyhow::Result<(ResolvedContext, String)> {
+    let resolved = resolve(config, context_override)?;
+    let token = resolved.token.clone().ok_or_else(|| {
+        anyhow::anyhow!(
+            "not logged in for context '{}', run: funnel login",
+            resolved.name
+        )
+    })?;
+    Ok((resolved, token))
+}
+
+pub fn set_token(context_name: &str, token: &str) -> anyhow::Result<()> {
     let mut config = load()?;
-    let inlet = config.inlets.entry(inlet_name.to_string()).or_default();
-    inlet.token = Some(token.to_string());
+    let ctx = config.contexts.entry(context_name.to_string()).or_default();
+    ctx.token = Some(token.to_string());
     save(&config)
 }
 
-pub fn set_server(inlet_name: &str, server: &str) -> anyhow::Result<()> {
+pub fn clear_token(context_name: &str) -> anyhow::Result<()> {
     let mut config = load()?;
-    let inlet = config.inlets.entry(inlet_name.to_string()).or_default();
-    inlet.server = server.to_string();
+    let ctx = config
+        .contexts
+        .get_mut(context_name)
+        .ok_or_else(|| anyhow::anyhow!("context '{context_name}' not found"))?;
+    ctx.token = None;
+    save(&config)
+}
+
+pub fn set_current_context(name: &str) -> anyhow::Result<()> {
+    let mut config = load()?;
+    if !config.contexts.contains_key(name) {
+        anyhow::bail!("context '{name}' does not exist");
+    }
+    config.current_context = name.to_string();
+    save(&config)
+}
+
+pub fn create_context(name: &str, server: &str, quic_port: Option<u16>) -> anyhow::Result<()> {
+    let mut config = load()?;
+    if config.contexts.contains_key(name) {
+        anyhow::bail!("context '{name}' already exists");
+    }
+    config.contexts.insert(
+        name.to_string(),
+        Context {
+            server: server.to_string(),
+            quic_port: quic_port.unwrap_or(DEFAULT_QUIC_PORT),
+            ..Default::default()
+        },
+    );
+    // first context becomes the current one automatically
+    if config.contexts.len() == 1 {
+        config.current_context = name.to_string();
+    }
+    save(&config)
+}
+
+pub fn delete_context(name: &str) -> anyhow::Result<()> {
+    let mut config = load()?;
+    if config.contexts.remove(name).is_none() {
+        anyhow::bail!("context '{name}' does not exist");
+    }
+    if config.current_context == name {
+        config.current_context = config
+            .contexts
+            .keys()
+            .next()
+            .cloned()
+            .unwrap_or_else(default_context_name);
+    }
     save(&config)
 }
 
@@ -80,47 +217,88 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_config_has_no_inlets() {
-        let config = Config::default();
-        assert!(config.inlets.is_empty());
+    fn default_config_has_no_contexts() {
+        let config = FunnelConfig::default();
+        assert!(config.contexts.is_empty());
+        assert_eq!(config.current_context, "default");
     }
 
-    type TestResult = Result<(), Box<dyn std::error::Error>>;
-
     #[test]
-    fn roundtrip_toml() -> TestResult {
-        let mut config = Config::default();
-        config.inlets.insert(
+    fn roundtrip_toml() {
+        let mut config = FunnelConfig::default();
+        config.contexts.insert(
             "default".to_string(),
-            Inlet {
+            Context {
                 server: "https://tunnel.example.com".to_string(),
-                domain: None,
-                token: Some("sk_test123".to_string()),
+                token: Some("fnl_test123".to_string()),
+                ..Default::default()
             },
         );
 
-        let serialized = toml::to_string_pretty(&config)?;
-        let parsed: Config = toml::from_str(&serialized)?;
+        let serialized = toml::to_string_pretty(&config).expect("serialize");
+        let parsed: FunnelConfig = toml::from_str(&serialized).expect("deserialize");
 
-        let inlet = parsed
-            .inlets
-            .get("default")
-            .ok_or("expected default inlet")?;
-        assert_eq!(inlet.server, "https://tunnel.example.com");
-        assert_eq!(inlet.token.as_deref(), Some("sk_test123"));
-        assert!(inlet.domain.is_none());
-        Ok(())
-    }
-
-    #[test]
-    fn get_inlet_returns_none_for_missing() {
-        let config = Config::default();
-        assert!(get_inlet(&config, "default").is_none());
+        let ctx = parsed.contexts.get("default").expect("default context");
+        assert_eq!(ctx.server, "https://tunnel.example.com");
+        assert_eq!(ctx.token.as_deref(), Some("fnl_test123"));
+        assert_eq!(ctx.quic_port, DEFAULT_QUIC_PORT);
     }
 
     #[test]
     fn config_path_is_not_empty() {
         let path = config_path();
         assert!(!path.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn resolve_missing_context_errors() {
+        let config = FunnelConfig::default();
+        assert!(resolve(&config, None).is_err());
+    }
+
+    #[test]
+    fn resolve_uses_current_context() {
+        let mut config = FunnelConfig::default();
+        config.contexts.insert(
+            "default".to_string(),
+            Context {
+                server: "https://example.com".to_string(),
+                token: Some("tok".to_string()),
+                ..Default::default()
+            },
+        );
+
+        let resolved = resolve(&config, None).expect("resolve");
+        assert_eq!(resolved.name, "default");
+        assert_eq!(resolved.server, "https://example.com");
+    }
+
+    #[test]
+    fn resolve_override_context() {
+        let mut config = FunnelConfig::default();
+        config.contexts.insert(
+            "staging".to_string(),
+            Context {
+                server: "https://staging.example.com".to_string(),
+                ..Default::default()
+            },
+        );
+
+        let resolved = resolve(&config, Some("staging")).expect("resolve");
+        assert_eq!(resolved.name, "staging");
+        assert_eq!(resolved.server, "https://staging.example.com");
+    }
+
+    #[test]
+    fn resolve_authenticated_requires_token() {
+        let mut config = FunnelConfig::default();
+        config.contexts.insert(
+            "default".to_string(),
+            Context {
+                server: "https://example.com".to_string(),
+                ..Default::default()
+            },
+        );
+        assert!(resolve_authenticated(&config, None).is_err());
     }
 }
