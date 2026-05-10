@@ -70,7 +70,7 @@ pub async fn handle_tunnel_request(
     }
 }
 
-fn extract_subdomain(host: &str) -> Option<&str> {
+pub fn extract_subdomain(host: &str) -> Option<&str> {
     let host = host.split(':').next().unwrap_or(host);
 
     let dot = host.find('.')?;

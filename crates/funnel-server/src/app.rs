@@ -1,14 +1,23 @@
 use std::sync::Arc;
 
 use axum::Router;
+use axum::body::Body;
+use axum::extract::State;
+use axum::http::Request;
+use axum::middleware::{self, Next};
+use axum::response::Response;
 use axum::routing::get;
 use metrics_exporter_prometheus::PrometheusHandle;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
+use funnel_core::tunnel::id::TunnelId;
+
 use crate::api;
+use crate::auth::oauth::OAuthState;
 use crate::metrics;
 use crate::proxy;
+use crate::store::account_store::AccountStore;
 use crate::store::api_key_store::ApiKeyStore;
 use crate::store::health::HealthReporter;
 use crate::store::session_recorder::SessionRecorder;
@@ -18,12 +27,12 @@ use crate::store::user_store::UserStore;
 pub struct AppState {
     pub tunnels: Arc<dyn TunnelRegistry>,
     pub api_keys: Arc<dyn ApiKeyStore>,
-    #[allow(dead_code)]
     pub users: Arc<dyn UserStore>,
-    #[allow(dead_code)]
+    pub accounts: Arc<dyn AccountStore>,
     pub sessions: Arc<dyn SessionRecorder>,
     pub health: Arc<dyn HealthReporter>,
     pub is_tls: bool,
+    pub oauth_state: Option<Arc<OAuthState>>,
 }
 
 pub fn build_router(state: Arc<AppState>, metrics_handle: PrometheusHandle) -> Router {
@@ -36,12 +45,45 @@ pub fn build_router(state: Arc<AppState>, metrics_handle: PrometheusHandle) -> R
         )
         .route("/keys", get(api::keys::list).post(api::keys::create))
         .route("/keys/{id}", axum::routing::delete(api::keys::revoke))
+        .route("/me", get(api::me::handler))
+        .route("/accounts", get(api::accounts::list))
         .route("/metrics", get(metrics::handler).with_state(metrics_handle));
+
+    let auth_routes = Router::new()
+        .route("/{provider}/authorize", get(api::oauth::authorize))
+        .route("/{provider}/callback", get(api::oauth::callback));
 
     Router::new()
         .nest("/api", api_routes)
+        .nest("/auth", auth_routes)
         .fallback(proxy::router::handle_tunnel_request)
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            tunnel_routing,
+        ))
         .with_state(state)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
+}
+
+/// if the first label of the host header matches a registered tunnel,
+/// route directly to the tunnel proxy, bypassing api/auth routes
+async fn tunnel_routing(
+    State(state): State<Arc<AppState>>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
+    let is_tunnel = request
+        .headers()
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .and_then(proxy::router::extract_subdomain)
+        .and_then(|sub| TunnelId::new(sub).ok())
+        .is_some_and(|id| state.tunnels.get(&id).is_some());
+
+    if is_tunnel {
+        proxy::router::handle_tunnel_request(State(state), request).await
+    } else {
+        next.run(request).await
+    }
 }
