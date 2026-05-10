@@ -21,8 +21,14 @@ impl InMemoryApiKeyStore {
 }
 
 impl ApiKeyStore for InMemoryApiKeyStore {
-    fn create(&self, user_id: Uuid, name: &str) -> BoxFuture<'_, Result<(String, ApiKeyView), StoreError>> {
+    fn create(
+        &self,
+        user_id: Uuid,
+        name: &str,
+        scopes: &serde_json::Value,
+    ) -> BoxFuture<'_, Result<(String, ApiKeyView), StoreError>> {
         let name = name.to_string();
+        let scopes = scopes.clone();
         Box::pin(async move {
             let plaintext = auth::generate_api_key()
                 .map_err(|e| StoreError::Other(format!("failed to generate api key: {e}")))?;
@@ -35,6 +41,7 @@ impl ApiKeyStore for InMemoryApiKeyStore {
                 name: name.clone(),
                 key_hash: hash,
                 key_prefix: prefix.as_ref().to_string(),
+                scopes,
                 created_at: Utc::now(),
                 revoked_at: None,
             };
@@ -42,8 +49,13 @@ impl ApiKeyStore for InMemoryApiKeyStore {
             let view = {
                 let mut keys = self.keys.write().unwrap_or_else(PoisonError::into_inner);
 
-                if keys.iter().any(|k| k.user_id == user_id && k.name == name && k.revoked_at.is_none()) {
-                    return Err(StoreError::Conflict(format!("api key name already exists: {name}")));
+                if keys
+                    .iter()
+                    .any(|k| k.user_id == user_id && k.name == name && k.revoked_at.is_none())
+                {
+                    return Err(StoreError::Conflict(format!(
+                        "api key name already exists: {name}"
+                    )));
                 }
 
                 let view = ApiKeyView::from(key.clone());
@@ -59,7 +71,10 @@ impl ApiKeyStore for InMemoryApiKeyStore {
         let hash = auth::hash_token(plaintext);
         Box::pin(async move {
             let keys = self.keys.read().unwrap_or_else(PoisonError::into_inner);
-            Ok(keys.iter().find(|k| k.key_hash == hash && k.revoked_at.is_none()).cloned())
+            Ok(keys
+                .iter()
+                .find(|k| k.key_hash == hash && k.revoked_at.is_none())
+                .cloned())
         })
     }
 
@@ -78,7 +93,10 @@ impl ApiKeyStore for InMemoryApiKeyStore {
     fn revoke(&self, key_id: Uuid, user_id: Uuid) -> BoxFuture<'_, Result<bool, StoreError>> {
         Box::pin(async move {
             let mut keys = self.keys.write().unwrap_or_else(PoisonError::into_inner);
-            if let Some(key) = keys.iter_mut().find(|k| k.id == key_id && k.user_id == user_id && k.revoked_at.is_none()) {
+            if let Some(key) = keys
+                .iter_mut()
+                .find(|k| k.id == key_id && k.user_id == user_id && k.revoked_at.is_none())
+            {
                 key.revoked_at = Some(Utc::now());
                 Ok(true)
             } else {
@@ -91,6 +109,7 @@ impl ApiKeyStore for InMemoryApiKeyStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::api_keys::default_scopes;
 
     fn user_id() -> Uuid {
         Uuid::now_v7()
@@ -101,7 +120,10 @@ mod tests {
         let store = InMemoryApiKeyStore::new();
         let uid = user_id();
 
-        let (plaintext, view) = store.create(uid, "test-key").await.unwrap();
+        let (plaintext, view) = store
+            .create(uid, "test-key", &default_scopes())
+            .await
+            .unwrap();
         assert_eq!(view.name, "test-key");
 
         let found = store.validate(&plaintext).await.unwrap();
@@ -121,8 +143,8 @@ mod tests {
         let store = InMemoryApiKeyStore::new();
         let uid = user_id();
 
-        store.create(uid, "dup").await.unwrap();
-        let result = store.create(uid, "dup").await;
+        store.create(uid, "dup", &default_scopes()).await.unwrap();
+        let result = store.create(uid, "dup", &default_scopes()).await;
         assert!(matches!(result, Err(StoreError::Conflict(_))));
     }
 
@@ -132,9 +154,9 @@ mod tests {
         let uid1 = user_id();
         let uid2 = user_id();
 
-        store.create(uid1, "a").await.unwrap();
-        store.create(uid1, "b").await.unwrap();
-        store.create(uid2, "c").await.unwrap();
+        store.create(uid1, "a", &default_scopes()).await.unwrap();
+        store.create(uid1, "b", &default_scopes()).await.unwrap();
+        store.create(uid2, "c", &default_scopes()).await.unwrap();
 
         let list = store.list_for_user(uid1).await.unwrap();
         assert_eq!(list.len(), 2);
@@ -146,7 +168,10 @@ mod tests {
         let store = InMemoryApiKeyStore::new();
         let uid = user_id();
 
-        let (plaintext, view) = store.create(uid, "to-revoke").await.unwrap();
+        let (plaintext, view) = store
+            .create(uid, "to-revoke", &default_scopes())
+            .await
+            .unwrap();
         let revoked = store.revoke(view.id, uid).await.unwrap();
         assert!(revoked);
 
@@ -163,7 +188,7 @@ mod tests {
         let uid = user_id();
         let other = user_id();
 
-        let (_plaintext, view) = store.create(uid, "key").await.unwrap();
+        let (_plaintext, view) = store.create(uid, "key", &default_scopes()).await.unwrap();
         let revoked = store.revoke(view.id, other).await.unwrap();
         assert!(!revoked);
     }
@@ -173,10 +198,24 @@ mod tests {
         let store = InMemoryApiKeyStore::new();
         let uid = user_id();
 
-        let (_plaintext, view) = store.create(uid, "reuse").await.unwrap();
+        let (_plaintext, view) = store.create(uid, "reuse", &default_scopes()).await.unwrap();
         store.revoke(view.id, uid).await.unwrap();
 
-        let result = store.create(uid, "reuse").await;
+        let result = store.create(uid, "reuse", &default_scopes()).await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn scopes_are_preserved() {
+        let store = InMemoryApiKeyStore::new();
+        let uid = user_id();
+        let scopes = serde_json::json!(["tunnels"]);
+
+        let (plaintext, view) = store.create(uid, "tunnel-only", &scopes).await.unwrap();
+        assert_eq!(view.scopes, scopes);
+
+        let key = store.validate(&plaintext).await.unwrap().unwrap();
+        assert!(key.has_scope("tunnels"));
+        assert!(!key.has_scope("management"));
     }
 }

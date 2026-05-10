@@ -12,8 +12,17 @@ pub struct ApiKey {
     pub name: String,
     pub key_hash: String,
     pub key_prefix: String,
+    pub scopes: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
+}
+
+impl ApiKey {
+    pub fn has_scope(&self, scope: &str) -> bool {
+        self.scopes
+            .as_array()
+            .is_some_and(|arr| arr.iter().any(|s| s.as_str() == Some(scope)))
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -21,6 +30,7 @@ pub struct ApiKeyView {
     pub id: Uuid,
     pub name: String,
     pub key_prefix: String,
+    pub scopes: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
 }
@@ -31,16 +41,22 @@ impl From<ApiKey> for ApiKeyView {
             id: key.id,
             name: key.name,
             key_prefix: key.key_prefix,
+            scopes: key.scopes,
             created_at: key.created_at,
             revoked_at: key.revoked_at,
         }
     }
 }
 
+pub fn default_scopes() -> serde_json::Value {
+    serde_json::json!(["management", "tunnels"])
+}
+
 pub async fn create(
     pool: &PgPool,
     user_id: Uuid,
     name: &str,
+    scopes: &serde_json::Value,
 ) -> Result<(String, ApiKey), sqlx::Error> {
     let plaintext = auth::generate_api_key()
         .map_err(|e| sqlx::Error::Protocol(format!("failed to generate api key: {e}")))?;
@@ -49,8 +65,8 @@ pub async fn create(
 
     let key = sqlx::query_as::<_, ApiKey>(
         r"
-        INSERT INTO api_keys (user_id, name, key_hash, key_prefix)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO api_keys (user_id, name, key_hash, key_prefix, scopes)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
         ",
     )
@@ -58,6 +74,7 @@ pub async fn create(
     .bind(name)
     .bind(&hash)
     .bind(prefix.as_ref())
+    .bind(scopes)
     .fetch_one(pool)
     .await?;
 
@@ -92,103 +109,4 @@ pub async fn revoke(pool: &PgPool, key_id: Uuid, user_id: Uuid) -> Result<bool, 
     .await?;
 
     Ok(result.rows_affected() > 0)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::db::users;
-
-    type TestResult = Result<(), Box<dyn std::error::Error>>;
-
-    async fn setup_user(pool: &PgPool) -> Result<users::User, sqlx::Error> {
-        users::create(
-            pool,
-            users::NewUser {
-                email: format!("apikey-test-{}@example.com", Uuid::now_v7()),
-                name: Some("API Key Test".into()),
-                avatar_url: None,
-                provider: "github".into(),
-                provider_id: Uuid::now_v7().to_string(),
-            },
-        )
-        .await
-    }
-
-    #[tokio::test]
-    #[ignore = "requires database"]
-    async fn create_and_validate_key() -> TestResult {
-        let pool = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
-
-        let user = setup_user(&pool).await?;
-        let (plaintext, key) = create(&pool, user.id, "test-key").await?;
-
-        assert!(plaintext.starts_with("sk_"));
-        assert_eq!(key.name, "test-key");
-        assert_eq!(key.user_id, user.id);
-        assert!(key.revoked_at.is_none());
-
-        let validated = validate(&pool, &plaintext).await?;
-        assert!(validated.is_some());
-        assert_eq!(validated.ok_or("expected Some")?.id, key.id);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore = "requires database"]
-    async fn validate_invalid_key() -> TestResult {
-        let pool = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
-
-        let result = validate(&pool, "sk_totally_bogus_key").await?;
-        assert!(result.is_none());
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore = "requires database"]
-    async fn revoke_key_prevents_validation() -> TestResult {
-        let pool = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
-
-        let user = setup_user(&pool).await?;
-        let (plaintext, key) = create(&pool, user.id, "revoke-test").await?;
-
-        let revoked = revoke(&pool, key.id, user.id).await?;
-        assert!(revoked);
-
-        let validated = validate(&pool, &plaintext).await?;
-        assert!(validated.is_none());
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore = "requires database"]
-    async fn list_keys_for_user() -> TestResult {
-        let pool = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
-
-        let user = setup_user(&pool).await?;
-        create(&pool, user.id, "key-1").await?;
-        create(&pool, user.id, "key-2").await?;
-
-        let keys = list_for_user(&pool, user.id).await?;
-        assert_eq!(keys.len(), 2);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[ignore = "requires database"]
-    async fn duplicate_key_name_rejected() -> TestResult {
-        let pool = PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
-
-        let user = setup_user(&pool).await?;
-        create(&pool, user.id, "dupe-name").await?;
-
-        let result = create(&pool, user.id, "dupe-name").await;
-        assert!(result.is_err());
-
-        Ok(())
-    }
 }

@@ -16,19 +16,23 @@ impl PgApiKeyStore {
 }
 
 impl ApiKeyStore for PgApiKeyStore {
-    fn create(&self, user_id: Uuid, name: &str) -> BoxFuture<'_, Result<(String, ApiKeyView), StoreError>> {
+    fn create(
+        &self,
+        user_id: Uuid,
+        name: &str,
+        scopes: &serde_json::Value,
+    ) -> BoxFuture<'_, Result<(String, ApiKeyView), StoreError>> {
         let name = name.to_string();
+        let scopes = scopes.clone();
         Box::pin(async move {
-            let (plaintext, key) = api_keys::create(&self.pool, user_id, &name).await?;
+            let (plaintext, key) = api_keys::create(&self.pool, user_id, &name, &scopes).await?;
             Ok((plaintext, key.into()))
         })
     }
 
     fn validate(&self, plaintext: &str) -> BoxFuture<'_, Result<Option<ApiKey>, StoreError>> {
         let plaintext = plaintext.to_string();
-        Box::pin(async move {
-            Ok(api_keys::validate(&self.pool, &plaintext).await?)
-        })
+        Box::pin(async move { Ok(api_keys::validate(&self.pool, &plaintext).await?) })
     }
 
     fn list_for_user(&self, user_id: Uuid) -> BoxFuture<'_, Result<Vec<ApiKeyView>, StoreError>> {
@@ -39,8 +43,6 @@ impl ApiKeyStore for PgApiKeyStore {
     }
 
     fn revoke(&self, key_id: Uuid, user_id: Uuid) -> BoxFuture<'_, Result<bool, StoreError>> {
-        Box::pin(async move {
-            Ok(api_keys::revoke(&self.pool, key_id, user_id).await?)
-        })
+        Box::pin(async move { Ok(api_keys::revoke(&self.pool, key_id, user_id).await?) })
     }
 }

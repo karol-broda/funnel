@@ -6,15 +6,20 @@ use axum::extract::{Path, State};
 use funnel_core::tunnel::id::TunnelId;
 
 use crate::app::AppState;
+use crate::auth::{Management, Scoped};
 use crate::error::AppError;
 use crate::tunnel::manager::TunnelInfo;
 
-pub async fn list(State(state): State<Arc<AppState>>) -> Json<Vec<TunnelInfo>> {
-    Json(state.tunnels.list())
+pub async fn list(
+    State(state): State<Arc<AppState>>,
+    _auth: Scoped<Management>,
+) -> Result<Json<Vec<TunnelInfo>>, AppError> {
+    Ok(Json(state.tunnels.list()))
 }
 
 pub async fn get_tunnel(
     State(state): State<Arc<AppState>>,
+    _auth: Scoped<Management>,
     Path(id): Path<String>,
 ) -> Result<Json<TunnelInfo>, AppError> {
     let tunnel_id = TunnelId::new(id.clone())?;
@@ -33,6 +38,7 @@ pub async fn get_tunnel(
 
 pub async fn delete(
     State(state): State<Arc<AppState>>,
+    _auth: Scoped<Management>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let tunnel_id = TunnelId::new(id.clone())?;

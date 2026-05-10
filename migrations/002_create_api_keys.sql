@@ -4,6 +4,7 @@ CREATE TABLE api_keys (
     name        TEXT NOT NULL,
     key_hash    TEXT NOT NULL,
     key_prefix  TEXT NOT NULL,
+    scopes      JSONB NOT NULL DEFAULT '["management", "tunnels"]',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     revoked_at  TIMESTAMPTZ,
 
