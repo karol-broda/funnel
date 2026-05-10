@@ -14,11 +14,16 @@ use crate::error::AppError;
 pub struct AuthUser {
     pub user_id: Uuid,
     pub scopes: Vec<String>,
+    pub role: String,
 }
 
 impl AuthUser {
     fn has_scope(&self, scope: &str) -> bool {
         self.scopes.iter().any(|s| s == scope)
+    }
+
+    pub fn is_admin(&self) -> bool {
+        self.role == "admin"
     }
 }
 
@@ -43,6 +48,17 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
             .map_err(AppError::Store)?
             .ok_or(AppError::Unauthorized)?;
 
+        let user = state
+            .users
+            .find_by_id(api_key.user_id)
+            .await
+            .map_err(AppError::Store)?
+            .ok_or(AppError::Unauthorized)?;
+
+        if !user.is_active() {
+            return Err(AppError::Unauthorized);
+        }
+
         let scopes = api_key
             .scopes
             .as_array()
@@ -56,6 +72,7 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
         Ok(Self {
             user_id: api_key.user_id,
             scopes,
+            role: user.role,
         })
     }
 }
@@ -84,7 +101,14 @@ impl Scope for Tunnels {
 
 pub struct Scoped<S: Scope> {
     pub user_id: Uuid,
+    pub role: String,
     _scope: std::marker::PhantomData<S>,
+}
+
+impl<S: Scope> Scoped<S> {
+    pub fn is_admin(&self) -> bool {
+        self.role == "admin"
+    }
 }
 
 impl<S: Scope> FromRequestParts<Arc<AppState>> for Scoped<S> {
@@ -102,7 +126,33 @@ impl<S: Scope> FromRequestParts<Arc<AppState>> for Scoped<S> {
 
         Ok(Self {
             user_id: auth.user_id,
+            role: auth.role,
             _scope: std::marker::PhantomData,
+        })
+    }
+}
+
+/// extractor that requires management scope AND admin role
+pub struct RequireAdmin {
+    #[allow(dead_code)]
+    pub user_id: Uuid,
+}
+
+impl FromRequestParts<Arc<AppState>> for RequireAdmin {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        let auth = AuthUser::from_request_parts(parts, state).await?;
+
+        if !auth.has_scope("management") || !auth.is_admin() {
+            return Err(AppError::Forbidden);
+        }
+
+        Ok(Self {
+            user_id: auth.user_id,
         })
     }
 }

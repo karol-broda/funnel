@@ -6,6 +6,10 @@ use crate::tunnel::id::TunnelId;
 pub struct Handshake {
     pub tunnel_id: TunnelId,
     pub token: Option<String>,
+    #[serde(default)]
+    pub team: Option<String>,
+    #[serde(default)]
+    pub version: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

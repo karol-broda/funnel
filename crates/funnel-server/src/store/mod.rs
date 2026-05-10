@@ -1,10 +1,10 @@
 pub mod account_store;
 pub mod api_key_store;
 pub mod health;
-pub mod memory;
 pub mod pg;
-#[allow(dead_code)]
+pub mod turso;
 pub mod session_recorder;
+pub mod team_store;
 pub mod tunnel_registry;
 pub mod user_store;
 
@@ -17,7 +17,6 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 #[derive(Debug)]
 pub enum StoreError {
     Database(sqlx::Error),
-    #[allow(dead_code)]
     NotFound,
     Conflict(String),
     Other(String),
@@ -45,6 +44,11 @@ impl std::error::Error for StoreError {
 
 impl From<sqlx::Error> for StoreError {
     fn from(e: sqlx::Error) -> Self {
+        if let sqlx::Error::Database(ref db_err) = e {
+            if db_err.is_unique_violation() {
+                return Self::Conflict(db_err.message().to_string());
+            }
+        }
         Self::Database(e)
     }
 }

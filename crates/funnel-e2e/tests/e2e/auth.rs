@@ -245,17 +245,20 @@ async fn me_requires_auth() -> TestResult {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn me_returns_404_for_seed_key_user() -> TestResult {
+async fn me_returns_seed_user() -> TestResult {
     let env = AuthTestEnv::start().await?;
 
-    // seed key is created with nil UUID, no matching user exists
+    // seed key creates a proper system user
     let resp = env
         .client
         .get(env.url("/api/me"))
         .header("authorization", env.auth_header())
         .send()
         .await?;
-    assert_eq!(resp.status(), 404);
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await?;
+    assert_eq!(body["email"], "system@funnel.local");
+    assert_eq!(body["role"], "admin");
 
     Ok(())
 }

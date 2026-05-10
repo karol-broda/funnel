@@ -1,8 +1,10 @@
 mod auth;
 mod harness;
 
+use futures_util::{SinkExt, StreamExt};
 use harness::TestEnv;
 use reqwest::Method;
+use tokio_tungstenite::tungstenite;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -115,4 +117,78 @@ async fn unknown_tunnel_returns_404() -> TestResult {
 
     assert_eq!(resp.status(), 404);
     Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn websocket_echo() -> TestResult {
+    let env = TestEnv::start().await?;
+
+    let request = ws_request(&env, "/ws-echo")?;
+    let (mut ws, _resp) = tokio_tungstenite::connect_async(request).await?;
+
+    ws.send(tungstenite::Message::Text("hello websocket".into())).await?;
+
+    let msg = ws.next().await
+        .ok_or("no message received")??;
+
+    assert_eq!(msg.into_text()?, "hello websocket");
+
+    ws.close(None).await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn websocket_multiple_messages() -> TestResult {
+    let env = TestEnv::start().await?;
+
+    let request = ws_request(&env, "/ws-echo")?;
+    let (mut ws, _) = tokio_tungstenite::connect_async(request).await?;
+
+    for i in 0..5 {
+        let msg = format!("msg {i}");
+        ws.send(tungstenite::Message::Text(msg.clone().into())).await?;
+
+        let resp = ws.next().await
+            .ok_or("no message received")??;
+        assert_eq!(resp.into_text()?, msg);
+    }
+
+    ws.close(None).await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn websocket_binary_data() -> TestResult {
+    let env = TestEnv::start().await?;
+
+    let request = ws_request(&env, "/ws-echo")?;
+    let (mut ws, _) = tokio_tungstenite::connect_async(request).await?;
+
+    let payload = vec![0u8, 1, 2, 255, 254, 253];
+    ws.send(tungstenite::Message::Binary(payload.clone().into())).await?;
+
+    let resp = ws.next().await
+        .ok_or("no message received")??;
+    assert_eq!(resp.into_data().to_vec(), payload);
+
+    ws.close(None).await?;
+    Ok(())
+}
+
+fn ws_request(
+    env: &TestEnv,
+    path: &str,
+) -> Result<tungstenite::http::Request<()>, tungstenite::http::Error> {
+    let url = format!("ws://127.0.0.1:{}{path}", env.http_port);
+    tungstenite::http::Request::builder()
+        .uri(&url)
+        .header("host", &env.host_header)
+        .header("connection", "Upgrade")
+        .header("upgrade", "websocket")
+        .header("sec-websocket-version", "13")
+        .header(
+            "sec-websocket-key",
+            tungstenite::handshake::client::generate_key(),
+        )
+        .body(())
 }

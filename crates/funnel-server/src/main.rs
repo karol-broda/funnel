@@ -29,15 +29,15 @@ use tunnel::manager::TunnelManager;
 #[command(name = "funnel-server", about = "Funnel tunnel server")]
 struct Cli {
     /// Port to listen on
-    #[arg(short, long, default_value_t = 8080)]
+    #[arg(short, long, default_value_t = 8080, env = "FUNNEL_PORT")]
     port: u16,
 
     /// Host to bind to
-    #[arg(long, default_value = "0.0.0.0")]
+    #[arg(long, default_value = "0.0.0.0", env = "FUNNEL_HOST")]
     host: String,
 
     /// QUIC port for tunnel connections
-    #[arg(long, default_value_t = 4433)]
+    #[arg(long, default_value_t = 4433, env = "FUNNEL_QUIC_PORT")]
     quic_port: u16,
 
     /// PostgreSQL connection URL
@@ -45,19 +45,19 @@ struct Cli {
     database_url: Option<String>,
 
     /// Maximum database connections
-    #[arg(long, default_value_t = 10)]
+    #[arg(long, default_value_t = 10, env = "FUNNEL_DB_MAX_CONNECTIONS")]
     db_max_connections: u32,
 
     /// Enable TLS/HTTPS
-    #[arg(long)]
+    #[arg(long, env = "FUNNEL_ENABLE_TLS")]
     enable_tls: bool,
 
     /// TLS port
-    #[arg(long, default_value_t = 8443)]
+    #[arg(long, default_value_t = 8443, env = "FUNNEL_TLS_PORT")]
     tls_port: u16,
 
     /// Certificate storage directory
-    #[arg(long, default_value = "./certs")]
+    #[arg(long, default_value = "./certs", env = "FUNNEL_CERT_DIR")]
     cert_dir: String,
 
     /// Let's Encrypt email for ACME registration
@@ -69,12 +69,20 @@ struct Cli {
     dns_providers_config: Option<String>,
 
     /// Use Let's Encrypt staging environment
-    #[arg(long)]
+    #[arg(long, env = "FUNNEL_ACME_STAGING")]
     acme_staging: bool,
 
     /// Create a seed API key at startup and print it to stdout
-    #[arg(long)]
+    #[arg(long, env = "FUNNEL_SEED_API_KEY")]
     seed_api_key: bool,
+
+    /// Path to turso/libsql database file (used when no PostgreSQL URL is set)
+    #[arg(long, default_value = "./funnel.db", env = "FUNNEL_TURSO_DB_PATH")]
+    turso_db_path: String,
+
+    /// Email of the initial admin user (auto promotes on first login)
+    #[arg(long, env = "FUNNEL_INITIAL_ADMIN_EMAIL")]
+    initial_admin_email: Option<String>,
 
     /// GitHub OAuth client ID
     #[arg(long, env = "GITHUB_CLIENT_ID")]
@@ -162,9 +170,23 @@ async fn main() -> anyhow::Result<()> {
         sqlx::migrate!("../../migrations").run(&pool).await?;
 
         tracing::info!("database migrations applied");
+
+        let (db_version,): (i32,) =
+            sqlx::query_as("SELECT version FROM schema_version ORDER BY applied_at DESC LIMIT 1")
+                .fetch_one(&pool)
+                .await?;
+
+        let expected = funnel_core::protocol::PROTOCOL_VERSION as i32;
+        if db_version != expected {
+            anyhow::bail!(
+                "schema version mismatch: database is v{db_version} but server expects v{expected}"
+            );
+        }
+
+        tracing::info!(schema_version = db_version, "schema version verified");
         Some(pool)
     } else {
-        tracing::info!("no database configured, running in memory only mode");
+        tracing::info!(path = %cli.turso_db_path, "no database url configured, using turso");
         None
     };
 
@@ -236,52 +258,69 @@ fn build_oauth_state(cli: &Cli) -> anyhow::Result<Option<Arc<OAuthState>>> {
     Ok(Some(Arc::new(OAuthState::new(providers, base_url))))
 }
 
-fn build_state(
+async fn build_state(
     pool: Option<sqlx::PgPool>,
+    turso_db_path: &str,
     is_tls: bool,
     oauth_state: Option<Arc<OAuthState>>,
-) -> Arc<app::AppState> {
+    initial_admin_email: Option<String>,
+) -> anyhow::Result<Arc<app::AppState>> {
     let tunnels = Arc::new(TunnelManager::new());
 
     if let Some(pool) = pool {
-        Arc::new(app::AppState {
+        Ok(Arc::new(app::AppState {
             tunnels,
             api_keys: Arc::new(store::pg::api_key_store::PgApiKeyStore::new(pool.clone())),
             users: Arc::new(store::pg::user_store::PgUserStore::new(pool.clone())),
             accounts: Arc::new(store::pg::account_store::PgAccountStore::new(pool.clone())),
-            sessions: Arc::new(store::pg::session_recorder::PgSessionRecorder::new(pool)),
+            sessions: Arc::new(store::pg::session_recorder::PgSessionRecorder::new(
+                pool.clone(),
+            )),
+            teams: Arc::new(store::pg::team_store::PgTeamStore::new(pool)),
             health: Arc::new(UptimeHealthReporter::new()),
             is_tls,
             oauth_state,
-        })
+            initial_admin_email,
+        }))
     } else {
-        Arc::new(app::AppState {
+        let db = store::turso::open(turso_db_path)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to open turso database: {e}"))?;
+
+        tracing::info!("turso database ready");
+
+        Ok(Arc::new(app::AppState {
             tunnels,
-            api_keys: Arc::new(store::memory::api_key_store::InMemoryApiKeyStore::new()),
-            users: Arc::new(store::memory::user_store::InMemoryUserStore::new()),
-            accounts: Arc::new(store::memory::account_store::InMemoryAccountStore::new()),
-            sessions: Arc::new(store::memory::session_recorder::InMemorySessionRecorder::new()),
+            api_keys: Arc::new(store::turso::api_key_store::TursoApiKeyStore::new(
+                Arc::clone(&db),
+            )),
+            users: Arc::new(store::turso::user_store::TursoUserStore::new(
+                Arc::clone(&db),
+            )),
+            accounts: Arc::new(store::turso::account_store::TursoAccountStore::new(
+                Arc::clone(&db),
+            )),
+            sessions: Arc::new(store::turso::session_recorder::TursoSessionRecorder::new(
+                Arc::clone(&db),
+            )),
+            teams: Arc::new(store::turso::team_store::TursoTeamStore::new(db)),
             health: Arc::new(UptimeHealthReporter::new()),
             is_tls,
             oauth_state,
-        })
+            initial_admin_email,
+        }))
     }
 }
 
 async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
     let metrics_handle = metrics::setup()?;
     let oauth_state = build_oauth_state(&cli)?;
-    let state = build_state(pool, false, oauth_state);
+    let initial_admin_email = cli.initial_admin_email.clone();
+    let state = build_state(pool, &cli.turso_db_path, false, oauth_state, initial_admin_email).await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);
 
     if cli.seed_api_key {
-        let scopes = db::api_keys::default_scopes();
-        let (plaintext, _) = state
-            .api_keys
-            .create(uuid::Uuid::nil(), "seed", &scopes)
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to create seed api key: {e}"))?;
-        println!("{plaintext}");
+        create_seed_key(&state).await?;
     }
 
     let quic_handle = quic::config::spawn_listener(&cli.host, cli.quic_port, Arc::clone(&state))?;
@@ -300,6 +339,53 @@ async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
         res = http_server => { res?; }
         _ = quic_handle => {}
     };
+
+    Ok(())
+}
+
+async fn create_seed_key(state: &Arc<app::AppState>) -> anyhow::Result<()> {
+    use crate::db::users::NewUser;
+
+    let seed_email = "system@funnel.local";
+
+    // find or create the seed user
+    let user = match state.users.find_by_email(seed_email).await {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            let u = state
+                .users
+                .create(NewUser {
+                    email: seed_email.to_string(),
+                    name: Some("System".to_string()),
+                    avatar_url: None,
+                })
+                .await
+                .map_err(|e| anyhow::anyhow!("failed to create seed user: {e}"))?;
+
+            // promote to admin
+            state
+                .users
+                .update_role(u.id, "admin")
+                .await
+                .map_err(|e| anyhow::anyhow!("failed to promote seed user: {e}"))?
+        }
+        Err(e) => anyhow::bail!("failed to look up seed user: {e}"),
+    };
+
+    let scopes = db::api_keys::default_scopes();
+    match state
+        .api_keys
+        .create(user.id, "seed", &scopes, None)
+        .await
+    {
+        Ok((plaintext, _)) => {
+            println!("{plaintext}");
+        }
+        Err(store::StoreError::Conflict(_)) => {
+            tracing::info!("seed key already exists, skipping");
+        }
+        Err(e) => anyhow::bail!("failed to create seed api key: {e}"),
+    }
 
     Ok(())
 }
@@ -324,8 +410,13 @@ async fn run_with_tls(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()
 
     let metrics_handle = metrics::setup()?;
     let oauth_state = build_oauth_state(&cli)?;
-    let state = build_state(pool, true, oauth_state);
+    let initial_admin_email = cli.initial_admin_email.clone();
+    let state = build_state(pool, &cli.turso_db_path, true, oauth_state, initial_admin_email).await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);
+
+    if cli.seed_api_key {
+        create_seed_key(&state).await?;
+    }
 
     let quic_handle = quic::config::spawn_listener(&cli.host, cli.quic_port, Arc::clone(&state))?;
 

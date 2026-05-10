@@ -20,6 +20,7 @@ pub trait SessionRecorder: Send + Sync {
         requests: i64,
     ) -> BoxFuture<'_, Result<bool, StoreError>>;
 
+    #[allow(dead_code)]
     fn list_active(&self) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>>;
 
     fn list_for_user(
@@ -27,4 +28,6 @@ pub trait SessionRecorder: Send + Sync {
         user_id: Uuid,
         limit: i64,
     ) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>>;
+
+    fn list_all(&self, limit: i64) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>>;
 }

@@ -8,6 +8,8 @@ use axum::routing::get;
 use serde::Deserialize;
 use tokio::sync::Notify;
 
+use funnel_core::protocol::PROTOCOL_VERSION;
+
 use crate::config;
 
 #[derive(Deserialize)]
@@ -24,7 +26,7 @@ pub async fn login(context_name: &str, provider: &str) -> anyhow::Result<()> {
     let port = local_addr.port();
 
     let login_url = format!(
-        "{}/auth/{provider}/authorize?cli_port={port}",
+        "{}/auth/v{PROTOCOL_VERSION}/{provider}/authorize?cli_port={port}",
         resolved.server
     );
 

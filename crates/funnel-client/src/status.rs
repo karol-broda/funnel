@@ -1,3 +1,4 @@
+use funnel_core::protocol::PROTOCOL_VERSION;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -5,6 +6,10 @@ struct TunnelInfo {
     id: String,
     uptime_secs: f64,
     stats: TunnelStats,
+    #[serde(default)]
+    owner_id: Option<String>,
+    #[serde(default)]
+    team_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -16,7 +21,7 @@ struct TunnelStats {
 
 pub async fn run(server: &str, token: &str) -> anyhow::Result<()> {
     let resp = reqwest::Client::new()
-        .get(format!("{server}/api/tunnels"))
+        .get(format!("{server}/api/v{PROTOCOL_VERSION}/tunnels"))
         .header("authorization", format!("Bearer {token}"))
         .send()
         .await?;
@@ -43,6 +48,12 @@ pub async fn run(server: &str, token: &str) -> anyhow::Result<()> {
             format_bytes(t.stats.bytes_in),
             format_bytes(t.stats.bytes_out)
         );
+        if let Some(ref owner) = t.owner_id {
+            println!("  owner:    {owner}");
+        }
+        if let Some(ref team) = t.team_id {
+            println!("  team:     {team}");
+        }
         if i < tunnels.len() - 1 {
             println!();
         }

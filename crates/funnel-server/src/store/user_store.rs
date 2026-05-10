@@ -13,4 +13,10 @@ pub trait UserStore: Send + Sync {
         name: Option<&str>,
         avatar_url: Option<&str>,
     ) -> BoxFuture<'_, Result<User, StoreError>>;
+    fn update_role(&self, id: Uuid, role: &str) -> BoxFuture<'_, Result<User, StoreError>>;
+    fn deactivate(&self, id: Uuid) -> BoxFuture<'_, Result<User, StoreError>>;
+    fn reactivate(&self, id: Uuid) -> BoxFuture<'_, Result<User, StoreError>>;
+    fn list_all(&self, limit: i64) -> BoxFuture<'_, Result<Vec<User>, StoreError>>;
+    fn count(&self) -> BoxFuture<'_, Result<i64, StoreError>>;
+    fn count_admins(&self) -> BoxFuture<'_, Result<i64, StoreError>>;
 }

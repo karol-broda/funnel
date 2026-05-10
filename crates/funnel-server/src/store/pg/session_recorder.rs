@@ -57,4 +57,8 @@ impl SessionRecorder for PgSessionRecorder {
             async move { Ok(tunnel_sessions::list_for_user(&self.pool, user_id, limit).await?) },
         )
     }
+
+    fn list_all(&self, limit: i64) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>> {
+        Box::pin(async move { Ok(tunnel_sessions::list_all(&self.pool, limit).await?) })
+    }
 }

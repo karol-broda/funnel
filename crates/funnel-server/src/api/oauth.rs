@@ -135,20 +135,48 @@ pub async fn callback(
             }
         }
     } else {
-        // no account exists, create new user then link account
-        let user = match state
-            .users
-            .create(NewUser {
-                email: info.email,
-                name: info.name,
-                avatar_url: info.avatar_url,
-            })
-            .await
-        {
+        // no account for this provider, check if user exists by email
+        let existing_user = match state.users.find_by_email(&info.email).await {
             Ok(u) => u,
             Err(e) => {
-                tracing::error!(error = %e, "failed to create user");
+                tracing::error!(error = %e, "failed to look up user by email");
                 return html_error(StatusCode::INTERNAL_SERVER_ERROR, "internal error");
+            }
+        };
+
+        let user = if let Some(user) = existing_user {
+            // user exists from a different provider, link this account
+            match state
+                .users
+                .update_profile(
+                    user.id,
+                    info.name.as_deref(),
+                    info.avatar_url.as_deref(),
+                )
+                .await
+            {
+                Ok(u) => u,
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to update user profile");
+                    return html_error(StatusCode::INTERNAL_SERVER_ERROR, "internal error");
+                }
+            }
+        } else {
+            // completely new user
+            match state
+                .users
+                .create(NewUser {
+                    email: info.email,
+                    name: info.name,
+                    avatar_url: info.avatar_url,
+                })
+                .await
+            {
+                Ok(u) => u,
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to create user");
+                    return html_error(StatusCode::INTERNAL_SERVER_ERROR, "internal error");
+                }
             }
         };
 
@@ -166,13 +194,45 @@ pub async fn callback(
             return html_error(StatusCode::INTERNAL_SERVER_ERROR, "internal error");
         }
 
-        user
+        // auto promote first user to admin, or match initial admin email
+        let should_promote = match state.users.count().await {
+            Ok(1) => true,
+            Ok(_) => {
+                state
+                    .initial_admin_email
+                    .as_ref()
+                    .is_some_and(|email| email == &user.email)
+                    && !user.is_admin()
+            }
+            Err(_) => false,
+        };
+
+        if should_promote {
+            match state.users.update_role(user.id, "admin").await {
+                Ok(promoted) => {
+                    tracing::info!(
+                        user_id = %promoted.id,
+                        email = %promoted.email,
+                        "auto promoted user to admin"
+                    );
+                    promoted
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to promote user to admin");
+                    user
+                }
+            }
+        } else {
+            user
+        }
     };
 
-    let key_name = format!("cli-{}", uuid::Uuid::now_v7());
+    // revoke any existing cli key before issuing a new one
+    let _ = state.api_keys.revoke_by_name(user.id, "cli").await;
+
     let (plaintext, _) = match state
         .api_keys
-        .create(user.id, &key_name, &default_scopes())
+        .create(user.id, "cli", &default_scopes(), None)
         .await
     {
         Ok(k) => k,
@@ -209,10 +269,7 @@ mod tests {
     use crate::auth::oauth::{OAuthError, OAuthProvider, OAuthState, OAuthUserInfo};
     use crate::store::BoxFuture;
     use crate::store::health::UptimeHealthReporter;
-    use crate::store::memory::account_store::InMemoryAccountStore;
-    use crate::store::memory::api_key_store::InMemoryApiKeyStore;
-    use crate::store::memory::session_recorder::InMemorySessionRecorder;
-    use crate::store::memory::user_store::InMemoryUserStore;
+    use crate::store::turso;
     use crate::tunnel::manager::TunnelManager;
 
     struct MockProvider;
@@ -257,7 +314,7 @@ mod tests {
         }
     }
 
-    fn test_state(with_oauth: bool) -> Arc<AppState> {
+    async fn test_state(with_oauth: bool) -> Arc<AppState> {
         let oauth_state = if with_oauth {
             let mut providers: HashMap<String, Arc<dyn OAuthProvider>> = HashMap::new();
             providers.insert("mock".into(), Arc::new(MockProvider));
@@ -269,15 +326,27 @@ mod tests {
             None
         };
 
+        let db = turso::open(":memory:")
+            .await
+            .unwrap_or_else(|e| panic!("open turso: {e}"));
+
         Arc::new(AppState {
             tunnels: Arc::new(TunnelManager::new()),
-            api_keys: Arc::new(InMemoryApiKeyStore::new()),
-            users: Arc::new(InMemoryUserStore::new()),
-            accounts: Arc::new(InMemoryAccountStore::new()),
-            sessions: Arc::new(InMemorySessionRecorder::new()),
+            api_keys: Arc::new(turso::api_key_store::TursoApiKeyStore::new(
+                Arc::clone(&db),
+            )),
+            users: Arc::new(turso::user_store::TursoUserStore::new(Arc::clone(&db))),
+            accounts: Arc::new(turso::account_store::TursoAccountStore::new(
+                Arc::clone(&db),
+            )),
+            sessions: Arc::new(turso::session_recorder::TursoSessionRecorder::new(
+                Arc::clone(&db),
+            )),
+            teams: Arc::new(turso::team_store::TursoTeamStore::new(db)),
             health: Arc::new(UptimeHealthReporter::new()),
             is_tls: false,
             oauth_state,
+            initial_admin_email: None,
         })
     }
 
@@ -292,7 +361,7 @@ mod tests {
 
     #[tokio::test]
     async fn authorize_redirects_to_provider() {
-        let state = test_state(true);
+        let state = test_state(true).await;
         let server = axum_test::TestServer::new(test_router(state));
 
         let resp = server
@@ -309,7 +378,7 @@ mod tests {
 
     #[tokio::test]
     async fn authorize_unknown_provider_returns_404() {
-        let state = test_state(true);
+        let state = test_state(true).await;
         let server = axum_test::TestServer::new(test_router(state));
 
         let resp = server
@@ -324,7 +393,7 @@ mod tests {
 
     #[tokio::test]
     async fn authorize_without_oauth_returns_404() {
-        let state = test_state(false);
+        let state = test_state(false).await;
         let server = axum_test::TestServer::new(test_router(state));
 
         let resp = server
@@ -339,7 +408,7 @@ mod tests {
 
     #[tokio::test]
     async fn callback_with_invalid_state_returns_400() {
-        let state = test_state(true);
+        let state = test_state(true).await;
         let server = axum_test::TestServer::new(test_router(state));
 
         let resp = server
@@ -355,7 +424,7 @@ mod tests {
 
     #[tokio::test]
     async fn callback_with_bad_code_returns_502() {
-        let state = test_state(true);
+        let state = test_state(true).await;
         let oauth = state.oauth_state.as_ref().unwrap();
         oauth.insert_pending("test_state_token".into(), 9999);
 
@@ -372,7 +441,7 @@ mod tests {
 
     #[tokio::test]
     async fn callback_full_flow_creates_user_and_returns_token() {
-        let state = test_state(true);
+        let state = test_state(true).await;
         let oauth = state.oauth_state.as_ref().unwrap();
         oauth.insert_pending("valid_state".into(), 7777);
 
@@ -410,7 +479,7 @@ mod tests {
 
     #[tokio::test]
     async fn callback_state_is_consumed() {
-        let state = test_state(true);
+        let state = test_state(true).await;
         let oauth = state.oauth_state.as_ref().unwrap();
         oauth.insert_pending("one_time".into(), 7777);
 
@@ -433,7 +502,7 @@ mod tests {
 
     #[tokio::test]
     async fn callback_second_login_updates_profile() {
-        let state = test_state(true);
+        let state = test_state(true).await;
         let oauth = state.oauth_state.as_ref().unwrap();
 
         // first login
@@ -465,11 +534,16 @@ mod tests {
         // still only one account
         let accounts = state.accounts.list_for_user(user.id).await.unwrap();
         assert_eq!(accounts.len(), 1);
+
+        // only one active cli key (old one was revoked)
+        let keys = state.api_keys.list_for_user(user.id).await.unwrap();
+        let cli_keys: Vec<_> = keys.iter().filter(|k| k.name == "cli").collect();
+        assert_eq!(cli_keys.len(), 1);
     }
 
     #[tokio::test]
     async fn me_requires_auth() {
-        let state = test_state(false);
+        let state = test_state(false).await;
         let server = axum_test::TestServer::new(test_router(state));
 
         let resp = server.get("/api/me").await;
@@ -478,7 +552,7 @@ mod tests {
 
     #[tokio::test]
     async fn me_returns_user_after_oauth_login() {
-        let state = test_state(true);
+        let state = test_state(true).await;
         let oauth = state.oauth_state.as_ref().unwrap();
         oauth.insert_pending("login_state".into(), 7777);
 
@@ -505,6 +579,6 @@ mod tests {
         let user: serde_json::Value = resp.json();
         assert_eq!(user["email"], "test@example.com");
         assert_eq!(user["name"], "Test User");
-        assert_eq!(user["role"], "user");
+        assert_eq!(user["role"], "admin");
     }
 }

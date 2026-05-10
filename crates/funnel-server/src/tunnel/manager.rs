@@ -6,6 +6,8 @@ use serde::Serialize;
 
 use funnel_core::tunnel::id::TunnelId;
 
+use uuid::Uuid;
+
 use super::connection::ActiveTunnel;
 use super::stats::TunnelStatsSnapshot;
 use crate::store::tunnel_registry::TunnelRegistry;
@@ -19,6 +21,8 @@ pub struct TunnelInfo {
     pub id: String,
     pub uptime_secs: f64,
     pub stats: TunnelStatsSnapshot,
+    pub owner_id: Uuid,
+    pub team_id: Option<Uuid>,
 }
 
 impl TunnelManager {
@@ -55,6 +59,8 @@ impl TunnelManager {
                     id: entry.key().to_string(),
                     uptime_secs: tunnel.connected_at().elapsed().as_secs_f64(),
                     stats: tunnel.stats(),
+                    owner_id: tunnel.owner_id(),
+                    team_id: tunnel.team_id(),
                 }
             })
             .collect()

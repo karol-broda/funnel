@@ -17,7 +17,9 @@ dashmap = "6"
 getrandom = "0.3"
 hex = "0.4"
 http-body-util = "0.1"
-ipnetwork = "0.20"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+ipnetwork.workspace = true
 metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
 quinn.workspace = true
@@ -25,6 +27,7 @@ rcgen = "0.13"
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
+turso.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

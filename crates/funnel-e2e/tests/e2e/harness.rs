@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -6,7 +7,10 @@ use std::time::Duration;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::response::IntoResponse;
 use axum::routing::{get, post};
+use futures_util::StreamExt;
 use tokio::task::JoinHandle;
 
 const TUNNEL_ID: &str = "e2etest";
@@ -20,9 +24,12 @@ pub struct TestEnv {
     local_server_handle: JoinHandle<()>,
     server_log: PathBuf,
     client_log: PathBuf,
+    turso_db_path: PathBuf,
     pub http_port: u16,
     pub host_header: String,
     pub client: reqwest::Client,
+    #[allow(dead_code)]
+    pub seed_key: String,
 }
 
 impl TestEnv {
@@ -31,12 +38,17 @@ impl TestEnv {
         let http_port = free_port()?;
         let quic_port = free_port()?;
         let host_header = format!("{TUNNEL_ID}.localhost:{http_port}");
+        let turso_db_path = std::env::temp_dir().join(format!(
+            "funnel-e2e-{}.db",
+            std::process::id()
+        ));
 
-        let (server_process, server_log) = start_server_process(http_port, quic_port)?;
+        let (server_process, server_log, seed_key) =
+            start_server_process(http_port, quic_port, &turso_db_path)?;
         wait_for_tcp(http_port).await;
 
         let (client_process, client_log) =
-            start_client_process(local_port, http_port, quic_port, TUNNEL_ID)?;
+            start_client_process(local_port, http_port, quic_port, TUNNEL_ID, &seed_key)?;
 
         let client = reqwest::Client::new();
         wait_for_tunnel(&client, http_port, &host_header).await;
@@ -47,9 +59,11 @@ impl TestEnv {
             local_server_handle: local_handle,
             server_log,
             client_log,
+            turso_db_path,
             http_port,
             host_header,
             client,
+            seed_key,
         })
     }
 
@@ -96,6 +110,7 @@ impl Drop for TestEnv {
 
         let _ = std::fs::remove_file(&self.server_log);
         let _ = std::fs::remove_file(&self.client_log);
+        let _ = std::fs::remove_file(&self.turso_db_path);
     }
 }
 
@@ -163,16 +178,37 @@ fn mock_app() -> Router {
             "/large",
             post(|body: axum::body::Bytes| async move { body }),
         )
+        .route("/ws-echo", get(ws_echo_handler))
         .layer(DefaultBodyLimit::max(MOCK_BODY_LIMIT))
+}
+
+async fn ws_echo_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(ws_echo)
+}
+
+async fn ws_echo(mut socket: WebSocket) {
+    while let Some(Ok(msg)) = socket.next().await {
+        let should_echo = matches!(msg, Message::Text(_) | Message::Binary(_));
+        if !should_echo {
+            if matches!(msg, Message::Close(_)) {
+                break;
+            }
+            continue;
+        }
+        if socket.send(msg).await.is_err() {
+            break;
+        }
+    }
 }
 
 fn start_server_process(
     http_port: u16,
     quic_port: u16,
-) -> Result<(Child, PathBuf), Box<dyn std::error::Error>> {
+    turso_db_path: &Path,
+) -> Result<(Child, PathBuf, String), Box<dyn std::error::Error>> {
     let (stderr_file, log_path) = log_file("server")?;
 
-    let child = Command::new(binary_path("funnel-server")?)
+    let mut child = Command::new(binary_path("funnel-server")?)
         .args([
             "--port",
             &http_port.to_string(),
@@ -180,12 +216,21 @@ fn start_server_process(
             &quic_port.to_string(),
             "--host",
             "127.0.0.1",
+            "--turso-db-path",
+            &turso_db_path.to_string_lossy(),
+            "--seed-api-key",
         ])
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::from(stderr_file))
         .spawn()?;
 
-    Ok((child, log_path))
+    let stdout = child.stdout.take().ok_or("stdout not piped")?;
+    let mut reader = BufReader::new(stdout);
+    let mut seed_key = String::new();
+    reader.read_line(&mut seed_key)?;
+    let seed_key = seed_key.trim().to_string();
+
+    Ok((child, log_path, seed_key))
 }
 
 fn start_client_process(
@@ -193,6 +238,7 @@ fn start_client_process(
     server_http_port: u16,
     quic_port: u16,
     tunnel_id: &str,
+    token: &str,
 ) -> Result<(Child, PathBuf), Box<dyn std::error::Error>> {
     let (stderr_file, log_path) = log_file("client")?;
 
@@ -207,6 +253,8 @@ fn start_client_process(
             "--quic-port",
             &quic_port.to_string(),
             "--insecure",
+            "--token",
+            token,
         ])
         .stdout(Stdio::null())
         .stderr(Stdio::from(stderr_file))

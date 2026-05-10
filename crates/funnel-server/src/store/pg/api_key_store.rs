@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -21,11 +22,13 @@ impl ApiKeyStore for PgApiKeyStore {
         user_id: Uuid,
         name: &str,
         scopes: &serde_json::Value,
+        expires_at: Option<DateTime<Utc>>,
     ) -> BoxFuture<'_, Result<(String, ApiKeyView), StoreError>> {
         let name = name.to_string();
         let scopes = scopes.clone();
         Box::pin(async move {
-            let (plaintext, key) = api_keys::create(&self.pool, user_id, &name, &scopes).await?;
+            let (plaintext, key) =
+                api_keys::create(&self.pool, user_id, &name, &scopes, expires_at).await?;
             Ok((plaintext, key.into()))
         })
     }
@@ -44,5 +47,10 @@ impl ApiKeyStore for PgApiKeyStore {
 
     fn revoke(&self, key_id: Uuid, user_id: Uuid) -> BoxFuture<'_, Result<bool, StoreError>> {
         Box::pin(async move { Ok(api_keys::revoke(&self.pool, key_id, user_id).await?) })
+    }
+
+    fn revoke_by_name(&self, user_id: Uuid, name: &str) -> BoxFuture<'_, Result<bool, StoreError>> {
+        let name = name.to_string();
+        Box::pin(async move { Ok(api_keys::revoke_by_name(&self.pool, user_id, &name).await?) })
     }
 }

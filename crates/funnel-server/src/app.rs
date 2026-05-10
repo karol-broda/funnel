@@ -11,6 +11,7 @@ use metrics_exporter_prometheus::PrometheusHandle;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
+use funnel_core::protocol::PROTOCOL_VERSION;
 use funnel_core::tunnel::id::TunnelId;
 
 use crate::api;
@@ -21,6 +22,7 @@ use crate::store::account_store::AccountStore;
 use crate::store::api_key_store::ApiKeyStore;
 use crate::store::health::HealthReporter;
 use crate::store::session_recorder::SessionRecorder;
+use crate::store::team_store::TeamStore;
 use crate::store::tunnel_registry::TunnelRegistry;
 use crate::store::user_store::UserStore;
 
@@ -30,9 +32,11 @@ pub struct AppState {
     pub users: Arc<dyn UserStore>,
     pub accounts: Arc<dyn AccountStore>,
     pub sessions: Arc<dyn SessionRecorder>,
+    pub teams: Arc<dyn TeamStore>,
     pub health: Arc<dyn HealthReporter>,
     pub is_tls: bool,
     pub oauth_state: Option<Arc<OAuthState>>,
+    pub initial_admin_email: Option<String>,
 }
 
 pub fn build_router(state: Arc<AppState>, metrics_handle: PrometheusHandle) -> Router {
@@ -47,15 +51,49 @@ pub fn build_router(state: Arc<AppState>, metrics_handle: PrometheusHandle) -> R
         .route("/keys/{id}", axum::routing::delete(api::keys::revoke))
         .route("/me", get(api::me::handler))
         .route("/accounts", get(api::accounts::list))
+        .route("/sessions", get(api::sessions::list))
+        .route(
+            "/users",
+            get(api::users::list),
+        )
+        .route("/users/{id}/role", axum::routing::put(api::users::set_role))
+        .route(
+            "/users/{id}/deactivate",
+            axum::routing::post(api::users::deactivate),
+        )
+        .route(
+            "/users/{id}/reactivate",
+            axum::routing::post(api::users::reactivate),
+        )
+        .route(
+            "/teams",
+            get(api::teams::list).post(api::teams::create),
+        )
+        .route("/teams/{id}", axum::routing::delete(api::teams::delete))
+        .route(
+            "/teams/{id}/members",
+            get(api::teams::list_members).post(api::teams::add_member),
+        )
+        .route(
+            "/teams/{id}/members/{user_id}",
+            axum::routing::delete(api::teams::remove_member),
+        )
+        .route(
+            "/teams/{id}/members/{user_id}/role",
+            axum::routing::put(api::teams::set_member_role),
+        )
         .route("/metrics", get(metrics::handler).with_state(metrics_handle));
 
     let auth_routes = Router::new()
         .route("/{provider}/authorize", get(api::oauth::authorize))
         .route("/{provider}/callback", get(api::oauth::callback));
 
+    let api_prefix = format!("/api/v{PROTOCOL_VERSION}");
+    let auth_prefix = format!("/auth/v{PROTOCOL_VERSION}");
+
     Router::new()
-        .nest("/api", api_routes)
-        .nest("/auth", auth_routes)
+        .nest(&api_prefix, api_routes)
+        .nest(&auth_prefix, auth_routes)
         .fallback(proxy::router::handle_tunnel_request)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
@@ -70,18 +108,19 @@ pub fn build_router(state: Arc<AppState>, metrics_handle: PrometheusHandle) -> R
 /// route directly to the tunnel proxy, bypassing api/auth routes
 async fn tunnel_routing(
     State(state): State<Arc<AppState>>,
-    request: Request<Body>,
+    mut request: Request<Body>,
     next: Next,
 ) -> Response {
-    let is_tunnel = request
+    let tunnel_id = request
         .headers()
         .get("host")
         .and_then(|v| v.to_str().ok())
         .and_then(proxy::router::extract_subdomain)
         .and_then(|sub| TunnelId::new(sub).ok())
-        .is_some_and(|id| state.tunnels.get(&id).is_some());
+        .filter(|id| state.tunnels.get(id).is_some());
 
-    if is_tunnel {
+    if let Some(id) = tunnel_id {
+        request.extensions_mut().insert(id);
         proxy::router::handle_tunnel_request(State(state), request).await
     } else {
         next.run(request).await

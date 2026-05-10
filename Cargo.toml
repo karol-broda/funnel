@@ -49,8 +49,10 @@ clap = { version = "4", features = ["derive", "env"] }
 
 # database
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "migrate", "ipnetwork"] }
+turso = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v7", "serde"] }
+ipnetwork = "0.20"
 
 # misc
 pretty_assertions = "1"

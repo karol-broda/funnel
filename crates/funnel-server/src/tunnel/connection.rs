@@ -19,15 +19,24 @@ pub struct ActiveTunnel {
     conn: quinn::Connection,
     stats: Arc<TunnelStats>,
     connected_at: tokio::time::Instant,
+    owner_id: uuid::Uuid,
+    team_id: Option<uuid::Uuid>,
 }
 
 impl ActiveTunnel {
-    pub fn new(id: TunnelId, conn: quinn::Connection) -> Self {
+    pub fn new(
+        id: TunnelId,
+        conn: quinn::Connection,
+        owner_id: uuid::Uuid,
+        team_id: Option<uuid::Uuid>,
+    ) -> Self {
         Self {
             id,
             conn,
             stats: Arc::new(TunnelStats::new()),
             connected_at: tokio::time::Instant::now(),
+            owner_id,
+            team_id,
         }
     }
 
@@ -41,6 +50,14 @@ impl ActiveTunnel {
 
     pub const fn connected_at(&self) -> tokio::time::Instant {
         self.connected_at
+    }
+
+    pub const fn owner_id(&self) -> uuid::Uuid {
+        self.owner_id
+    }
+
+    pub const fn team_id(&self) -> Option<uuid::Uuid> {
+        self.team_id
     }
 
     /// open a quic bidirectional stream, send the request, and return the
@@ -88,6 +105,47 @@ impl ActiveTunnel {
 
         let duration = start.elapsed().as_secs_f64();
         metrics::histogram!("funnel_request_duration_seconds").record(duration);
+
+        match result {
+            Ok(Ok(response)) => {
+                metrics::counter!("funnel_requests_total", "outcome" => "success").increment(1);
+                Ok(response)
+            }
+            Ok(Err(e)) => {
+                metrics::counter!("funnel_requests_total", "outcome" => e.outcome_label())
+                    .increment(1);
+                Err(e)
+            }
+            Err(_) => {
+                metrics::counter!("funnel_requests_total", "outcome" => "timeout").increment(1);
+                Err(SendError::Timeout)
+            }
+        }
+    }
+
+    /// open a quic bidirectional stream, send the request metadata, then
+    /// return the response metadata and raw streams for bidirectional piping.
+    /// unlike send_request, this does not send a body or call finish().
+    pub async fn send_upgrade_request(
+        &self,
+        meta: RequestMeta,
+    ) -> Result<(ResponseMeta, quinn::SendStream, quinn::RecvStream), SendError> {
+        self.stats.inc_requests();
+
+        let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
+            let (mut send, mut recv) = self.conn.open_bi().await.map_err(SendError::OpenStream)?;
+
+            frame::write_meta(&mut send, &meta)
+                .await
+                .map_err(SendError::SendMeta)?;
+
+            let resp_meta: ResponseMeta = frame::read_meta(&mut recv)
+                .await
+                .map_err(SendError::ReadResponse)?;
+
+            Ok::<_, SendError>((resp_meta, send, recv))
+        })
+        .await;
 
         match result {
             Ok(Ok(response)) => {

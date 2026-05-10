@@ -3,4 +3,7 @@ pub mod health;
 pub mod keys;
 pub mod me;
 pub mod oauth;
+pub mod sessions;
+pub mod teams;
 pub mod tunnels;
+pub mod users;

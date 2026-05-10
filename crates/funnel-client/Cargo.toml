@@ -15,7 +15,11 @@ clap = { workspace = true, features = ["derive"] }
 config_rs = { package = "config", version = "0.15", default-features = false, features = ["toml"] }
 dirs = "6"
 console = "0.15"
+bytes = "1"
 http.workspace = true
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 indicatif = "0.17"
 quinn.workspace = true
 reqwest = { workspace = true, features = ["rustls", "stream", "json"] }
@@ -29,3 +33,8 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 url = "2"
 webpki-roots = "1"
+
+[dev-dependencies]
+axum = { workspace = true, features = ["ws"] }
+futures-util = "0.3"
+tokio-tungstenite = "0.26"

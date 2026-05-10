@@ -2,18 +2,22 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tokio_util::io::ReaderStream;
+use bytes::Bytes;
+use http_body_util::BodyExt;
+use hyper::body::Incoming;
+use hyper_util::rt::TokioIo;
+use tokio::io;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
-use funnel_core::protocol::QUIC_ALPN;
+use funnel_core::protocol::{PROTOCOL_VERSION, QUIC_ALPN};
 use funnel_core::protocol::frame;
 use funnel_core::protocol::handshake::{Handshake, HandshakeResponse};
 use funnel_core::protocol::request::RequestMeta;
 use funnel_core::tunnel::id::TunnelId;
 
 use crate::display::{RequestResult, TunnelDisplay};
-use crate::forwarder::Forwarder;
+use crate::forwarder::{ForwardResult, ForwardUpgradeResult, Forwarder};
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_CONCURRENT_REQUESTS: usize = 128;
@@ -25,6 +29,7 @@ pub struct TunnelClient {
     quic_addr: SocketAddr,
     host: String,
     endpoint: quinn::Endpoint,
+    team: Option<String>,
 }
 
 impl TunnelClient {
@@ -35,6 +40,7 @@ impl TunnelClient {
         token: Option<String>,
         quic_port: u16,
         insecure: bool,
+        team: Option<String>,
     ) -> anyhow::Result<Self> {
         let url = Url::parse(server_url)?;
         let host = url
@@ -63,6 +69,7 @@ impl TunnelClient {
             quic_addr,
             host,
             endpoint,
+            team,
         })
     }
 
@@ -73,7 +80,7 @@ impl TunnelClient {
         display: &Arc<TunnelDisplay>,
     ) -> anyhow::Result<()> {
         let conn = self.connect().await?;
-        let forwarder = Arc::new(Forwarder::new(self.local_addr.clone())?);
+        let forwarder = Arc::new(Forwarder::new(self.local_addr.clone()));
         let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
 
         display.set_message("waiting for requests...");
@@ -132,6 +139,8 @@ impl TunnelClient {
         let handshake = Handshake {
             tunnel_id: self.tunnel_id.clone(),
             token: self.token.clone(),
+            team: self.team.clone(),
+            version: Some(PROTOCOL_VERSION),
         };
 
         frame::write_meta(&mut send, &handshake).await?;
@@ -164,22 +173,117 @@ async fn handle_stream(
     let method = meta.method.clone();
     let path = meta.path.clone();
 
-    // stream body from quic directly to local service (no buffer cap)
-    let body_stream = ReaderStream::new(recv);
-    let body = reqwest::Body::wrap_stream(body_stream);
+    if meta.upgrade {
+        return handle_upgrade_stream(send, recv, forwarder, &meta, &method, &path, start).await;
+    }
 
-    let (resp_meta, resp_body) = forwarder.forward(meta, body).await;
+    // read full body from quic for normal requests
+    let body = recv.read_to_end(64 * 1024 * 1024).await?;
+    let body = Bytes::from(body);
 
-    frame::write_meta(&mut send, &resp_meta).await?;
-    send.write_all(&resp_body).await?;
-    send.finish()?;
+    match forwarder.forward(meta, body).await {
+        ForwardResult::Success {
+            meta: resp_meta,
+            body: incoming,
+            conn,
+        } => {
+            frame::write_meta(&mut send, &resp_meta).await?;
+            stream_body_to_quic(incoming, &mut send).await?;
+            send.finish()?;
+            forwarder.release(conn);
+            Ok(RequestResult {
+                method,
+                path,
+                status: resp_meta.status,
+                duration: start.elapsed(),
+            })
+        }
+        ForwardResult::LocalError {
+            meta: resp_meta,
+            body: resp_body,
+        } => {
+            frame::write_meta(&mut send, &resp_meta).await?;
+            send.write_all(&resp_body).await?;
+            send.finish()?;
+            Ok(RequestResult {
+                method,
+                path,
+                status: resp_meta.status,
+                duration: start.elapsed(),
+            })
+        }
+    }
+}
 
-    Ok(RequestResult {
-        method,
-        path,
-        status: resp_meta.status,
-        duration: start.elapsed(),
-    })
+async fn stream_body_to_quic(
+    mut body: Incoming,
+    send: &mut quinn::SendStream,
+) -> anyhow::Result<()> {
+    while let Some(frame) = body.frame().await {
+        let frame = frame?;
+        if let Some(data) = frame.data_ref() {
+            send.write_all(data).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn handle_upgrade_stream(
+    mut send: quinn::SendStream,
+    mut recv: quinn::RecvStream,
+    forwarder: &Forwarder,
+    meta: &RequestMeta,
+    method: &str,
+    path: &str,
+    start: Instant,
+) -> anyhow::Result<RequestResult> {
+    let result = forwarder.forward_upgrade(meta).await?;
+
+    match result {
+        ForwardUpgradeResult::Upgraded(upgrade) => {
+            frame::write_meta(&mut send, &upgrade.meta).await?;
+
+            let status = upgrade.meta.status;
+
+            let upgraded_io = TokioIo::new(upgrade.upgraded);
+            let (mut local_read, mut local_write) = io::split(upgraded_io);
+
+            let quic_to_local = io::copy(&mut recv, &mut local_write);
+            let local_to_quic = io::copy(&mut local_read, &mut send);
+
+            tokio::select! {
+                r = quic_to_local => {
+                    if let Err(e) = r {
+                        tracing::debug!(error = %e, "quic to local copy ended");
+                    }
+                }
+                r = local_to_quic => {
+                    if let Err(e) = r {
+                        tracing::debug!(error = %e, "local to quic copy ended");
+                    }
+                }
+            }
+
+            Ok(RequestResult {
+                method: method.to_string(),
+                path: path.to_string(),
+                status,
+                duration: start.elapsed(),
+            })
+        }
+        ForwardUpgradeResult::Rejected(resp_meta, resp_body) => {
+            frame::write_meta(&mut send, &resp_meta).await?;
+            send.write_all(&resp_body).await?;
+            send.finish()?;
+
+            Ok(RequestResult {
+                method: method.to_string(),
+                path: path.to_string(),
+                status: resp_meta.status,
+                duration: start.elapsed(),
+            })
+        }
+    }
 }
 
 fn is_loopback(host: &str, addr: &SocketAddr) -> bool {

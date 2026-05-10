@@ -15,6 +15,7 @@ pub struct ApiKey {
     pub scopes: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 impl ApiKey {
@@ -33,6 +34,7 @@ pub struct ApiKeyView {
     pub scopes: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 impl From<ApiKey> for ApiKeyView {
@@ -44,6 +46,7 @@ impl From<ApiKey> for ApiKeyView {
             scopes: key.scopes,
             created_at: key.created_at,
             revoked_at: key.revoked_at,
+            expires_at: key.expires_at,
         }
     }
 }
@@ -57,6 +60,7 @@ pub async fn create(
     user_id: Uuid,
     name: &str,
     scopes: &serde_json::Value,
+    expires_at: Option<DateTime<Utc>>,
 ) -> Result<(String, ApiKey), sqlx::Error> {
     let plaintext = auth::generate_api_key()
         .map_err(|e| sqlx::Error::Protocol(format!("failed to generate api key: {e}")))?;
@@ -65,8 +69,8 @@ pub async fn create(
 
     let key = sqlx::query_as::<_, ApiKey>(
         r"
-        INSERT INTO api_keys (user_id, name, key_hash, key_prefix, scopes)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO api_keys (user_id, name, key_hash, key_prefix, scopes, expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
         ",
     )
@@ -75,6 +79,7 @@ pub async fn create(
     .bind(&hash)
     .bind(prefix.as_ref())
     .bind(scopes)
+    .bind(expires_at)
     .fetch_one(pool)
     .await?;
 
@@ -84,10 +89,12 @@ pub async fn create(
 pub async fn validate(pool: &PgPool, plaintext: &str) -> Result<Option<ApiKey>, sqlx::Error> {
     let hash = auth::hash_token(plaintext);
 
-    sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE key_hash = $1 AND revoked_at IS NULL")
-        .bind(&hash)
-        .fetch_optional(pool)
-        .await
+    sqlx::query_as::<_, ApiKey>(
+        "SELECT * FROM api_keys WHERE key_hash = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())",
+    )
+    .bind(&hash)
+    .fetch_optional(pool)
+    .await
 }
 
 pub async fn list_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<ApiKey>, sqlx::Error> {
@@ -105,6 +112,18 @@ pub async fn revoke(pool: &PgPool, key_id: Uuid, user_id: Uuid) -> Result<bool, 
     )
     .bind(key_id)
     .bind(user_id)
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+pub async fn revoke_by_name(pool: &PgPool, user_id: Uuid, name: &str) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query(
+        "UPDATE api_keys SET revoked_at = now() WHERE user_id = $1 AND name = $2 AND revoked_at IS NULL",
+    )
+    .bind(user_id)
+    .bind(name)
     .execute(pool)
     .await?;
 

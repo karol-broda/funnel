@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::app::AppState;
 use crate::tunnel::connection::ActiveTunnel;
+use funnel_core::protocol::PROTOCOL_VERSION;
 use funnel_core::protocol::frame;
 use funnel_core::protocol::handshake::{Handshake, HandshakeResponse};
 
@@ -32,6 +33,26 @@ pub async fn handle_connection(
     let handshake: Handshake = frame::read_meta(&mut recv).await?;
     let tunnel_id = handshake.tunnel_id;
 
+    match handshake.version {
+        Some(v) if v != PROTOCOL_VERSION => {
+            let resp = HandshakeResponse::rejected(format!(
+                "incompatible client version: got v{v}, server requires v{PROTOCOL_VERSION}"
+            ));
+            let _ = frame::write_meta(&mut send, &resp).await;
+            return Err(ConnectionError::Auth(format!(
+                "incompatible client version: v{v}"
+            )));
+        }
+        None => {
+            let resp = HandshakeResponse::rejected("client too old, version field required");
+            let _ = frame::write_meta(&mut send, &resp).await;
+            return Err(ConnectionError::Auth(
+                "client did not send version".into(),
+            ));
+        }
+        _ => {}
+    }
+
     // validate auth token
     let token = handshake
         .token
@@ -53,7 +74,58 @@ pub async fn handle_connection(
 
     let user_id = api_key.user_id;
 
-    let tunnel = Arc::new(ActiveTunnel::new(tunnel_id.clone(), conn.clone()));
+    // check user is active
+    let user = state
+        .users
+        .find_by_id(user_id)
+        .await
+        .map_err(|e| ConnectionError::Auth(format!("user lookup failed: {e}")))?
+        .ok_or_else(|| ConnectionError::Auth("user not found".into()))?;
+
+    if !user.is_active() {
+        let resp = HandshakeResponse::rejected("user account is deactivated");
+        let _ = frame::write_meta(&mut send, &resp).await;
+        return Err(ConnectionError::Auth("deactivated user".into()));
+    }
+
+    // resolve team if specified
+    let team_id = if let Some(ref team_name) = handshake.team {
+        let team = state
+            .teams
+            .find_by_name(team_name)
+            .await
+            .map_err(|e| ConnectionError::Auth(format!("team lookup failed: {e}")))?
+            .ok_or_else(|| {
+                ConnectionError::Auth(format!("team not found: {team_name}"))
+            })?;
+
+        let is_member = state
+            .teams
+            .is_member(team.id, user_id)
+            .await
+            .map_err(|e| ConnectionError::Auth(format!("membership check failed: {e}")))?;
+
+        if !is_member {
+            let resp = HandshakeResponse::rejected(format!(
+                "not a member of team: {team_name}"
+            ));
+            let _ = frame::write_meta(&mut send, &resp).await;
+            return Err(ConnectionError::Auth(format!(
+                "not a member of team: {team_name}"
+            )));
+        }
+
+        Some(team.id)
+    } else {
+        None
+    };
+
+    let tunnel = Arc::new(ActiveTunnel::new(
+        tunnel_id.clone(),
+        conn.clone(),
+        user_id,
+        team_id,
+    ));
 
     if state
         .tunnels
@@ -67,7 +139,12 @@ pub async fn handle_connection(
 
     frame::write_meta(&mut send, &HandshakeResponse::ok()).await?;
 
-    tracing::info!(tunnel_id = %tunnel_id, user_id = %user_id, "tunnel connected via quic");
+    tracing::info!(
+        tunnel_id = %tunnel_id,
+        user_id = %user_id,
+        team_id = ?team_id,
+        "tunnel connected via quic"
+    );
 
     metrics::gauge!("funnel_tunnels_active").increment(1.0);
     metrics::counter!("funnel_tunnels_total").increment(1);

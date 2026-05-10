@@ -1,3 +1,4 @@
+use funnel_core::protocol::PROTOCOL_VERSION;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
@@ -56,7 +57,7 @@ fn format_timestamp(ts: &str) -> &str {
 
 pub async fn list(server: &str, token: &str) -> anyhow::Result<()> {
     let resp = client(token)
-        .get(format!("{server}/api/keys"))
+        .get(format!("{server}/api/v{PROTOCOL_VERSION}/keys"))
         .send()
         .await?;
 
@@ -100,7 +101,7 @@ pub async fn create(
     let scopes = scopes.map(|s| s.split(',').map(|s| s.trim().to_string()).collect());
 
     let resp = client(token)
-        .post(format!("{server}/api/keys"))
+        .post(format!("{server}/api/v{PROTOCOL_VERSION}/keys"))
         .json(&CreateKeyRequest {
             name: name.to_string(),
             scopes,
@@ -125,7 +126,7 @@ pub async fn create(
 
 pub async fn revoke(server: &str, token: &str, id: &str) -> anyhow::Result<()> {
     let resp = client(token)
-        .delete(format!("{server}/api/keys/{id}"))
+        .delete(format!("{server}/api/v{PROTOCOL_VERSION}/keys/{id}"))
         .send()
         .await?;
 

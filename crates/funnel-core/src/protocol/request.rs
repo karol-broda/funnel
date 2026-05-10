@@ -17,6 +17,8 @@ pub struct RequestMeta {
     pub method: String,
     pub path: String,
     pub headers: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    pub upgrade: bool,
 }
 
 impl RequestMeta {
@@ -72,6 +74,7 @@ mod tests {
                 h.insert("content-type".into(), vec!["application/json".into()]);
                 h
             },
+            upgrade: false,
         };
 
         let encoded = rmp_serde::to_vec_named(&meta)?;
@@ -100,6 +103,7 @@ mod tests {
             method: "GET".into(),
             path: "/".into(),
             headers: HashMap::new(),
+            upgrade: false,
         };
         assert_eq!(meta.http_method().ok(), Some(http::Method::GET));
     }
@@ -110,6 +114,7 @@ mod tests {
             method: "".into(),
             path: "/".into(),
             headers: HashMap::new(),
+            upgrade: false,
         };
         assert!(meta.http_method().is_err());
     }

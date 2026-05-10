@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{Path, State};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -14,6 +15,7 @@ use crate::error::AppError;
 pub struct CreateKeyRequest {
     pub name: String,
     pub scopes: Option<Vec<String>>,
+    pub expires_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize)]
@@ -41,7 +43,7 @@ pub async fn create(
 
     let (plaintext, info) = state
         .api_keys
-        .create(auth.user_id, &req.name, &scopes)
+        .create(auth.user_id, &req.name, &scopes, req.expires_at)
         .await?;
 
     Ok(Json(CreateKeyResponse {

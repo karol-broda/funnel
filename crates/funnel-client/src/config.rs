@@ -30,8 +30,6 @@ pub struct Context {
     pub server: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub domain: Option<String>,
     #[serde(default = "default_quic_port")]
     pub quic_port: u16,
 }
@@ -41,7 +39,6 @@ impl Default for Context {
         Self {
             server: String::new(),
             token: None,
-            domain: None,
             quic_port: DEFAULT_QUIC_PORT,
         }
     }

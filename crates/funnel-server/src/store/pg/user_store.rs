@@ -44,4 +44,29 @@ impl UserStore for PgUserStore {
             )
         })
     }
+
+    fn update_role(&self, id: Uuid, role: &str) -> BoxFuture<'_, Result<User, StoreError>> {
+        let role = role.to_string();
+        Box::pin(async move { Ok(users::update_role(&self.pool, id, &role).await?) })
+    }
+
+    fn deactivate(&self, id: Uuid) -> BoxFuture<'_, Result<User, StoreError>> {
+        Box::pin(async move { Ok(users::deactivate(&self.pool, id).await?) })
+    }
+
+    fn reactivate(&self, id: Uuid) -> BoxFuture<'_, Result<User, StoreError>> {
+        Box::pin(async move { Ok(users::reactivate(&self.pool, id).await?) })
+    }
+
+    fn list_all(&self, limit: i64) -> BoxFuture<'_, Result<Vec<User>, StoreError>> {
+        Box::pin(async move { Ok(users::list_all(&self.pool, limit).await?) })
+    }
+
+    fn count(&self) -> BoxFuture<'_, Result<i64, StoreError>> {
+        Box::pin(async move { Ok(users::count(&self.pool).await?) })
+    }
+
+    fn count_admins(&self) -> BoxFuture<'_, Result<i64, StoreError>> {
+        Box::pin(async move { Ok(users::count_admins(&self.pool).await?) })
+    }
 }

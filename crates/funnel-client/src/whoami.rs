@@ -1,3 +1,4 @@
+use funnel_core::protocol::PROTOCOL_VERSION;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -9,7 +10,7 @@ struct UserInfo {
 
 pub async fn run(server: &str, token: &str, context_name: &str) -> anyhow::Result<()> {
     let resp = reqwest::Client::new()
-        .get(format!("{server}/api/me"))
+        .get(format!("{server}/api/v{PROTOCOL_VERSION}/me"))
         .header("authorization", format!("Bearer {token}"))
         .send()
         .await?;

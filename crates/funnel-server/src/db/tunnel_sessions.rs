@@ -80,10 +80,20 @@ pub async fn list_for_user(
     .await
 }
 
+#[allow(dead_code)]
 pub async fn list_active(pool: &PgPool) -> Result<Vec<TunnelSession>, sqlx::Error> {
     sqlx::query_as::<_, TunnelSession>(
         "SELECT * FROM tunnel_sessions WHERE disconnected_at IS NULL ORDER BY connected_at DESC",
     )
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn list_all(pool: &PgPool, limit: i64) -> Result<Vec<TunnelSession>, sqlx::Error> {
+    sqlx::query_as::<_, TunnelSession>(
+        "SELECT * FROM tunnel_sessions ORDER BY connected_at DESC LIMIT $1",
+    )
+    .bind(limit)
     .fetch_all(pool)
     .await
 }

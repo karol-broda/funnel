@@ -4,8 +4,11 @@ mod display;
 mod forwarder;
 mod keys;
 mod runner;
+mod sessions;
 mod status;
+mod teams;
 mod tunnel;
+mod users;
 mod whoami;
 
 use std::sync::Arc;
@@ -56,6 +59,10 @@ enum Command {
         /// skip tls certificate verification (for development)
         #[arg(long)]
         insecure: bool,
+
+        /// associate tunnel with a team
+        #[arg(long)]
+        team: Option<String>,
     },
     /// log in via oauth
     Login {
@@ -73,6 +80,26 @@ enum Command {
     Keys {
         #[command(subcommand)]
         command: KeysCommand,
+    },
+    /// view tunnel sessions
+    Sessions {
+        /// show all sessions (admin only)
+        #[arg(long)]
+        all: bool,
+
+        /// maximum number of sessions to show
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+    /// manage users (admin only)
+    Users {
+        #[command(subcommand)]
+        command: UsersCommand,
+    },
+    /// manage teams
+    Teams {
+        #[command(subcommand)]
+        command: TeamsCommand,
     },
     /// manage server contexts
     Context {
@@ -102,6 +129,77 @@ enum KeysCommand {
     Revoke {
         /// key id to revoke
         id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum UsersCommand {
+    /// list all users
+    List {
+        /// maximum number of users to show
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+    /// set a user's role
+    SetRole {
+        /// user id
+        id: String,
+        /// new role (admin or member)
+        role: String,
+    },
+    /// deactivate a user
+    Deactivate {
+        /// user id
+        id: String,
+    },
+    /// reactivate a user
+    Reactivate {
+        /// user id
+        id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum TeamsCommand {
+    /// list teams
+    List,
+    /// create a new team
+    Create {
+        /// team name
+        name: String,
+    },
+    /// delete a team
+    Delete {
+        /// team id
+        id: String,
+    },
+    /// list team members
+    Members {
+        /// team id
+        id: String,
+    },
+    /// add a member to a team
+    AddMember {
+        /// team id
+        team_id: String,
+        /// user id to add
+        user_id: String,
+    },
+    /// remove a member from a team
+    RemoveMember {
+        /// team id
+        team_id: String,
+        /// user id to remove
+        user_id: String,
+    },
+    /// set a member's role in a team
+    SetRole {
+        /// team id
+        team_id: String,
+        /// user id
+        user_id: String,
+        /// role (owner or member)
+        role: String,
     },
 }
 
@@ -170,6 +268,7 @@ async fn main() -> anyhow::Result<()> {
             token,
             quic_port,
             insecure,
+            team,
         } => {
             run_http(
                 ctx_override,
@@ -179,6 +278,7 @@ async fn main() -> anyhow::Result<()> {
                 token,
                 quic_port,
                 insecure,
+                team,
             )
             .await
         }
@@ -215,12 +315,64 @@ async fn main() -> anyhow::Result<()> {
                 KeysCommand::Revoke { id } => keys::revoke(&resolved.server, &token, &id).await,
             }
         }
+        Command::Sessions { all, limit } => {
+            let cfg = config::load()?;
+            let (resolved, token) = config::resolve_authenticated(&cfg, ctx_override)?;
+            sessions::list(&resolved.server, &token, all, limit).await
+        }
+        Command::Users { command } => {
+            let cfg = config::load()?;
+            let (resolved, token) = config::resolve_authenticated(&cfg, ctx_override)?;
+            match command {
+                UsersCommand::List { limit } => {
+                    users::list(&resolved.server, &token, limit).await
+                }
+                UsersCommand::SetRole { id, role } => {
+                    users::set_role(&resolved.server, &token, &id, &role).await
+                }
+                UsersCommand::Deactivate { id } => {
+                    users::deactivate(&resolved.server, &token, &id).await
+                }
+                UsersCommand::Reactivate { id } => {
+                    users::reactivate(&resolved.server, &token, &id).await
+                }
+            }
+        }
+        Command::Teams { command } => {
+            let cfg = config::load()?;
+            let (resolved, token) = config::resolve_authenticated(&cfg, ctx_override)?;
+            match command {
+                TeamsCommand::List => teams::list(&resolved.server, &token).await,
+                TeamsCommand::Create { name } => {
+                    teams::create(&resolved.server, &token, &name).await
+                }
+                TeamsCommand::Delete { id } => {
+                    teams::delete(&resolved.server, &token, &id).await
+                }
+                TeamsCommand::Members { id } => {
+                    teams::members(&resolved.server, &token, &id).await
+                }
+                TeamsCommand::AddMember { team_id, user_id } => {
+                    teams::add_member(&resolved.server, &token, &team_id, &user_id).await
+                }
+                TeamsCommand::RemoveMember { team_id, user_id } => {
+                    teams::remove_member(&resolved.server, &token, &team_id, &user_id).await
+                }
+                TeamsCommand::SetRole {
+                    team_id,
+                    user_id,
+                    role,
+                } => {
+                    teams::set_role(&resolved.server, &token, &team_id, &user_id, &role).await
+                }
+            }
+        }
         Command::Context { command } => run_context(command),
         Command::Config { command } => run_config(&command),
     }
 }
 
-#[allow(clippy::fn_params_excessive_bools)]
+#[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
 async fn run_http(
     ctx_override: Option<&str>,
     address: String,
@@ -229,6 +381,7 @@ async fn run_http(
     token_flag: Option<String>,
     quic_port_flag: Option<u16>,
     insecure: bool,
+    team: Option<String>,
 ) -> anyhow::Result<()> {
     let local_addr = normalize_address(&address);
 
@@ -264,12 +417,15 @@ async fn run_http(
     };
 
     let public_url =
-        runner::build_public_url(&server_url, &tunnel_id).unwrap_or_else(|| format!("<unknown>"));
+        runner::build_public_url(&server_url, &tunnel_id).unwrap_or_else(|| "<unknown>".to_string());
 
     println!("funnel\n");
     println!("  public url  {public_url}");
     println!("  forwarding  {local_addr}");
     println!("  tunnel id   {tunnel_id}");
+    if let Some(ref team_name) = team {
+        println!("  team        {team_name}");
+    }
     println!();
 
     let display = Arc::new(display::TunnelDisplay::new());
@@ -281,6 +437,7 @@ async fn run_http(
         token,
         quic_port,
         insecure,
+        team,
     )?;
 
     let shutdown = CancellationToken::new();

@@ -3,6 +3,8 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::extract::State;
 use axum::http::{Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
+use tokio::io;
 use tokio_util::io::ReaderStream;
 
 use funnel_core::protocol::request::{self as proto, RequestMeta, ResponseMeta};
@@ -10,32 +12,49 @@ use funnel_core::tunnel::id::TunnelId;
 
 use super::headers::prepare_forwarding_headers;
 use crate::app::AppState;
-use crate::tunnel::connection::{CountedRecvStream, SendError};
+use crate::tunnel::connection::{ActiveTunnel, CountedRecvStream, SendError};
+
+fn is_upgrade_request(req: &Request<Body>) -> bool {
+    req.headers()
+        .get("connection")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.eq_ignore_ascii_case("upgrade"))
+}
 
 /// axum fallback handler that routes requests based on subdomain.
 /// requests to `{tunnel_id}.{base_domain}` are forwarded through the matching tunnel.
 pub async fn handle_tunnel_request(
     State(state): State<Arc<AppState>>,
-    request: Request<Body>,
+    mut request: Request<Body>,
 ) -> Response<Body> {
     let host = request
         .headers()
         .get("host")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+        .unwrap_or("")
+        .to_string();
 
-    let subdomain = match extract_subdomain(host) {
-        Some(s) => s.to_string(),
-        None => return not_found("tunnel not found"),
-    };
+    // use pre-resolved tunnel id from middleware when available
+    let tunnel_id = request
+        .extensions()
+        .get::<TunnelId>()
+        .cloned()
+        .or_else(|| {
+            extract_subdomain(&host)
+                .and_then(|s| TunnelId::new(s).ok())
+        });
 
-    let Ok(tunnel_id) = TunnelId::new(&subdomain) else {
+    let Some(tunnel_id) = tunnel_id else {
         return not_found("tunnel not found");
     };
 
     let Some(tunnel) = state.tunnels.get(&tunnel_id) else {
         return not_found("tunnel not found");
     };
+
+    if is_upgrade_request(&request) {
+        return handle_upgrade(&mut request, &host, &state, &tunnel).await;
+    }
 
     let method = request.method().to_string();
     let path = request.uri().to_string();
@@ -46,12 +65,13 @@ pub async fn handle_tunnel_request(
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
         .map_or(fallback_addr, |ci| ci.0);
 
-    let headers = prepare_forwarding_headers(request.headers(), host, remote_addr, state.is_tls);
+    let headers = prepare_forwarding_headers(request.headers(), &host, remote_addr, state.is_tls);
 
     let meta = RequestMeta {
         method,
         path,
         headers,
+        upgrade: false,
     };
 
     let body = request.into_body();
@@ -68,6 +88,101 @@ pub async fn handle_tunnel_request(
             error_response(StatusCode::BAD_GATEWAY, "tunnel error")
         }
     }
+}
+
+async fn handle_upgrade(
+    request: &mut Request<Body>,
+    host: &str,
+    state: &AppState,
+    tunnel: &ActiveTunnel,
+) -> Response<Body> {
+    let method = request.method().to_string();
+    let path = request.uri().to_string();
+
+    let fallback_addr = std::net::SocketAddr::from(([0, 0, 0, 0], 0));
+    let remote_addr = request
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map_or(fallback_addr, |ci| ci.0);
+
+    let headers = prepare_forwarding_headers(request.headers(), host, remote_addr, state.is_tls);
+
+    let meta = RequestMeta {
+        method,
+        path,
+        headers,
+        upgrade: true,
+    };
+
+    // capture the upgrade future before we consume anything
+    let on_upgrade = hyper::upgrade::on(request);
+
+    let (resp_meta, quic_send, quic_recv) = match tunnel.send_upgrade_request(meta).await {
+        Ok(v) => v,
+        Err(SendError::Timeout) => {
+            return error_response(StatusCode::GATEWAY_TIMEOUT, "request timed out");
+        }
+        Err(e) => {
+            tracing::debug!(error = %e, "upgrade tunnel request failed");
+            return error_response(StatusCode::BAD_GATEWAY, "tunnel error");
+        }
+    };
+
+    let status = resp_meta
+        .http_status()
+        .unwrap_or(StatusCode::BAD_GATEWAY);
+
+    if status != StatusCode::SWITCHING_PROTOCOLS {
+        // backend rejected the upgrade, return the response as is
+        let mut builder = Response::builder().status(status);
+        if let Some(h) = builder.headers_mut() {
+            *h = proto::to_header_map(&resp_meta.headers);
+        }
+        return builder
+            .body(Body::empty())
+            .unwrap_or_else(|_| error_response(StatusCode::INTERNAL_SERVER_ERROR, "internal error"));
+    }
+
+    // build the 101 response for the browser
+    let mut builder = Response::builder().status(StatusCode::SWITCHING_PROTOCOLS);
+    if let Some(h) = builder.headers_mut() {
+        *h = proto::to_header_map(&resp_meta.headers);
+    }
+
+    // spawn a task to pipe bytes between the browser upgrade and the quic streams
+    tokio::spawn(async move {
+        let upgraded = match on_upgrade.await {
+            Ok(u) => u,
+            Err(e) => {
+                tracing::debug!(error = %e, "upgrade handshake failed");
+                return;
+            }
+        };
+
+        let upgraded_io = TokioIo::new(upgraded);
+        let (mut browser_read, mut browser_write) = io::split(upgraded_io);
+        let (mut quic_send, mut quic_recv) = (quic_send, quic_recv);
+
+        let client_to_quic = io::copy(&mut browser_read, &mut quic_send);
+        let quic_to_client = io::copy(&mut quic_recv, &mut browser_write);
+
+        tokio::select! {
+            r = client_to_quic => {
+                if let Err(e) = r {
+                    tracing::debug!(error = %e, "browser to quic copy ended");
+                }
+            }
+            r = quic_to_client => {
+                if let Err(e) = r {
+                    tracing::debug!(error = %e, "quic to browser copy ended");
+                }
+            }
+        }
+    });
+
+    builder
+        .body(Body::empty())
+        .unwrap_or_else(|_| error_response(StatusCode::INTERNAL_SERVER_ERROR, "internal error"))
 }
 
 pub fn extract_subdomain(host: &str) -> Option<&str> {
@@ -158,5 +273,25 @@ mod tests {
     #[test]
     fn extract_subdomain_deep_nesting() {
         assert_eq!(extract_subdomain("a.b.example.com"), Some("a"));
+    }
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    #[test]
+    fn detects_upgrade_request() -> TestResult {
+        let req = Request::builder()
+            .header("connection", "Upgrade")
+            .header("upgrade", "websocket")
+            .body(Body::empty())?;
+        assert!(is_upgrade_request(&req));
+        Ok(())
+    }
+
+    #[test]
+    fn normal_request_is_not_upgrade() -> TestResult {
+        let req = Request::builder()
+            .body(Body::empty())?;
+        assert!(!is_upgrade_request(&req));
+        Ok(())
     }
 }
