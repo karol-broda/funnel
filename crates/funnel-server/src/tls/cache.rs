@@ -27,10 +27,7 @@ impl CertCache {
     }
 
     pub fn get(&self, domain: &str) -> Option<(Arc<CertifiedKey>, SystemTime)> {
-        let cache = self
-            .inner
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let cache = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         let cached = cache.peek(domain)?;
         let result = (Arc::clone(&cached.certified_key), cached.not_after);
         drop(cache);
@@ -38,10 +35,7 @@ impl CertCache {
     }
 
     pub fn put(&self, domain: String, key: CertifiedKey, not_after: SystemTime) {
-        let mut cache = self
-            .inner
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let mut cache = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         cache.put(
             domain,
             CachedCert {
@@ -52,10 +46,7 @@ impl CertCache {
     }
 
     pub fn domains_needing_renewal(&self, window: Duration) -> Vec<String> {
-        let cache = self
-            .inner
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let cache = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         cache
             .iter()
             .filter(|(_, cert)| {

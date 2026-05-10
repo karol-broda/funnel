@@ -93,8 +93,7 @@ impl CertificateManager {
 
         tracing::info!(domain = %domain, "ordering certificate from ACME");
 
-        let (cert_pem, key_pem) =
-            acme::order_certificate(&self.account, domain, &provider).await?;
+        let (cert_pem, key_pem) = acme::order_certificate(&self.account, domain, &provider).await?;
 
         self.save_to_disk(domain, &cert_pem, &key_pem).await?;
 

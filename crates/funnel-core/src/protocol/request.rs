@@ -41,9 +41,7 @@ impl ResponseMeta {
 }
 
 /// convert a protocol header map into an http `HeaderMap`, skipping invalid entries.
-pub fn to_header_map<S: BuildHasher>(
-    headers: &HashMap<String, Vec<String>, S>,
-) -> http::HeaderMap {
+pub fn to_header_map<S: BuildHasher>(headers: &HashMap<String, Vec<String>, S>) -> http::HeaderMap {
     let mut map = http::HeaderMap::new();
     for (name, values) in headers {
         for value in values {
@@ -122,10 +120,7 @@ mod tests {
             status: 404,
             headers: HashMap::new(),
         };
-        assert_eq!(
-            meta.http_status().ok(),
-            Some(http::StatusCode::NOT_FOUND)
-        );
+        assert_eq!(meta.http_status().ok(), Some(http::StatusCode::NOT_FOUND));
     }
 
     #[test]
@@ -144,7 +139,10 @@ mod tests {
         headers.insert("x-custom".into(), vec!["a".into(), "b".into()]);
 
         let map = to_header_map(&headers);
-        assert_eq!(map.get("content-type").and_then(|v| v.to_str().ok()), Some("text/html"));
+        assert_eq!(
+            map.get("content-type").and_then(|v| v.to_str().ok()),
+            Some("text/html")
+        );
         assert_eq!(map.get_all("x-custom").iter().count(), 2);
     }
 
