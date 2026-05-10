@@ -37,14 +37,15 @@ impl SessionRecorder for PgSessionRecorder {
         requests: i64,
     ) -> BoxFuture<'_, Result<bool, StoreError>> {
         Box::pin(async move {
-            Ok(tunnel_sessions::disconnect(&self.pool, session_id, bytes_in, bytes_out, requests).await?)
+            Ok(
+                tunnel_sessions::disconnect(&self.pool, session_id, bytes_in, bytes_out, requests)
+                    .await?,
+            )
         })
     }
 
     fn list_active(&self) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>> {
-        Box::pin(async move {
-            Ok(tunnel_sessions::list_active(&self.pool).await?)
-        })
+        Box::pin(async move { Ok(tunnel_sessions::list_active(&self.pool).await?) })
     }
 
     fn list_for_user(
@@ -52,8 +53,8 @@ impl SessionRecorder for PgSessionRecorder {
         user_id: Uuid,
         limit: i64,
     ) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>> {
-        Box::pin(async move {
-            Ok(tunnel_sessions::list_for_user(&self.pool, user_id, limit).await?)
-        })
+        Box::pin(
+            async move { Ok(tunnel_sessions::list_for_user(&self.pool, user_id, limit).await?) },
+        )
     }
 }

@@ -1,8 +1,8 @@
 use ipnetwork::IpNetwork;
 use uuid::Uuid;
 
-use crate::db::tunnel_sessions::TunnelSession;
 use super::{BoxFuture, StoreError};
+use crate::db::tunnel_sessions::TunnelSession;
 
 pub trait SessionRecorder: Send + Sync {
     fn record_connect(

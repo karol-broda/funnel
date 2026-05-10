@@ -233,3 +233,60 @@ async fn revoked_key_cannot_authenticate() -> TestResult {
 
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn me_requires_auth() -> TestResult {
+    let env = AuthTestEnv::start().await?;
+
+    let resp = env.client.get(env.url("/api/me")).send().await?;
+    assert_eq!(resp.status(), 401);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn me_returns_404_for_seed_key_user() -> TestResult {
+    let env = AuthTestEnv::start().await?;
+
+    // seed key is created with nil UUID, no matching user exists
+    let resp = env
+        .client
+        .get(env.url("/api/me"))
+        .header("authorization", env.auth_header())
+        .send()
+        .await?;
+    assert_eq!(resp.status(), 404);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn oauth_authorize_returns_404_when_not_configured() -> TestResult {
+    let env = AuthTestEnv::start().await?;
+
+    let resp = env
+        .client
+        .get(env.url("/auth/github/authorize?cli_port=9999"))
+        .send()
+        .await?;
+    assert_eq!(resp.status(), 404);
+
+    let body = resp.text().await?;
+    assert!(body.contains("oauth not configured"));
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn oauth_callback_returns_404_when_not_configured() -> TestResult {
+    let env = AuthTestEnv::start().await?;
+
+    let resp = env
+        .client
+        .get(env.url("/auth/github/callback?code=test&state=test"))
+        .send()
+        .await?;
+    assert_eq!(resp.status(), 404);
+
+    Ok(())
+}

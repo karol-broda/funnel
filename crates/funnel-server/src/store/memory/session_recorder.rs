@@ -41,7 +41,10 @@ impl SessionRecorder for InMemorySessionRecorder {
                 requests: 0,
             };
             {
-                let mut sessions = self.sessions.write().unwrap_or_else(PoisonError::into_inner);
+                let mut sessions = self
+                    .sessions
+                    .write()
+                    .unwrap_or_else(PoisonError::into_inner);
                 sessions.push(session.clone());
             }
             Ok(session)
@@ -56,8 +59,14 @@ impl SessionRecorder for InMemorySessionRecorder {
         requests: i64,
     ) -> BoxFuture<'_, Result<bool, StoreError>> {
         Box::pin(async move {
-            let mut sessions = self.sessions.write().unwrap_or_else(PoisonError::into_inner);
-            if let Some(session) = sessions.iter_mut().find(|s| s.id == session_id && s.disconnected_at.is_none()) {
+            let mut sessions = self
+                .sessions
+                .write()
+                .unwrap_or_else(PoisonError::into_inner);
+            if let Some(session) = sessions
+                .iter_mut()
+                .find(|s| s.id == session_id && s.disconnected_at.is_none())
+            {
                 session.disconnected_at = Some(Utc::now());
                 session.bytes_in = bytes_in;
                 session.bytes_out = bytes_out;
@@ -72,7 +81,11 @@ impl SessionRecorder for InMemorySessionRecorder {
     fn list_active(&self) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>> {
         Box::pin(async move {
             let sessions = self.sessions.read().unwrap_or_else(PoisonError::into_inner);
-            Ok(sessions.iter().filter(|s| s.disconnected_at.is_none()).cloned().collect())
+            Ok(sessions
+                .iter()
+                .filter(|s| s.disconnected_at.is_none())
+                .cloned()
+                .collect())
         })
     }
 
@@ -124,7 +137,10 @@ mod tests {
         let uid = user_id();
 
         let session = store.record_connect(uid, "tunnel-2", None).await.unwrap();
-        let disconnected = store.record_disconnect(session.id, 100, 200, 5).await.unwrap();
+        let disconnected = store
+            .record_disconnect(session.id, 100, 200, 5)
+            .await
+            .unwrap();
         assert!(disconnected);
 
         let active = store.list_active().await.unwrap();
@@ -137,7 +153,10 @@ mod tests {
         let uid = user_id();
 
         let session = store.record_connect(uid, "tunnel-3", None).await.unwrap();
-        store.record_disconnect(session.id, 1024, 2048, 10).await.unwrap();
+        store
+            .record_disconnect(session.id, 1024, 2048, 10)
+            .await
+            .unwrap();
 
         let all = store.list_for_user(uid, 100).await.unwrap();
         assert_eq!(all.len(), 1);
@@ -150,7 +169,10 @@ mod tests {
     #[tokio::test]
     async fn disconnect_nonexistent_returns_false() {
         let store = InMemorySessionRecorder::new();
-        let result = store.record_disconnect(Uuid::now_v7(), 0, 0, 0).await.unwrap();
+        let result = store
+            .record_disconnect(Uuid::now_v7(), 0, 0, 0)
+            .await
+            .unwrap();
         assert!(!result);
     }
 
@@ -172,7 +194,10 @@ mod tests {
         let uid = user_id();
 
         for i in 0..5 {
-            store.record_connect(uid, &format!("tunnel-{i}"), None).await.unwrap();
+            store
+                .record_connect(uid, &format!("tunnel-{i}"), None)
+                .await
+                .unwrap();
         }
 
         let limited = store.list_for_user(uid, 3).await.unwrap();
