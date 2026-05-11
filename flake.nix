@@ -1,51 +1,33 @@
 {
-  description = "rust development flake";
+  description = "funnel | expose local services through secure tunnels";
+
+  nixConfig = {
+    extra-substituters = ["https://cache.karolbroda.com/funnel"];
+    extra-trusted-public-keys = ["funnel:f2v8GXhe4t/c5ITHJ/LRYqcen5RWsYNEa9BKvxxxVBA="];
+  };
 
   inputs = {
     nixpkgs = {
       url = "github:NixOS/nixpkgs/nixos-25.05";
     };
+    flake-parts = {
+      url = "github:hercules-ci/flake-parts";
+    };
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
+    };
+    crane = {
+      url = "github:ipetkov/crane";
     };
     systems = {
       url = "github:nix-systems/default";
     };
   };
 
-  outputs = {
-    self,
-    nixpkgs,
-    rust-overlay,
-    systems,
-  }: let
-    supportedSystems = import systems;
-    forAllSystems = f: nixpkgs.lib.genAttrs supportedSystems (system: f system);
-
-    mkPkgs = system:
-      import nixpkgs {
-        inherit system;
-        overlays = [
-          rust-overlay.overlays.default
-        ];
-      };
-
-    mkModules = system:
-      import ./nix {
-        pkgs = mkPkgs system;
-      };
-  in {
-    devShells = forAllSystems (
-      system: let
-        modules = mkModules system;
-      in {
-        inherit (modules.shells) default nightly wasm;
-      }
-    );
-
-    overlays = {
-      default = rust-overlay.overlays.default;
+  outputs = inputs @ {flake-parts, ...}:
+    flake-parts.lib.mkFlake {inherit inputs;} {
+      systems = import inputs.systems;
+      imports = [./nix/parts];
     };
-  };
 }

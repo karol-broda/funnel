@@ -382,7 +382,7 @@ async fn create_seed_key(state: &Arc<app::AppState>) -> anyhow::Result<()> {
         .await
     {
         Ok((plaintext, _)) => {
-            println!("{plaintext}");
+            tracing::info!(seed_api_key = %plaintext, "seed api key created");
         }
         Err(store::StoreError::Conflict(_)) => {
             tracing::info!("seed key already exists, skipping");

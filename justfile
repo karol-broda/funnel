@@ -47,3 +47,39 @@ audit:
 # find unused dependencies
 machete:
     cargo machete
+
+# build nix packages
+nix-build:
+    nix build .#funnel-server .#funnel-client
+
+# build oci container images
+nix-images:
+    nix build .#funnel-server-image .#funnel-client-image
+
+# run nix checks (clippy, fmt, nixos vm test)
+nix-check:
+    nix flake check
+
+# push all outputs to the attic binary cache
+nix-push:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "building and pushing funnel-server..."
+    nix build .#funnel-server --no-link --print-out-paths | xargs attic push funnel
+    echo "building and pushing funnel-client..."
+    nix build .#funnel-client --no-link --print-out-paths | xargs attic push funnel
+    echo "done"
+
+# push container images to attic binary cache
+nix-push-images:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "building and pushing funnel-server-image..."
+    nix build .#funnel-server-image --no-link --print-out-paths | xargs attic push funnel
+    echo "building and pushing funnel-client-image..."
+    nix build .#funnel-client-image --no-link --print-out-paths | xargs attic push funnel
+    echo "done"
+
+# load a container image into docker
+nix-docker-load target="funnel-server-image":
+    nix build .#{{ target }} && docker load < result
