@@ -25,8 +25,24 @@ use auth::oauth::{OAuthProvider, OAuthState};
 use store::health::UptimeHealthReporter;
 use tunnel::manager::TunnelManager;
 
+fn build_version() -> &'static str {
+    Box::leak(
+        format!(
+            "{} ({}) protocol v{}",
+            env!("CARGO_PKG_VERSION"),
+            env!("FUNNEL_GIT_HASH"),
+            funnel_core::protocol::PROTOCOL_VERSION,
+        )
+        .into_boxed_str(),
+    )
+}
+
 #[derive(Parser)]
-#[command(name = "funnel-server", about = "Funnel tunnel server")]
+#[command(
+    name = "funnel-server",
+    about = "Funnel tunnel server",
+    version = build_version(),
+)]
 struct Cli {
     /// Port to listen on
     #[arg(short, long, default_value_t = 8080, env = "FUNNEL_PORT")]

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Nix Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          extra-conf: accept-flake-config = true
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+      - run: nix flake check
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          extra-conf: accept-flake-config = true
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+      - run: nix develop -c cargo nextest run --workspace --exclude funnel-e2e
+      - run: nix develop -c cargo test --doc --workspace
+
+  deny:
+    name: Deny (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        check: [advisories, "bans licenses sources"]
+    continue-on-error: ${{ matrix.check == 'advisories' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check ${{ matrix.check }}

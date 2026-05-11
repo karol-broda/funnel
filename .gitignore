@@ -5,7 +5,7 @@
 # Environment
 .env
 .direnv
-result
+result*
 
 # IDE
 .vscode/

@@ -1,6 +1,7 @@
 {
   pkgs,
   craneLib,
+  gitHash ? "unknown",
 }: let
   src = let
     sqlFilter = path: _type:
@@ -30,6 +31,7 @@
 
     nativeBuildInputs = [pkgs.pkg-config];
 
+    FUNNEL_GIT_HASH = gitHash;
     OPENSSL_NO_VENDOR = "1";
     OPENSSL_DIR = "${pkgs.openssl.dev}";
     OPENSSL_LIB_DIR = "${pkgs.openssl.out}/lib";

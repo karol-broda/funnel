@@ -6,10 +6,23 @@ mod tunnel;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
+fn build_version() -> &'static str {
+    Box::leak(
+        format!(
+            "{} ({}) protocol v{}",
+            env!("CARGO_PKG_VERSION"),
+            env!("FUNNEL_GIT_HASH"),
+            funnel_core::protocol::PROTOCOL_VERSION,
+        )
+        .into_boxed_str(),
+    )
+}
+
 #[derive(Parser)]
 #[command(
     name = "funnel",
-    about = "expose local services through secure tunnels"
+    about = "expose local services through secure tunnels",
+    version = build_version(),
 )]
 struct Cli {
     /// context to use (overrides current_context in config)
