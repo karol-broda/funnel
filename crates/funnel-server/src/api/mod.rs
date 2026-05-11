@@ -1,5 +1,6 @@
 pub mod accounts;
 pub mod health;
+pub mod info;
 pub mod keys;
 pub mod me;
 pub mod oauth;

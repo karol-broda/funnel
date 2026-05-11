@@ -17,6 +17,14 @@ struct CallbackParams {
     token: String,
 }
 
+pub fn logout(ctx_override: Option<&str>) -> anyhow::Result<()> {
+    let cfg = config::load()?;
+    let name = ctx_override.unwrap_or(&cfg.current_context).to_string();
+    config::clear_token(&name)?;
+    println!("logged out from context '{name}'");
+    Ok(())
+}
+
 pub async fn login(context_name: &str, provider: &str) -> anyhow::Result<()> {
     let cfg = config::load()?;
     let resolved = config::resolve(&cfg, Some(context_name))?;

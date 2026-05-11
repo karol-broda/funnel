@@ -16,8 +16,8 @@ use funnel_core::protocol::handshake::{Handshake, HandshakeResponse};
 use funnel_core::protocol::request::RequestMeta;
 use funnel_core::tunnel::id::TunnelId;
 
-use crate::display::{RequestResult, TunnelDisplay};
-use crate::forwarder::{ForwardResult, ForwardUpgradeResult, Forwarder};
+use super::display::{RequestResult, TunnelDisplay};
+use super::forwarder::{ForwardResult, ForwardUpgradeResult, Forwarder};
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_CONCURRENT_REQUESTS: usize = 128;

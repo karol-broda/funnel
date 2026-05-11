@@ -264,6 +264,7 @@ async fn build_state(
     is_tls: bool,
     oauth_state: Option<Arc<OAuthState>>,
     initial_admin_email: Option<String>,
+    quic_port: u16,
 ) -> anyhow::Result<Arc<app::AppState>> {
     let tunnels = Arc::new(TunnelManager::new());
 
@@ -281,6 +282,7 @@ async fn build_state(
             is_tls,
             oauth_state,
             initial_admin_email,
+            quic_port,
         }))
     } else {
         let db = store::turso::open(turso_db_path)
@@ -308,6 +310,7 @@ async fn build_state(
             is_tls,
             oauth_state,
             initial_admin_email,
+            quic_port,
         }))
     }
 }
@@ -316,7 +319,7 @@ async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
     let metrics_handle = metrics::setup()?;
     let oauth_state = build_oauth_state(&cli)?;
     let initial_admin_email = cli.initial_admin_email.clone();
-    let state = build_state(pool, &cli.turso_db_path, false, oauth_state, initial_admin_email).await?;
+    let state = build_state(pool, &cli.turso_db_path, false, oauth_state, initial_admin_email, cli.quic_port).await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);
 
     if cli.seed_api_key {
@@ -411,7 +414,7 @@ async fn run_with_tls(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()
     let metrics_handle = metrics::setup()?;
     let oauth_state = build_oauth_state(&cli)?;
     let initial_admin_email = cli.initial_admin_email.clone();
-    let state = build_state(pool, &cli.turso_db_path, true, oauth_state, initial_admin_email).await?;
+    let state = build_state(pool, &cli.turso_db_path, true, oauth_state, initial_admin_email, cli.quic_port).await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);
 
     if cli.seed_api_key {

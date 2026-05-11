@@ -37,11 +37,13 @@ pub struct AppState {
     pub is_tls: bool,
     pub oauth_state: Option<Arc<OAuthState>>,
     pub initial_admin_email: Option<String>,
+    pub quic_port: u16,
 }
 
 pub fn build_router(state: Arc<AppState>, metrics_handle: PrometheusHandle) -> Router {
     let api_routes = Router::new()
         .route("/health", get(api::health::handler))
+        .route("/info", get(api::info::handler))
         .route("/tunnels", get(api::tunnels::list))
         .route(
             "/tunnels/{id}",

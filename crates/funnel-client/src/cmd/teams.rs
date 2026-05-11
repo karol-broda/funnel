@@ -1,6 +1,70 @@
 use funnel_core::protocol::PROTOCOL_VERSION;
 use serde::{Deserialize, Serialize};
 
+#[derive(clap::Subcommand)]
+pub enum Command {
+    /// list teams
+    List,
+    /// create a new team
+    Create {
+        /// team name
+        name: String,
+    },
+    /// delete a team
+    Delete {
+        /// team id
+        id: String,
+    },
+    /// list team members
+    Members {
+        /// team id
+        id: String,
+    },
+    /// add a member to a team
+    AddMember {
+        /// team id
+        team_id: String,
+        /// user id to add
+        user_id: String,
+    },
+    /// remove a member from a team
+    RemoveMember {
+        /// team id
+        team_id: String,
+        /// user id to remove
+        user_id: String,
+    },
+    /// set a member's role in a team
+    SetRole {
+        /// team id
+        team_id: String,
+        /// user id
+        user_id: String,
+        /// role (owner or member)
+        role: String,
+    },
+}
+
+pub async fn run(server: &str, token: &str, command: Command) -> anyhow::Result<()> {
+    match command {
+        Command::List => list(server, token).await,
+        Command::Create { name } => create(server, token, &name).await,
+        Command::Delete { id } => delete(server, token, &id).await,
+        Command::Members { id } => members(server, token, &id).await,
+        Command::AddMember { team_id, user_id } => {
+            add_member(server, token, &team_id, &user_id).await
+        }
+        Command::RemoveMember { team_id, user_id } => {
+            remove_member(server, token, &team_id, &user_id).await
+        }
+        Command::SetRole {
+            team_id,
+            user_id,
+            role,
+        } => set_role(server, token, &team_id, &user_id, &role).await,
+    }
+}
+
 #[derive(Deserialize)]
 struct Team {
     id: String,

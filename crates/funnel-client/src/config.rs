@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 const CONFIG_DIR: &str = "funnel";
 const CONFIG_FILE: &str = "config.toml";
-pub const DEFAULT_QUIC_PORT: u16 = 4433;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunnelConfig {
@@ -24,39 +23,22 @@ impl Default for FunnelConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Context {
     #[serde(default)]
     pub server: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
-    #[serde(default = "default_quic_port")]
-    pub quic_port: u16,
-}
-
-impl Default for Context {
-    fn default() -> Self {
-        Self {
-            server: String::new(),
-            token: None,
-            quic_port: DEFAULT_QUIC_PORT,
-        }
-    }
 }
 
 fn default_context_name() -> String {
     "default".into()
 }
 
-const fn default_quic_port() -> u16 {
-    DEFAULT_QUIC_PORT
-}
-
 pub struct ResolvedContext {
     pub name: String,
     pub server: String,
     pub token: Option<String>,
-    pub quic_port: u16,
 }
 
 pub fn config_path() -> PathBuf {
@@ -128,7 +110,6 @@ pub fn resolve(
         name: name.to_string(),
         server,
         token,
-        quic_port: ctx.quic_port,
     })
 }
 
@@ -173,7 +154,7 @@ pub fn set_current_context(name: &str) -> anyhow::Result<()> {
     save(&config)
 }
 
-pub fn create_context(name: &str, server: &str, quic_port: Option<u16>) -> anyhow::Result<()> {
+pub fn create_context(name: &str, server: &str) -> anyhow::Result<()> {
     let mut config = load()?;
     if config.contexts.contains_key(name) {
         anyhow::bail!("context '{name}' already exists");
@@ -182,7 +163,6 @@ pub fn create_context(name: &str, server: &str, quic_port: Option<u16>) -> anyho
         name.to_string(),
         Context {
             server: server.to_string(),
-            quic_port: quic_port.unwrap_or(DEFAULT_QUIC_PORT),
             ..Default::default()
         },
     );
@@ -238,7 +218,6 @@ mod tests {
         let ctx = parsed.contexts.get("default").expect("default context");
         assert_eq!(ctx.server, "https://tunnel.example.com");
         assert_eq!(ctx.token.as_deref(), Some("fnl_test123"));
-        assert_eq!(ctx.quic_port, DEFAULT_QUIC_PORT);
     }
 
     #[test]

@@ -93,7 +93,7 @@ async fn metrics_endpoint() -> TestResult {
 
     let resp = env
         .client
-        .get(env.server_url("/api/metrics"))
+        .get(env.server_url("/api/v1/metrics"))
         .send()
         .await?;
 

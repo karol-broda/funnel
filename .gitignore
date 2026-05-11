@@ -21,6 +21,14 @@ Thumbs.db
 # Logs
 *.log
 
+# Binaries
+/bin/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
 # Temporary
 *.tmp
 *.temp

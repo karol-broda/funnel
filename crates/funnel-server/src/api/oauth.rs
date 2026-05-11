@@ -9,6 +9,7 @@ use crate::app::AppState;
 use crate::db::accounts::NewAccount;
 use crate::db::api_keys::default_scopes;
 use crate::db::users::NewUser;
+use funnel_core::protocol::PROTOCOL_VERSION;
 
 #[derive(Deserialize)]
 pub struct AuthorizeParams {
@@ -57,7 +58,7 @@ pub async fn authorize(
 
     oauth.insert_pending(token.clone(), params.cli_port);
 
-    let redirect_uri = format!("{}/auth/{}/callback", oauth.base_url, provider);
+    let redirect_uri = format!("{}/auth/v{PROTOCOL_VERSION}/{}/callback", oauth.base_url, provider);
     let url = p.authorize_url(&redirect_uri, &token);
 
     Redirect::temporary(&url).into_response()
@@ -83,7 +84,7 @@ pub async fn callback(
         return html_error(StatusCode::BAD_REQUEST, "invalid or expired state");
     };
 
-    let redirect_uri = format!("{}/auth/{}/callback", oauth.base_url, provider);
+    let redirect_uri = format!("{}/auth/v{PROTOCOL_VERSION}/{}/callback", oauth.base_url, provider);
 
     let access_token = match p.exchange_code(&params.code, &redirect_uri).await {
         Ok(t) => t,
@@ -347,6 +348,7 @@ mod tests {
             is_tls: false,
             oauth_state,
             initial_admin_email: None,
+            quic_port: 4433,
         })
     }
 

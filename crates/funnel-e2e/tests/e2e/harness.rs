@@ -39,8 +39,9 @@ impl TestEnv {
         let quic_port = free_port()?;
         let host_header = format!("{TUNNEL_ID}.localhost:{http_port}");
         let turso_db_path = std::env::temp_dir().join(format!(
-            "funnel-e2e-{}.db",
-            std::process::id()
+            "funnel-e2e-{}-{}.db",
+            std::process::id(),
+            http_port,
         ));
 
         let (server_process, server_log, seed_key) =
@@ -48,7 +49,7 @@ impl TestEnv {
         wait_for_tcp(http_port).await;
 
         let (client_process, client_log) =
-            start_client_process(local_port, http_port, quic_port, TUNNEL_ID, &seed_key)?;
+            start_client_process(local_port, http_port, TUNNEL_ID, &seed_key)?;
 
         let client = reqwest::Client::new();
         wait_for_tunnel(&client, http_port, &host_header).await;
@@ -236,7 +237,6 @@ fn start_server_process(
 fn start_client_process(
     local_port: u16,
     server_http_port: u16,
-    quic_port: u16,
     tunnel_id: &str,
     token: &str,
 ) -> Result<(Child, PathBuf), Box<dyn std::error::Error>> {
@@ -250,8 +250,6 @@ fn start_client_process(
             &format!("http://127.0.0.1:{server_http_port}"),
             "--id",
             tunnel_id,
-            "--quic-port",
-            &quic_port.to_string(),
             "--insecure",
             "--token",
             token,

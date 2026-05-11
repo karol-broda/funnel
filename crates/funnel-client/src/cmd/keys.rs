@@ -1,6 +1,33 @@
 use funnel_core::protocol::PROTOCOL_VERSION;
 use serde::{Deserialize, Serialize};
 
+#[derive(clap::Subcommand)]
+pub enum Command {
+    /// list api keys
+    List,
+    /// create a new api key
+    Create {
+        /// name for the new key
+        name: String,
+        /// comma separated scopes (defaults to management,tunnels)
+        #[arg(long)]
+        scopes: Option<String>,
+    },
+    /// revoke an api key
+    Revoke {
+        /// key id to revoke
+        id: String,
+    },
+}
+
+pub async fn run(server: &str, token: &str, command: Command) -> anyhow::Result<()> {
+    match command {
+        Command::List => list(server, token).await,
+        Command::Create { name, scopes } => create(server, token, &name, scopes.as_deref()).await,
+        Command::Revoke { id } => revoke(server, token, &id).await,
+    }
+}
+
 #[derive(Deserialize)]
 struct ApiKeyView {
     id: String,

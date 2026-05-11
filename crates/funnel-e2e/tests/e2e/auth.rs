@@ -9,6 +9,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 struct AuthTestEnv {
     server_process: Child,
     server_log: PathBuf,
+    turso_db_path: PathBuf,
     http_port: u16,
     seed_key: String,
     client: reqwest::Client,
@@ -18,6 +19,11 @@ impl AuthTestEnv {
     async fn start() -> Result<Self, Box<dyn std::error::Error>> {
         let http_port = free_port()?;
         let quic_port = free_port()?;
+        let turso_db_path = std::env::temp_dir().join(format!(
+            "funnel-auth-e2e-{}-{}.db",
+            std::process::id(),
+            http_port,
+        ));
 
         let (stderr_file, log_path) = log_file("auth-server")?;
 
@@ -29,6 +35,8 @@ impl AuthTestEnv {
                 &quic_port.to_string(),
                 "--host",
                 "127.0.0.1",
+                "--turso-db-path",
+                &turso_db_path.to_string_lossy(),
                 "--seed-api-key",
             ])
             .stdout(Stdio::piped())
@@ -46,6 +54,7 @@ impl AuthTestEnv {
         Ok(Self {
             server_process: child,
             server_log: log_path,
+            turso_db_path,
             http_port,
             seed_key,
             client: reqwest::Client::new(),
@@ -79,6 +88,7 @@ impl Drop for AuthTestEnv {
         }
 
         let _ = std::fs::remove_file(&self.server_log);
+        let _ = std::fs::remove_file(&self.turso_db_path);
     }
 }
 
@@ -86,12 +96,12 @@ impl Drop for AuthTestEnv {
 async fn keys_require_auth() -> TestResult {
     let env = AuthTestEnv::start().await?;
 
-    let get = env.client.get(env.url("/api/keys")).send().await?;
+    let get = env.client.get(env.url("/api/v1/keys")).send().await?;
     assert_eq!(get.status(), 401);
 
     let post = env
         .client
-        .post(env.url("/api/keys"))
+        .post(env.url("/api/v1/keys"))
         .json(&serde_json::json!({"name": "test"}))
         .send()
         .await?;
@@ -99,7 +109,7 @@ async fn keys_require_auth() -> TestResult {
 
     let delete = env
         .client
-        .delete(env.url("/api/keys/00000000-0000-0000-0000-000000000000"))
+        .delete(env.url("/api/v1/keys/00000000-0000-0000-0000-000000000000"))
         .send()
         .await?;
     assert_eq!(delete.status(), 401);
@@ -113,7 +123,7 @@ async fn invalid_bearer_token_rejected() -> TestResult {
 
     let resp = env
         .client
-        .get(env.url("/api/keys"))
+        .get(env.url("/api/v1/keys"))
         .header("authorization", "Bearer fnl_bogustoken1234567890")
         .send()
         .await?;
@@ -128,7 +138,7 @@ async fn create_and_list_keys() -> TestResult {
 
     let resp = env
         .client
-        .post(env.url("/api/keys"))
+        .post(env.url("/api/v1/keys"))
         .header("authorization", env.auth_header())
         .json(&serde_json::json!({"name": "my-key"}))
         .send()
@@ -141,7 +151,7 @@ async fn create_and_list_keys() -> TestResult {
     // seed key + new key
     let resp = env
         .client
-        .get(env.url("/api/keys"))
+        .get(env.url("/api/v1/keys"))
         .header("authorization", env.auth_header())
         .send()
         .await?;
@@ -158,7 +168,7 @@ async fn revoke_key() -> TestResult {
 
     let resp = env
         .client
-        .post(env.url("/api/keys"))
+        .post(env.url("/api/v1/keys"))
         .header("authorization", env.auth_header())
         .json(&serde_json::json!({"name": "to-revoke"}))
         .send()
@@ -169,7 +179,7 @@ async fn revoke_key() -> TestResult {
 
     let resp = env
         .client
-        .delete(env.url(&format!("/api/keys/{key_id}")))
+        .delete(env.url(&format!("/api/v1/keys/{key_id}")))
         .header("authorization", env.auth_header())
         .send()
         .await?;
@@ -180,7 +190,7 @@ async fn revoke_key() -> TestResult {
     // only seed key remains
     let resp = env
         .client
-        .get(env.url("/api/keys"))
+        .get(env.url("/api/v1/keys"))
         .header("authorization", env.auth_header())
         .send()
         .await?;
@@ -197,7 +207,7 @@ async fn revoked_key_cannot_authenticate() -> TestResult {
     // create a second key
     let resp = env
         .client
-        .post(env.url("/api/keys"))
+        .post(env.url("/api/v1/keys"))
         .header("authorization", env.auth_header())
         .json(&serde_json::json!({"name": "ephemeral"}))
         .send()
@@ -209,7 +219,7 @@ async fn revoked_key_cannot_authenticate() -> TestResult {
     // verify it works
     let resp = env
         .client
-        .get(env.url("/api/keys"))
+        .get(env.url("/api/v1/keys"))
         .header("authorization", format!("Bearer {new_key}"))
         .send()
         .await?;
@@ -217,7 +227,7 @@ async fn revoked_key_cannot_authenticate() -> TestResult {
 
     // revoke it
     env.client
-        .delete(env.url(&format!("/api/keys/{new_key_id}")))
+        .delete(env.url(&format!("/api/v1/keys/{new_key_id}")))
         .header("authorization", env.auth_header())
         .send()
         .await?;
@@ -225,7 +235,7 @@ async fn revoked_key_cannot_authenticate() -> TestResult {
     // revoked key should be rejected
     let resp = env
         .client
-        .get(env.url("/api/keys"))
+        .get(env.url("/api/v1/keys"))
         .header("authorization", format!("Bearer {new_key}"))
         .send()
         .await?;
@@ -238,7 +248,7 @@ async fn revoked_key_cannot_authenticate() -> TestResult {
 async fn me_requires_auth() -> TestResult {
     let env = AuthTestEnv::start().await?;
 
-    let resp = env.client.get(env.url("/api/me")).send().await?;
+    let resp = env.client.get(env.url("/api/v1/me")).send().await?;
     assert_eq!(resp.status(), 401);
 
     Ok(())
@@ -251,7 +261,7 @@ async fn me_returns_seed_user() -> TestResult {
     // seed key creates a proper system user
     let resp = env
         .client
-        .get(env.url("/api/me"))
+        .get(env.url("/api/v1/me"))
         .header("authorization", env.auth_header())
         .send()
         .await?;
@@ -269,7 +279,7 @@ async fn oauth_authorize_returns_404_when_not_configured() -> TestResult {
 
     let resp = env
         .client
-        .get(env.url("/auth/github/authorize?cli_port=9999"))
+        .get(env.url("/auth/v1/github/authorize?cli_port=9999"))
         .send()
         .await?;
     assert_eq!(resp.status(), 404);
@@ -286,7 +296,7 @@ async fn oauth_callback_returns_404_when_not_configured() -> TestResult {
 
     let resp = env
         .client
-        .get(env.url("/auth/github/callback?code=test&state=test"))
+        .get(env.url("/auth/v1/github/callback?code=test&state=test"))
         .send()
         .await?;
     assert_eq!(resp.status(), 404);

@@ -1,6 +1,42 @@
 use funnel_core::protocol::PROTOCOL_VERSION;
 use serde::{Deserialize, Serialize};
 
+#[derive(clap::Subcommand)]
+pub enum Command {
+    /// list all users
+    List {
+        /// maximum number of users to show
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+    /// set a user's role
+    SetRole {
+        /// user id
+        id: String,
+        /// new role (admin or member)
+        role: String,
+    },
+    /// deactivate a user
+    Deactivate {
+        /// user id
+        id: String,
+    },
+    /// reactivate a user
+    Reactivate {
+        /// user id
+        id: String,
+    },
+}
+
+pub async fn run(server: &str, token: &str, command: Command) -> anyhow::Result<()> {
+    match command {
+        Command::List { limit } => list(server, token, limit).await,
+        Command::SetRole { id, role } => set_role(server, token, &id, &role).await,
+        Command::Deactivate { id } => deactivate(server, token, &id).await,
+        Command::Reactivate { id } => reactivate(server, token, &id).await,
+    }
+}
+
 #[derive(Deserialize)]
 struct User {
     id: String,

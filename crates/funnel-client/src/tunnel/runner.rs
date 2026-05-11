@@ -6,8 +6,8 @@ use url::Url;
 
 use funnel_core::tunnel::id::TunnelId;
 
-use crate::display::TunnelDisplay;
-use crate::tunnel::TunnelClient;
+use super::client::TunnelClient;
+use super::display::TunnelDisplay;
 
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
