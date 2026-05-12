@@ -190,6 +190,7 @@ pub fn delete_context(name: &str) -> anyhow::Result<()> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -208,7 +209,6 @@ mod tests {
             Context {
                 server: "https://tunnel.example.com".to_string(),
                 token: Some("fnl_test123".to_string()),
-                ..Default::default()
             },
         );
 
@@ -240,7 +240,6 @@ mod tests {
             Context {
                 server: "https://example.com".to_string(),
                 token: Some("tok".to_string()),
-                ..Default::default()
             },
         );
 

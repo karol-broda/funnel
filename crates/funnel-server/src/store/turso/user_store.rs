@@ -5,7 +5,7 @@ use turso::Database;
 use uuid::Uuid;
 
 use super::{format_dt, map_err, parse_dt, parse_optional_dt, parse_uuid};
-use crate::db::users::{NewUser, User, ROLE_MEMBER};
+use crate::db::users::{NewUser, ROLE_MEMBER, User};
 use crate::store::user_store::UserStore;
 use crate::store::{BoxFuture, StoreError};
 
@@ -14,38 +14,38 @@ pub struct TursoUserStore {
 }
 
 impl TursoUserStore {
-    pub fn new(db: Arc<Database>) -> Self {
+    pub const fn new(db: Arc<Database>) -> Self {
         Self { db }
     }
 }
 
 fn row_to_user(row: &turso::Row) -> Result<User, StoreError> {
     Ok(User {
-        id: parse_uuid(&row.get::<String>(0).map_err(map_err)?)?,
-        email: row.get::<String>(1).map_err(map_err)?,
-        name: row.get::<Option<String>>(2).map_err(map_err)?,
-        avatar_url: row.get::<Option<String>>(3).map_err(map_err)?,
-        role: row.get::<String>(4).map_err(map_err)?,
-        metadata: serde_json::from_str(&row.get::<String>(5).map_err(map_err)?)
+        id: parse_uuid(&row.get::<String>(0).map_err(|e| map_err(&e))?)?,
+        email: row.get::<String>(1).map_err(|e| map_err(&e))?,
+        name: row.get::<Option<String>>(2).map_err(|e| map_err(&e))?,
+        avatar_url: row.get::<Option<String>>(3).map_err(|e| map_err(&e))?,
+        role: row.get::<String>(4).map_err(|e| map_err(&e))?,
+        metadata: serde_json::from_str(&row.get::<String>(5).map_err(|e| map_err(&e))?)
             .map_err(|e| StoreError::Other(format!("invalid json: {e}")))?,
-        created_at: parse_dt(&row.get::<String>(6).map_err(map_err)?)?,
-        updated_at: parse_dt(&row.get::<String>(7).map_err(map_err)?)?,
-        deactivated_at: parse_optional_dt(row.get::<Option<String>>(8).map_err(map_err)?)?,
+        created_at: parse_dt(&row.get::<String>(6).map_err(|e| map_err(&e))?)?,
+        updated_at: parse_dt(&row.get::<String>(7).map_err(|e| map_err(&e))?)?,
+        deactivated_at: parse_optional_dt(row.get::<Option<String>>(8).map_err(|e| map_err(&e))?)?,
     })
 }
 
 impl UserStore for TursoUserStore {
     fn find_by_id(&self, id: Uuid) -> BoxFuture<'_, Result<Option<User>, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let mut rows = conn
                 .query(
                     "SELECT id, email, name, avatar_url, role, metadata, created_at, updated_at, deactivated_at FROM users WHERE id = ?",
                     turso::params![id.to_string()],
                 )
                 .await
-                .map_err(map_err)?;
-            match rows.next().await.map_err(map_err)? {
+                .map_err(|e| map_err(&e))?;
+            match rows.next().await.map_err(|e| map_err(&e))? {
                 Some(row) => Ok(Some(row_to_user(&row)?)),
                 None => Ok(None),
             }
@@ -55,15 +55,15 @@ impl UserStore for TursoUserStore {
     fn find_by_email(&self, email: &str) -> BoxFuture<'_, Result<Option<User>, StoreError>> {
         let email = email.to_string();
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let mut rows = conn
                 .query(
                     "SELECT id, email, name, avatar_url, role, metadata, created_at, updated_at, deactivated_at FROM users WHERE email = ?",
                     turso::params![email],
                 )
                 .await
-                .map_err(map_err)?;
-            match rows.next().await.map_err(map_err)? {
+                .map_err(|e| map_err(&e))?;
+            match rows.next().await.map_err(|e| map_err(&e))? {
                 Some(row) => Ok(Some(row_to_user(&row)?)),
                 None => Ok(None),
             }
@@ -72,7 +72,7 @@ impl UserStore for TursoUserStore {
 
     fn create(&self, new_user: NewUser) -> BoxFuture<'_, Result<User, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let id = Uuid::now_v7();
             let now = Utc::now();
             let now_str = format_dt(now);
@@ -91,7 +91,7 @@ impl UserStore for TursoUserStore {
                 ],
             )
             .await
-            .map_err(map_err)?;
+            .map_err(|e| map_err(&e))?;
             Ok(User {
                 id,
                 email: new_user.email,
@@ -115,7 +115,7 @@ impl UserStore for TursoUserStore {
         let name = name.map(ToString::to_string);
         let avatar_url = avatar_url.map(ToString::to_string);
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let now = format_dt(Utc::now());
             conn.execute(
                 "UPDATE users SET name = ?, avatar_url = ?, updated_at = ? WHERE id = ?",
@@ -127,7 +127,7 @@ impl UserStore for TursoUserStore {
                 ],
             )
             .await
-            .map_err(map_err)?;
+            .map_err(|e| map_err(&e))?;
             let user = self.find_by_id(id).await?.ok_or(StoreError::NotFound)?;
             Ok(user)
         })
@@ -136,14 +136,14 @@ impl UserStore for TursoUserStore {
     fn update_role(&self, id: Uuid, role: &str) -> BoxFuture<'_, Result<User, StoreError>> {
         let role = role.to_string();
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let now = format_dt(Utc::now());
             conn.execute(
                 "UPDATE users SET role = ?, updated_at = ? WHERE id = ?",
                 turso::params![role, now, id.to_string()],
             )
             .await
-            .map_err(map_err)?;
+            .map_err(|e| map_err(&e))?;
             let user = self.find_by_id(id).await?.ok_or(StoreError::NotFound)?;
             Ok(user)
         })
@@ -151,14 +151,14 @@ impl UserStore for TursoUserStore {
 
     fn deactivate(&self, id: Uuid) -> BoxFuture<'_, Result<User, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let now = format_dt(Utc::now());
             conn.execute(
                 "UPDATE users SET deactivated_at = ?, updated_at = ? WHERE id = ?",
                 turso::params![now.clone(), now, id.to_string()],
             )
             .await
-            .map_err(map_err)?;
+            .map_err(|e| map_err(&e))?;
             let user = self.find_by_id(id).await?.ok_or(StoreError::NotFound)?;
             Ok(user)
         })
@@ -166,14 +166,14 @@ impl UserStore for TursoUserStore {
 
     fn reactivate(&self, id: Uuid) -> BoxFuture<'_, Result<User, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let now = format_dt(Utc::now());
             conn.execute(
                 "UPDATE users SET deactivated_at = NULL, updated_at = ? WHERE id = ?",
                 turso::params![now, id.to_string()],
             )
             .await
-            .map_err(map_err)?;
+            .map_err(|e| map_err(&e))?;
             let user = self.find_by_id(id).await?.ok_or(StoreError::NotFound)?;
             Ok(user)
         })
@@ -181,16 +181,16 @@ impl UserStore for TursoUserStore {
 
     fn list_all(&self, limit: i64) -> BoxFuture<'_, Result<Vec<User>, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let mut rows = conn
                 .query(
                     "SELECT id, email, name, avatar_url, role, metadata, created_at, updated_at, deactivated_at FROM users ORDER BY created_at DESC LIMIT ?",
                     turso::params![limit],
                 )
                 .await
-                .map_err(map_err)?;
+                .map_err(|e| map_err(&e))?;
             let mut users = Vec::new();
-            while let Some(row) = rows.next().await.map_err(map_err)? {
+            while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
                 users.push(row_to_user(&row)?);
             }
             Ok(users)
@@ -199,47 +199,50 @@ impl UserStore for TursoUserStore {
 
     fn count(&self) -> BoxFuture<'_, Result<i64, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let mut rows = conn
                 .query("SELECT COUNT(*) FROM users", ())
                 .await
-                .map_err(map_err)?;
+                .map_err(|e| map_err(&e))?;
             let row = rows
                 .next()
                 .await
-                .map_err(map_err)?
+                .map_err(|e| map_err(&e))?
                 .ok_or(StoreError::Other("no count row".into()))?;
-            Ok(row.get::<i64>(0).map_err(map_err)?)
+            row.get::<i64>(0).map_err(|e| map_err(&e))
         })
     }
 
     fn count_admins(&self) -> BoxFuture<'_, Result<i64, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let mut rows = conn
                 .query(
                     "SELECT COUNT(*) FROM users WHERE role = 'admin' AND deactivated_at IS NULL",
                     (),
                 )
                 .await
-                .map_err(map_err)?;
+                .map_err(|e| map_err(&e))?;
             let row = rows
                 .next()
                 .await
-                .map_err(map_err)?
+                .map_err(|e| map_err(&e))?
                 .ok_or(StoreError::Other("no count row".into()))?;
-            Ok(row.get::<i64>(0).map_err(map_err)?)
+            row.get::<i64>(0).map_err(|e| map_err(&e))
         })
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::store::turso::open;
 
     async fn store() -> TursoUserStore {
-        let db = open(":memory:").await.unwrap_or_else(|e| panic!("open: {e}"));
+        let db = open(":memory:")
+            .await
+            .unwrap_or_else(|e| panic!("open: {e}"));
         TursoUserStore::new(db)
     }
 

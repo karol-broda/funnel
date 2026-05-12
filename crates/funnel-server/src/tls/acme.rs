@@ -173,13 +173,12 @@ pub fn load_certified_key(cert_pem: &str, key_pem: &str) -> Result<CertifiedKey>
 }
 
 pub fn parse_cert_expiry(cert_pem: &str) -> Result<SystemTime> {
-    use rustls_pki_types::pem::PemObject;
     use rustls_pki_types::CertificateDer;
+    use rustls_pki_types::pem::PemObject;
 
-    let certs: Vec<CertificateDer<'static>> =
-        CertificateDer::pem_slice_iter(cert_pem.as_bytes())
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| anyhow::anyhow!(e))?;
+    let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(cert_pem.as_bytes())
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| anyhow::anyhow!(e))?;
     let cert = certs.first().context("no certificate found")?;
     let (_, parsed) = X509Certificate::from_der(cert.as_ref())
         .map_err(|e| anyhow::anyhow!("failed to parse x509 certificate: {e}"))?;

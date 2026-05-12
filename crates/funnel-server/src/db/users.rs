@@ -126,12 +126,10 @@ pub async fn reactivate(pool: &PgPool, id: Uuid) -> Result<User, sqlx::Error> {
 }
 
 pub async fn list_all(pool: &PgPool, limit: i64) -> Result<Vec<User>, sqlx::Error> {
-    sqlx::query_as::<_, User>(
-        "SELECT * FROM users ORDER BY created_at DESC LIMIT $1",
-    )
-    .bind(limit)
-    .fetch_all(pool)
-    .await
+    sqlx::query_as::<_, User>("SELECT * FROM users ORDER BY created_at DESC LIMIT $1")
+        .bind(limit)
+        .fetch_all(pool)
+        .await
 }
 
 pub async fn count(pool: &PgPool) -> Result<i64, sqlx::Error> {

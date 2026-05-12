@@ -20,10 +20,8 @@ pub trait TeamStore: Send + Sync {
         team_id: Uuid,
         user_id: Uuid,
     ) -> BoxFuture<'_, Result<bool, StoreError>>;
-    fn list_members(
-        &self,
-        team_id: Uuid,
-    ) -> BoxFuture<'_, Result<Vec<TeamMembership>, StoreError>>;
+    fn list_members(&self, team_id: Uuid)
+    -> BoxFuture<'_, Result<Vec<TeamMembership>, StoreError>>;
     fn list_teams_for_user(&self, user_id: Uuid) -> BoxFuture<'_, Result<Vec<Team>, StoreError>>;
     fn get_team_ids_for_user(&self, user_id: Uuid) -> BoxFuture<'_, Result<Vec<Uuid>, StoreError>>;
     fn is_member(&self, team_id: Uuid, user_id: Uuid) -> BoxFuture<'_, Result<bool, StoreError>>;

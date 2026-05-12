@@ -46,9 +46,7 @@ pub async fn handle_connection(
         None => {
             let resp = HandshakeResponse::rejected("client too old, version field required");
             let _ = frame::write_meta(&mut send, &resp).await;
-            return Err(ConnectionError::Auth(
-                "client did not send version".into(),
-            ));
+            return Err(ConnectionError::Auth("client did not send version".into()));
         }
         _ => {}
     }
@@ -95,9 +93,7 @@ pub async fn handle_connection(
             .find_by_name(team_name)
             .await
             .map_err(|e| ConnectionError::Auth(format!("team lookup failed: {e}")))?
-            .ok_or_else(|| {
-                ConnectionError::Auth(format!("team not found: {team_name}"))
-            })?;
+            .ok_or_else(|| ConnectionError::Auth(format!("team not found: {team_name}")))?;
 
         let is_member = state
             .teams
@@ -106,9 +102,7 @@ pub async fn handle_connection(
             .map_err(|e| ConnectionError::Auth(format!("membership check failed: {e}")))?;
 
         if !is_member {
-            let resp = HandshakeResponse::rejected(format!(
-                "not a member of team: {team_name}"
-            ));
+            let resp = HandshakeResponse::rejected(format!("not a member of team: {team_name}"));
             let _ = frame::write_meta(&mut send, &resp).await;
             return Err(ConnectionError::Auth(format!(
                 "not a member of team: {team_name}"

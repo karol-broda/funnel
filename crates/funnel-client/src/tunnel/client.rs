@@ -10,10 +10,10 @@ use tokio::io;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
-use funnel_core::protocol::{PROTOCOL_VERSION, QUIC_ALPN};
 use funnel_core::protocol::frame;
 use funnel_core::protocol::handshake::{Handshake, HandshakeResponse};
 use funnel_core::protocol::request::RequestMeta;
+use funnel_core::protocol::{PROTOCOL_VERSION, QUIC_ALPN};
 use funnel_core::tunnel::id::TunnelId;
 
 use super::display::{RequestResult, TunnelDisplay};

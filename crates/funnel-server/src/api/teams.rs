@@ -7,15 +7,19 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::auth::{Management, RequireAdmin, Scoped};
-use crate::db::teams::{Team, TeamMembership, TEAM_ROLE_MEMBER, TEAM_ROLE_OWNER};
+use crate::db::teams::{TEAM_ROLE_MEMBER, TEAM_ROLE_OWNER, Team, TeamMembership};
 use crate::error::{ApiErrorBody, AppError};
 
-async fn can_manage_team(state: &AppState, team_id: Uuid, auth: &Scoped<Management>) -> Result<bool, AppError> {
+async fn can_manage_team(
+    state: &AppState,
+    team_id: Uuid,
+    auth: &Scoped<Management>,
+) -> Result<bool, AppError> {
     if auth.is_admin() {
         return Ok(true);
     }
     let membership = state.teams.find_membership(team_id, auth.user_id).await?;
-    Ok(membership.map_or(false, |m| m.role == TEAM_ROLE_OWNER))
+    Ok(membership.is_some_and(|m| m.role == TEAM_ROLE_OWNER))
 }
 
 #[utoipa::path(
@@ -210,14 +214,14 @@ pub async fn remove_member(
 
     // prevent removing the last owner
     let membership = state.teams.find_membership(id, user_id).await?;
-    if let Some(ref m) = membership {
-        if m.role == TEAM_ROLE_OWNER {
-            let owner_count = state.teams.count_owners(id).await?;
-            if owner_count <= 1 {
-                return Err(AppError::BadRequest(
-                    "cannot remove the last owner of a team".into(),
-                ));
-            }
+    if let Some(ref m) = membership
+        && m.role == TEAM_ROLE_OWNER
+    {
+        let owner_count = state.teams.count_owners(id).await?;
+        if owner_count <= 1 {
+            return Err(AppError::BadRequest(
+                "cannot remove the last owner of a team".into(),
+            ));
         }
     }
 

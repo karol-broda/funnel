@@ -41,8 +41,7 @@ pub async fn list(
     let visible: Vec<TunnelInfo> = all
         .into_iter()
         .filter(|t| {
-            t.owner_id == auth.user_id
-                || t.team_id.is_some_and(|tid| team_ids.contains(&tid))
+            t.owner_id == auth.user_id || t.team_id.is_some_and(|tid| team_ids.contains(&tid))
         })
         .collect();
 
@@ -50,8 +49,7 @@ pub async fn list(
 }
 
 fn can_access(tunnel: &TunnelInfo, user_id: uuid::Uuid, team_ids: &[uuid::Uuid]) -> bool {
-    tunnel.owner_id == user_id
-        || tunnel.team_id.is_some_and(|tid| team_ids.contains(&tid))
+    tunnel.owner_id == user_id || tunnel.team_id.is_some_and(|tid| team_ids.contains(&tid))
 }
 
 #[utoipa::path(

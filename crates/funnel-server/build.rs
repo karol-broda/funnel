@@ -10,10 +10,10 @@ fn main() {
     if let Some(git_dir) = run("git", &["rev-parse", "--git-dir"]) {
         let head_path = format!("{git_dir}/HEAD");
         println!("cargo:rerun-if-changed={head_path}");
-        if let Ok(head_ref) = std::fs::read_to_string(&head_path) {
-            if let Some(ref_path) = head_ref.strip_prefix("ref: ") {
-                println!("cargo:rerun-if-changed={git_dir}/{}", ref_path.trim());
-            }
+        if let Ok(head_ref) = std::fs::read_to_string(&head_path)
+            && let Some(ref_path) = head_ref.strip_prefix("ref: ")
+        {
+            println!("cargo:rerun-if-changed={git_dir}/{}", ref_path.trim());
         }
     }
     println!("cargo:rerun-if-env-changed=FUNNEL_GIT_HASH");

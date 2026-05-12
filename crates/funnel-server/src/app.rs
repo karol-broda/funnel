@@ -8,9 +8,9 @@ use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::get;
 use metrics_exporter_prometheus::PrometheusHandle;
+use scalar_api_reference::axum::scalar_response;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
-use scalar_api_reference::axum::scalar_response;
 
 use funnel_core::protocol::PROTOCOL_VERSION;
 use funnel_core::tunnel::id::TunnelId;
@@ -55,10 +55,7 @@ pub fn build_router(state: Arc<AppState>, metrics_handle: PrometheusHandle) -> R
         .route("/me", get(api::me::handler))
         .route("/accounts", get(api::accounts::list))
         .route("/sessions", get(api::sessions::list))
-        .route(
-            "/users",
-            get(api::users::list),
-        )
+        .route("/users", get(api::users::list))
         .route("/users/{id}/role", axum::routing::put(api::users::set_role))
         .route(
             "/users/{id}/deactivate",
@@ -68,10 +65,7 @@ pub fn build_router(state: Arc<AppState>, metrics_handle: PrometheusHandle) -> R
             "/users/{id}/reactivate",
             axum::routing::post(api::users::reactivate),
         )
-        .route(
-            "/teams",
-            get(api::teams::list).post(api::teams::create),
-        )
+        .route("/teams", get(api::teams::list).post(api::teams::create))
         .route("/teams/{id}", axum::routing::delete(api::teams::delete))
         .route(
             "/teams/{id}/members",

@@ -18,13 +18,13 @@ pub async fn open(path: &str) -> Result<Arc<Database>, StoreError> {
     let db = turso::Builder::new_local(path)
         .build()
         .await
-        .map_err(map_err)?;
-    let conn = db.connect().map_err(map_err)?;
-    conn.execute_batch(SCHEMA).await.map_err(map_err)?;
+        .map_err(|e| map_err(&e))?;
+    let conn = db.connect().map_err(|e| map_err(&e))?;
+    conn.execute_batch(SCHEMA).await.map_err(|e| map_err(&e))?;
     Ok(Arc::new(db))
 }
 
-pub fn map_err(e: turso::Error) -> StoreError {
+pub fn map_err(e: &turso::Error) -> StoreError {
     let msg = e.to_string();
     if msg.contains("UNIQUE constraint failed") {
         StoreError::Conflict(msg)

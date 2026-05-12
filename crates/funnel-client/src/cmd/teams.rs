@@ -168,7 +168,9 @@ pub async fn delete(server: &str, token: &str, id: &str) -> anyhow::Result<()> {
 
 pub async fn members(server: &str, token: &str, id: &str) -> anyhow::Result<()> {
     let resp = client(token)
-        .get(format!("{server}/api/v{PROTOCOL_VERSION}/teams/{id}/members"))
+        .get(format!(
+            "{server}/api/v{PROTOCOL_VERSION}/teams/{id}/members"
+        ))
         .send()
         .await?;
 
@@ -207,9 +209,16 @@ struct AddMemberRequest {
     user_id: String,
 }
 
-pub async fn add_member(server: &str, token: &str, team_id: &str, user_id: &str) -> anyhow::Result<()> {
+pub async fn add_member(
+    server: &str,
+    token: &str,
+    team_id: &str,
+    user_id: &str,
+) -> anyhow::Result<()> {
     let resp = client(token)
-        .post(format!("{server}/api/v{PROTOCOL_VERSION}/teams/{team_id}/members"))
+        .post(format!(
+            "{server}/api/v{PROTOCOL_VERSION}/teams/{team_id}/members"
+        ))
         .json(&AddMemberRequest {
             user_id: user_id.to_string(),
         })
@@ -226,9 +235,16 @@ pub async fn add_member(server: &str, token: &str, team_id: &str, user_id: &str)
     Ok(())
 }
 
-pub async fn remove_member(server: &str, token: &str, team_id: &str, user_id: &str) -> anyhow::Result<()> {
+pub async fn remove_member(
+    server: &str,
+    token: &str,
+    team_id: &str,
+    user_id: &str,
+) -> anyhow::Result<()> {
     let resp = client(token)
-        .delete(format!("{server}/api/v{PROTOCOL_VERSION}/teams/{team_id}/members/{user_id}"))
+        .delete(format!(
+            "{server}/api/v{PROTOCOL_VERSION}/teams/{team_id}/members/{user_id}"
+        ))
         .send()
         .await?;
 

@@ -58,7 +58,10 @@ pub async fn authorize(
 
     oauth.insert_pending(token.clone(), params.cli_port);
 
-    let redirect_uri = format!("{}/auth/v{PROTOCOL_VERSION}/{}/callback", oauth.base_url, provider);
+    let redirect_uri = format!(
+        "{}/auth/v{PROTOCOL_VERSION}/{}/callback",
+        oauth.base_url, provider
+    );
     let url = p.authorize_url(&redirect_uri, &token);
 
     Redirect::temporary(&url).into_response()
@@ -84,7 +87,10 @@ pub async fn callback(
         return html_error(StatusCode::BAD_REQUEST, "invalid or expired state");
     };
 
-    let redirect_uri = format!("{}/auth/v{PROTOCOL_VERSION}/{}/callback", oauth.base_url, provider);
+    let redirect_uri = format!(
+        "{}/auth/v{PROTOCOL_VERSION}/{}/callback",
+        oauth.base_url, provider
+    );
 
     let access_token = match p.exchange_code(&params.code, &redirect_uri).await {
         Ok(t) => t,
@@ -149,11 +155,7 @@ pub async fn callback(
             // user exists from a different provider, link this account
             match state
                 .users
-                .update_profile(
-                    user.id,
-                    info.name.as_deref(),
-                    info.avatar_url.as_deref(),
-                )
+                .update_profile(user.id, info.name.as_deref(), info.avatar_url.as_deref())
                 .await
             {
                 Ok(u) => u,
@@ -258,6 +260,7 @@ pub async fn callback(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -333,13 +336,11 @@ mod tests {
 
         Arc::new(AppState {
             tunnels: Arc::new(TunnelManager::new()),
-            api_keys: Arc::new(turso::api_key_store::TursoApiKeyStore::new(
-                Arc::clone(&db),
-            )),
+            api_keys: Arc::new(turso::api_key_store::TursoApiKeyStore::new(Arc::clone(&db))),
             users: Arc::new(turso::user_store::TursoUserStore::new(Arc::clone(&db))),
-            accounts: Arc::new(turso::account_store::TursoAccountStore::new(
-                Arc::clone(&db),
-            )),
+            accounts: Arc::new(turso::account_store::TursoAccountStore::new(Arc::clone(
+                &db,
+            ))),
             sessions: Arc::new(turso::session_recorder::TursoSessionRecorder::new(
                 Arc::clone(&db),
             )),
@@ -539,8 +540,7 @@ mod tests {
 
         // only one active cli key (old one was revoked)
         let keys = state.api_keys.list_for_user(user.id).await.unwrap();
-        let cli_keys: Vec<_> = keys.iter().filter(|k| k.name == "cli").collect();
-        assert_eq!(cli_keys.len(), 1);
+        assert_eq!(keys.iter().filter(|k| k.name == "cli").count(), 1);
     }
 
     #[tokio::test]

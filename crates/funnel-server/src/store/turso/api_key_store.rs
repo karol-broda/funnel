@@ -15,23 +15,23 @@ pub struct TursoApiKeyStore {
 }
 
 impl TursoApiKeyStore {
-    pub fn new(db: Arc<Database>) -> Self {
+    pub const fn new(db: Arc<Database>) -> Self {
         Self { db }
     }
 }
 
 fn row_to_api_key(row: &turso::Row) -> Result<ApiKey, StoreError> {
     Ok(ApiKey {
-        id: parse_uuid(&row.get::<String>(0).map_err(map_err)?)?,
-        user_id: parse_uuid(&row.get::<String>(1).map_err(map_err)?)?,
-        name: row.get::<String>(2).map_err(map_err)?,
-        key_hash: row.get::<String>(3).map_err(map_err)?,
-        key_prefix: row.get::<String>(4).map_err(map_err)?,
-        scopes: serde_json::from_str(&row.get::<String>(5).map_err(map_err)?)
+        id: parse_uuid(&row.get::<String>(0).map_err(|e| map_err(&e))?)?,
+        user_id: parse_uuid(&row.get::<String>(1).map_err(|e| map_err(&e))?)?,
+        name: row.get::<String>(2).map_err(|e| map_err(&e))?,
+        key_hash: row.get::<String>(3).map_err(|e| map_err(&e))?,
+        key_prefix: row.get::<String>(4).map_err(|e| map_err(&e))?,
+        scopes: serde_json::from_str(&row.get::<String>(5).map_err(|e| map_err(&e))?)
             .map_err(|e| StoreError::Other(format!("invalid json: {e}")))?,
-        created_at: parse_dt(&row.get::<String>(6).map_err(map_err)?)?,
-        revoked_at: parse_optional_dt(row.get::<Option<String>>(7).map_err(map_err)?)?,
-        expires_at: parse_optional_dt(row.get::<Option<String>>(8).map_err(map_err)?)?,
+        created_at: parse_dt(&row.get::<String>(6).map_err(|e| map_err(&e))?)?,
+        revoked_at: parse_optional_dt(row.get::<Option<String>>(7).map_err(|e| map_err(&e))?)?,
+        expires_at: parse_optional_dt(row.get::<Option<String>>(8).map_err(|e| map_err(&e))?)?,
     })
 }
 
@@ -51,7 +51,7 @@ impl ApiKeyStore for TursoApiKeyStore {
             let hash = auth::hash_token(&plaintext);
             let prefix = auth::ApiKeyPrefix::from_key(&plaintext);
 
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let id = Uuid::now_v7();
             let now = Utc::now();
             let scopes_str = serde_json::to_string(&scopes)
@@ -72,7 +72,7 @@ impl ApiKeyStore for TursoApiKeyStore {
                 ],
             )
             .await
-            .map_err(map_err)?;
+            .map_err(|e| map_err(&e))?;
 
             let view = ApiKeyView {
                 id,
@@ -91,7 +91,7 @@ impl ApiKeyStore for TursoApiKeyStore {
     fn validate(&self, plaintext: &str) -> BoxFuture<'_, Result<Option<ApiKey>, StoreError>> {
         let hash = auth::hash_token(plaintext);
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let now = format_dt(Utc::now());
             let mut rows = conn
                 .query(
@@ -99,8 +99,8 @@ impl ApiKeyStore for TursoApiKeyStore {
                     turso::params![hash, now],
                 )
                 .await
-                .map_err(map_err)?;
-            match rows.next().await.map_err(map_err)? {
+                .map_err(|e| map_err(&e))?;
+            match rows.next().await.map_err(|e| map_err(&e))? {
                 Some(row) => Ok(Some(row_to_api_key(&row)?)),
                 None => Ok(None),
             }
@@ -109,16 +109,16 @@ impl ApiKeyStore for TursoApiKeyStore {
 
     fn list_for_user(&self, user_id: Uuid) -> BoxFuture<'_, Result<Vec<ApiKeyView>, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let mut rows = conn
                 .query(
                     "SELECT id, user_id, name, key_hash, key_prefix, scopes, created_at, revoked_at, expires_at FROM api_keys WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC",
                     turso::params![user_id.to_string()],
                 )
                 .await
-                .map_err(map_err)?;
+                .map_err(|e| map_err(&e))?;
             let mut keys = Vec::new();
-            while let Some(row) = rows.next().await.map_err(map_err)? {
+            while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
                 let key = row_to_api_key(&row)?;
                 keys.push(ApiKeyView::from(key));
             }
@@ -128,7 +128,7 @@ impl ApiKeyStore for TursoApiKeyStore {
 
     fn revoke(&self, key_id: Uuid, user_id: Uuid) -> BoxFuture<'_, Result<bool, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let now = format_dt(Utc::now());
             let rows_affected = conn
                 .execute(
@@ -136,19 +136,15 @@ impl ApiKeyStore for TursoApiKeyStore {
                     turso::params![now, key_id.to_string(), user_id.to_string()],
                 )
                 .await
-                .map_err(map_err)?;
+                .map_err(|e| map_err(&e))?;
             Ok(rows_affected > 0)
         })
     }
 
-    fn revoke_by_name(
-        &self,
-        user_id: Uuid,
-        name: &str,
-    ) -> BoxFuture<'_, Result<bool, StoreError>> {
+    fn revoke_by_name(&self, user_id: Uuid, name: &str) -> BoxFuture<'_, Result<bool, StoreError>> {
         let name = name.to_string();
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let now = format_dt(Utc::now());
             let rows_affected = conn
                 .execute(
@@ -156,13 +152,14 @@ impl ApiKeyStore for TursoApiKeyStore {
                     turso::params![now, user_id.to_string(), name],
                 )
                 .await
-                .map_err(map_err)?;
+                .map_err(|e| map_err(&e))?;
             Ok(rows_affected > 0)
         })
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::db::api_keys::default_scopes;
@@ -172,7 +169,9 @@ mod tests {
     use crate::store::user_store::UserStore;
 
     async fn setup() -> (TursoApiKeyStore, Uuid) {
-        let db = open(":memory:").await.unwrap_or_else(|e| panic!("open: {e}"));
+        let db = open(":memory:")
+            .await
+            .unwrap_or_else(|e| panic!("open: {e}"));
         let user_store = TursoUserStore::new(Arc::clone(&db));
         let user = user_store
             .create(NewUser {
@@ -221,21 +220,40 @@ mod tests {
 
     #[tokio::test]
     async fn list_for_user_only_returns_matching() {
-        let db = open(":memory:").await.unwrap_or_else(|e| panic!("open: {e}"));
+        let db = open(":memory:")
+            .await
+            .unwrap_or_else(|e| panic!("open: {e}"));
         let user_store = TursoUserStore::new(Arc::clone(&db));
         let u1 = user_store
-            .create(NewUser { email: format!("u1-{}@t.com", Uuid::now_v7()), name: None, avatar_url: None })
+            .create(NewUser {
+                email: format!("u1-{}@t.com", Uuid::now_v7()),
+                name: None,
+                avatar_url: None,
+            })
             .await
             .unwrap();
         let u2 = user_store
-            .create(NewUser { email: format!("u2-{}@t.com", Uuid::now_v7()), name: None, avatar_url: None })
+            .create(NewUser {
+                email: format!("u2-{}@t.com", Uuid::now_v7()),
+                name: None,
+                avatar_url: None,
+            })
             .await
             .unwrap();
         let store = TursoApiKeyStore::new(db);
 
-        store.create(u1.id, "a", &default_scopes(), None).await.unwrap();
-        store.create(u1.id, "b", &default_scopes(), None).await.unwrap();
-        store.create(u2.id, "c", &default_scopes(), None).await.unwrap();
+        store
+            .create(u1.id, "a", &default_scopes(), None)
+            .await
+            .unwrap();
+        store
+            .create(u1.id, "b", &default_scopes(), None)
+            .await
+            .unwrap();
+        store
+            .create(u2.id, "c", &default_scopes(), None)
+            .await
+            .unwrap();
 
         let list = store.list_for_user(u1.id).await.unwrap();
         assert_eq!(list.len(), 2);

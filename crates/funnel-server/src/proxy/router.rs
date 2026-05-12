@@ -39,10 +39,7 @@ pub async fn handle_tunnel_request(
         .extensions()
         .get::<TunnelId>()
         .cloned()
-        .or_else(|| {
-            extract_subdomain(&host)
-                .and_then(|s| TunnelId::new(s).ok())
-        });
+        .or_else(|| extract_subdomain(&host).and_then(|s| TunnelId::new(s).ok()));
 
     let Some(tunnel_id) = tunnel_id else {
         return not_found("tunnel not found");
@@ -128,9 +125,7 @@ async fn handle_upgrade(
         }
     };
 
-    let status = resp_meta
-        .http_status()
-        .unwrap_or(StatusCode::BAD_GATEWAY);
+    let status = resp_meta.http_status().unwrap_or(StatusCode::BAD_GATEWAY);
 
     if status != StatusCode::SWITCHING_PROTOCOLS {
         // backend rejected the upgrade, return the response as is
@@ -138,9 +133,9 @@ async fn handle_upgrade(
         if let Some(h) = builder.headers_mut() {
             *h = proto::to_header_map(&resp_meta.headers);
         }
-        return builder
-            .body(Body::empty())
-            .unwrap_or_else(|_| error_response(StatusCode::INTERNAL_SERVER_ERROR, "internal error"));
+        return builder.body(Body::empty()).unwrap_or_else(|_| {
+            error_response(StatusCode::INTERNAL_SERVER_ERROR, "internal error")
+        });
     }
 
     // build the 101 response for the browser
@@ -289,8 +284,7 @@ mod tests {
 
     #[test]
     fn normal_request_is_not_upgrade() -> TestResult {
-        let req = Request::builder()
-            .body(Body::empty())?;
+        let req = Request::builder().body(Body::empty())?;
         assert!(!is_upgrade_request(&req));
         Ok(())
     }

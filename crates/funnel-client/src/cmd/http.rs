@@ -78,8 +78,8 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
         None => TunnelId::generate(),
     };
 
-    let public_url =
-        runner::build_public_url(&server_url, &tunnel_id).unwrap_or_else(|| "<unknown>".to_string());
+    let public_url = runner::build_public_url(&server_url, &tunnel_id)
+        .unwrap_or_else(|| "<unknown>".to_string());
 
     println!("funnel\n");
     println!("  public url  {public_url}");

@@ -15,13 +15,13 @@ pub struct TursoSessionRecorder {
 }
 
 impl TursoSessionRecorder {
-    pub fn new(db: Arc<Database>) -> Self {
+    pub const fn new(db: Arc<Database>) -> Self {
         Self { db }
     }
 }
 
 fn row_to_session(row: &turso::Row) -> Result<TunnelSession, StoreError> {
-    let ip_str: Option<String> = row.get::<Option<String>>(3).map_err(map_err)?;
+    let ip_str: Option<String> = row.get::<Option<String>>(3).map_err(|e| map_err(&e))?;
     let client_ip = match ip_str {
         Some(s) if !s.is_empty() => Some(
             s.parse::<IpNetwork>()
@@ -30,15 +30,15 @@ fn row_to_session(row: &turso::Row) -> Result<TunnelSession, StoreError> {
         _ => None,
     };
     Ok(TunnelSession {
-        id: parse_uuid(&row.get::<String>(0).map_err(map_err)?)?,
-        user_id: parse_uuid(&row.get::<String>(1).map_err(map_err)?)?,
-        tunnel_id: row.get::<String>(2).map_err(map_err)?,
+        id: parse_uuid(&row.get::<String>(0).map_err(|e| map_err(&e))?)?,
+        user_id: parse_uuid(&row.get::<String>(1).map_err(|e| map_err(&e))?)?,
+        tunnel_id: row.get::<String>(2).map_err(|e| map_err(&e))?,
         client_ip,
-        connected_at: parse_dt(&row.get::<String>(4).map_err(map_err)?)?,
-        disconnected_at: parse_optional_dt(row.get::<Option<String>>(5).map_err(map_err)?)?,
-        bytes_in: row.get::<i64>(6).map_err(map_err)?,
-        bytes_out: row.get::<i64>(7).map_err(map_err)?,
-        requests: row.get::<i64>(8).map_err(map_err)?,
+        connected_at: parse_dt(&row.get::<String>(4).map_err(|e| map_err(&e))?)?,
+        disconnected_at: parse_optional_dt(row.get::<Option<String>>(5).map_err(|e| map_err(&e))?)?,
+        bytes_in: row.get::<i64>(6).map_err(|e| map_err(&e))?,
+        bytes_out: row.get::<i64>(7).map_err(|e| map_err(&e))?,
+        requests: row.get::<i64>(8).map_err(|e| map_err(&e))?,
     })
 }
 
@@ -51,7 +51,7 @@ impl SessionRecorder for TursoSessionRecorder {
     ) -> BoxFuture<'_, Result<TunnelSession, StoreError>> {
         let tunnel_id = tunnel_id.to_string();
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let id = Uuid::now_v7();
             let now = Utc::now();
             let ip_str = client_ip.map(|ip| ip.to_string()).unwrap_or_default();
@@ -67,7 +67,7 @@ impl SessionRecorder for TursoSessionRecorder {
                 ],
             )
             .await
-            .map_err(map_err)?;
+            .map_err(|e| map_err(&e))?;
 
             Ok(TunnelSession {
                 id,
@@ -91,7 +91,7 @@ impl SessionRecorder for TursoSessionRecorder {
         requests: i64,
     ) -> BoxFuture<'_, Result<bool, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let now = format_dt(Utc::now());
             let rows_affected = conn
                 .execute(
@@ -99,23 +99,23 @@ impl SessionRecorder for TursoSessionRecorder {
                     turso::params![now, bytes_in, bytes_out, requests, session_id.to_string()],
                 )
                 .await
-                .map_err(map_err)?;
+                .map_err(|e| map_err(&e))?;
             Ok(rows_affected > 0)
         })
     }
 
     fn list_active(&self) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let mut rows = conn
                 .query(
                     "SELECT id, user_id, tunnel_id, client_ip, connected_at, disconnected_at, bytes_in, bytes_out, requests FROM tunnel_sessions WHERE disconnected_at IS NULL ORDER BY connected_at DESC",
                     (),
                 )
                 .await
-                .map_err(map_err)?;
+                .map_err(|e| map_err(&e))?;
             let mut sessions = Vec::new();
-            while let Some(row) = rows.next().await.map_err(map_err)? {
+            while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
                 sessions.push(row_to_session(&row)?);
             }
             Ok(sessions)
@@ -128,16 +128,16 @@ impl SessionRecorder for TursoSessionRecorder {
         limit: i64,
     ) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let mut rows = conn
                 .query(
                     "SELECT id, user_id, tunnel_id, client_ip, connected_at, disconnected_at, bytes_in, bytes_out, requests FROM tunnel_sessions WHERE user_id = ? ORDER BY connected_at DESC LIMIT ?",
                     turso::params![user_id.to_string(), limit],
                 )
                 .await
-                .map_err(map_err)?;
+                .map_err(|e| map_err(&e))?;
             let mut sessions = Vec::new();
-            while let Some(row) = rows.next().await.map_err(map_err)? {
+            while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
                 sessions.push(row_to_session(&row)?);
             }
             Ok(sessions)
@@ -146,16 +146,16 @@ impl SessionRecorder for TursoSessionRecorder {
 
     fn list_all(&self, limit: i64) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>> {
         Box::pin(async move {
-            let conn = self.db.connect().map_err(map_err)?;
+            let conn = self.db.connect().map_err(|e| map_err(&e))?;
             let mut rows = conn
                 .query(
                     "SELECT id, user_id, tunnel_id, client_ip, connected_at, disconnected_at, bytes_in, bytes_out, requests FROM tunnel_sessions ORDER BY connected_at DESC LIMIT ?",
                     turso::params![limit],
                 )
                 .await
-                .map_err(map_err)?;
+                .map_err(|e| map_err(&e))?;
             let mut sessions = Vec::new();
-            while let Some(row) = rows.next().await.map_err(map_err)? {
+            while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
                 sessions.push(row_to_session(&row)?);
             }
             Ok(sessions)
@@ -164,6 +164,7 @@ impl SessionRecorder for TursoSessionRecorder {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::db::users::NewUser;
@@ -172,7 +173,9 @@ mod tests {
     use crate::store::user_store::UserStore;
 
     async fn setup() -> (TursoSessionRecorder, Uuid) {
-        let db = open(":memory:").await.unwrap_or_else(|e| panic!("open: {e}"));
+        let db = open(":memory:")
+            .await
+            .unwrap_or_else(|e| panic!("open: {e}"));
         let user_store = TursoUserStore::new(Arc::clone(&db));
         let user = user_store
             .create(NewUser {
@@ -270,14 +273,24 @@ mod tests {
 
     #[tokio::test]
     async fn list_for_user_filters_by_user() {
-        let db = open(":memory:").await.unwrap_or_else(|e| panic!("open: {e}"));
+        let db = open(":memory:")
+            .await
+            .unwrap_or_else(|e| panic!("open: {e}"));
         let user_store = TursoUserStore::new(Arc::clone(&db));
         let u1 = user_store
-            .create(NewUser { email: format!("u1-{}@t.com", Uuid::now_v7()), name: None, avatar_url: None })
+            .create(NewUser {
+                email: format!("u1-{}@t.com", Uuid::now_v7()),
+                name: None,
+                avatar_url: None,
+            })
             .await
             .unwrap();
         let u2 = user_store
-            .create(NewUser { email: format!("u2-{}@t.com", Uuid::now_v7()), name: None, avatar_url: None })
+            .create(NewUser {
+                email: format!("u2-{}@t.com", Uuid::now_v7()),
+                name: None,
+                avatar_url: None,
+            })
             .await
             .unwrap();
         let store = TursoSessionRecorder::new(db);

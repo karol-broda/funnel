@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn invalid_http_method() {
         let meta = RequestMeta {
-            method: "".into(),
+            method: String::new(),
             path: "/".into(),
             headers: HashMap::new(),
             upgrade: false,
@@ -155,7 +155,7 @@ mod tests {
     fn to_header_map_skips_invalid() {
         let mut headers = HashMap::new();
         headers.insert("valid".into(), vec!["ok".into()]);
-        headers.insert("".into(), vec!["bad name".into()]);
+        headers.insert(String::new(), vec!["bad name".into()]);
 
         let map = to_header_map(&headers);
         assert_eq!(map.len(), 1);

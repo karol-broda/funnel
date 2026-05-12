@@ -126,10 +126,10 @@ async fn websocket_echo() -> TestResult {
     let request = ws_request(&env, "/ws-echo")?;
     let (mut ws, _resp) = tokio_tungstenite::connect_async(request).await?;
 
-    ws.send(tungstenite::Message::Text("hello websocket".into())).await?;
+    ws.send(tungstenite::Message::Text("hello websocket".into()))
+        .await?;
 
-    let msg = ws.next().await
-        .ok_or("no message received")??;
+    let msg = ws.next().await.ok_or("no message received")??;
 
     assert_eq!(msg.into_text()?, "hello websocket");
 
@@ -146,10 +146,10 @@ async fn websocket_multiple_messages() -> TestResult {
 
     for i in 0..5 {
         let msg = format!("msg {i}");
-        ws.send(tungstenite::Message::Text(msg.clone().into())).await?;
+        ws.send(tungstenite::Message::Text(msg.clone().into()))
+            .await?;
 
-        let resp = ws.next().await
-            .ok_or("no message received")??;
+        let resp = ws.next().await.ok_or("no message received")??;
         assert_eq!(resp.into_text()?, msg);
     }
 
@@ -165,10 +165,10 @@ async fn websocket_binary_data() -> TestResult {
     let (mut ws, _) = tokio_tungstenite::connect_async(request).await?;
 
     let payload = vec![0u8, 1, 2, 255, 254, 253];
-    ws.send(tungstenite::Message::Binary(payload.clone().into())).await?;
+    ws.send(tungstenite::Message::Binary(payload.clone().into()))
+        .await?;
 
-    let resp = ws.next().await
-        .ok_or("no message received")??;
+    let resp = ws.next().await.ok_or("no message received")??;
     assert_eq!(resp.into_data().to_vec(), payload);
 
     ws.close(None).await?;

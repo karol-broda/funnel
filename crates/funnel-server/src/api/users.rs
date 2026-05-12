@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::auth::RequireAdmin;
-use crate::db::users::{User, ROLE_ADMIN, ROLE_MEMBER};
+use crate::db::users::{ROLE_ADMIN, ROLE_MEMBER, User};
 use crate::error::{ApiErrorBody, AppError};
 
 #[derive(Deserialize, utoipa::IntoParams)]
@@ -88,9 +88,7 @@ pub async fn set_role(
         if target.is_admin() {
             let admin_count = state.users.count_admins().await?;
             if admin_count <= 1 {
-                return Err(AppError::BadRequest(
-                    "cannot demote the last admin".into(),
-                ));
+                return Err(AppError::BadRequest("cannot demote the last admin".into()));
             }
         }
     }

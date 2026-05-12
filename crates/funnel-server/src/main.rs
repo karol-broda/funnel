@@ -205,7 +205,8 @@ async fn main() -> anyhow::Result<()> {
                 .fetch_one(&pool)
                 .await?;
 
-        let expected = funnel_core::protocol::PROTOCOL_VERSION as i32;
+        let expected = i32::try_from(funnel_core::protocol::PROTOCOL_VERSION)
+            .map_err(|_| anyhow::anyhow!("protocol version exceeds i32 range"))?;
         if db_version != expected {
             anyhow::bail!(
                 "schema version mismatch: database is v{db_version} but server expects v{expected}"
@@ -325,9 +326,9 @@ async fn build_state(
             api_keys: Arc::new(store::turso::api_key_store::TursoApiKeyStore::new(
                 Arc::clone(&db),
             )),
-            users: Arc::new(store::turso::user_store::TursoUserStore::new(
-                Arc::clone(&db),
-            )),
+            users: Arc::new(store::turso::user_store::TursoUserStore::new(Arc::clone(
+                &db,
+            ))),
             accounts: Arc::new(store::turso::account_store::TursoAccountStore::new(
                 Arc::clone(&db),
             )),
@@ -348,7 +349,15 @@ async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
     let metrics_handle = metrics::setup()?;
     let oauth_state = build_oauth_state(&cli)?;
     let initial_admin_email = cli.initial_admin_email.clone();
-    let state = build_state(pool, &cli.turso_db_path, false, oauth_state, initial_admin_email, cli.quic_port).await?;
+    let state = build_state(
+        pool,
+        &cli.turso_db_path,
+        false,
+        oauth_state,
+        initial_admin_email,
+        cli.quic_port,
+    )
+    .await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);
 
     if cli.seed_api_key {
@@ -405,11 +414,7 @@ async fn create_seed_key(state: &Arc<app::AppState>) -> anyhow::Result<()> {
     };
 
     let scopes = db::api_keys::default_scopes();
-    match state
-        .api_keys
-        .create(user.id, "seed", &scopes, None)
-        .await
-    {
+    match state.api_keys.create(user.id, "seed", &scopes, None).await {
         Ok((plaintext, _)) => {
             tracing::info!(seed_api_key = %plaintext, "seed api key created");
         }
@@ -443,7 +448,15 @@ async fn run_with_tls(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()
     let metrics_handle = metrics::setup()?;
     let oauth_state = build_oauth_state(&cli)?;
     let initial_admin_email = cli.initial_admin_email.clone();
-    let state = build_state(pool, &cli.turso_db_path, true, oauth_state, initial_admin_email, cli.quic_port).await?;
+    let state = build_state(
+        pool,
+        &cli.turso_db_path,
+        true,
+        oauth_state,
+        initial_admin_email,
+        cli.quic_port,
+    )
+    .await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);
 
     if cli.seed_api_key {

@@ -61,7 +61,9 @@ fn client(token: &str) -> reqwest::Client {
 
 pub async fn list(server: &str, token: &str, limit: u32) -> anyhow::Result<()> {
     let resp = client(token)
-        .get(format!("{server}/api/v{PROTOCOL_VERSION}/users?limit={limit}"))
+        .get(format!(
+            "{server}/api/v{PROTOCOL_VERSION}/users?limit={limit}"
+        ))
         .send()
         .await?;
 
@@ -85,7 +87,7 @@ pub async fn list(server: &str, token: &str, limit: u32) -> anyhow::Result<()> {
         } else {
             ""
         };
-        println!("{} ({}){}",  u.email, u.role, status);
+        println!("{} ({}){}", u.email, u.role, status);
         println!("  id:   {}", u.id);
         println!("  name: {name}");
         if i < users.len() - 1 {
@@ -127,7 +129,9 @@ pub async fn set_role(server: &str, token: &str, id: &str, role: &str) -> anyhow
 
 pub async fn deactivate(server: &str, token: &str, id: &str) -> anyhow::Result<()> {
     let resp = client(token)
-        .post(format!("{server}/api/v{PROTOCOL_VERSION}/users/{id}/deactivate"))
+        .post(format!(
+            "{server}/api/v{PROTOCOL_VERSION}/users/{id}/deactivate"
+        ))
         .send()
         .await?;
 
@@ -144,7 +148,9 @@ pub async fn deactivate(server: &str, token: &str, id: &str) -> anyhow::Result<(
 
 pub async fn reactivate(server: &str, token: &str, id: &str) -> anyhow::Result<()> {
     let resp = client(token)
-        .post(format!("{server}/api/v{PROTOCOL_VERSION}/users/{id}/reactivate"))
+        .post(format!(
+            "{server}/api/v{PROTOCOL_VERSION}/users/{id}/reactivate"
+        ))
         .send()
         .await?;
 

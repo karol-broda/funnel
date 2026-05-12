@@ -26,7 +26,7 @@ impl TunnelDisplay {
         let style = ProgressStyle::default_spinner()
             .tick_strings(SPINNER_FRAMES)
             .template("{spinner} {msg}")
-            .expect("valid template");
+            .unwrap_or_else(|_| ProgressStyle::default_spinner());
         pb.set_style(style);
         pb.enable_steady_tick(Duration::from_millis(SPINNER_TICK_MS));
         pb.set_message("waiting for requests...");

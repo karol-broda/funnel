@@ -133,12 +133,11 @@ pub async fn remove_member(
     team_id: Uuid,
     user_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    let result =
-        sqlx::query("DELETE FROM team_memberships WHERE team_id = $1 AND user_id = $2")
-            .bind(team_id)
-            .bind(user_id)
-            .execute(pool)
-            .await?;
+    let result = sqlx::query("DELETE FROM team_memberships WHERE team_id = $1 AND user_id = $2")
+        .bind(team_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
     Ok(result.rows_affected() > 0)
 }
 
@@ -154,10 +153,7 @@ pub async fn list_members(
     .await
 }
 
-pub async fn list_teams_for_user(
-    pool: &PgPool,
-    user_id: Uuid,
-) -> Result<Vec<Team>, sqlx::Error> {
+pub async fn list_teams_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Team>, sqlx::Error> {
     sqlx::query_as::<_, Team>(
         r"
         SELECT t.* FROM teams t
@@ -171,10 +167,7 @@ pub async fn list_teams_for_user(
     .await
 }
 
-pub async fn get_team_ids_for_user(
-    pool: &PgPool,
-    user_id: Uuid,
-) -> Result<Vec<Uuid>, sqlx::Error> {
+pub async fn get_team_ids_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
     let rows: Vec<(Uuid,)> =
         sqlx::query_as("SELECT team_id FROM team_memberships WHERE user_id = $1")
             .bind(user_id)
@@ -183,11 +176,7 @@ pub async fn get_team_ids_for_user(
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
-pub async fn is_member(
-    pool: &PgPool,
-    team_id: Uuid,
-    user_id: Uuid,
-) -> Result<bool, sqlx::Error> {
+pub async fn is_member(pool: &PgPool, team_id: Uuid, user_id: Uuid) -> Result<bool, sqlx::Error> {
     let row: (bool,) = sqlx::query_as(
         "SELECT EXISTS(SELECT 1 FROM team_memberships WHERE team_id = $1 AND user_id = $2)",
     )

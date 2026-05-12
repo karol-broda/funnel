@@ -140,8 +140,7 @@ impl Forwarder {
         let stream = TcpStream::connect(&self.local_addr).await?;
         let io = TokioIo::new(stream);
 
-        let (mut sender, conn) =
-            hyper::client::conn::http1::handshake(io).await?;
+        let (mut sender, conn) = hyper::client::conn::http1::handshake(io).await?;
         tokio::spawn(async move {
             if let Err(e) = conn.with_upgrades().await {
                 tracing::debug!(error = %e, "upgrade connection task ended");
@@ -195,10 +194,7 @@ fn build_request(
                 }
             }
         }
-        headers.insert(
-            http::header::HOST,
-            http::HeaderValue::from_str(local_addr)?,
-        );
+        headers.insert(http::header::HOST, http::HeaderValue::from_str(local_addr)?);
     }
 
     Ok(builder.body(Full::new(body))?)
@@ -232,15 +228,16 @@ fn error_response(status: u16, msg: &str) -> (ResponseMeta, Vec<u8>) {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
     use std::net::TcpListener;
 
+    use axum::Router;
     use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
     use axum::response::IntoResponse;
     use axum::routing::{get, post};
-    use axum::Router;
     use futures_util::StreamExt;
     use http_body_util::BodyExt;
 
@@ -249,8 +246,7 @@ mod tests {
     fn free_port() -> u16 {
         TcpListener::bind("127.0.0.1:0")
             .and_then(|l| l.local_addr())
-            .map(|a| a.port())
-            .unwrap_or(0)
+            .map_or(0, |a| a.port())
     }
 
     async fn start_test_server(app: Router) -> String {
@@ -301,7 +297,10 @@ mod tests {
                 (meta, bytes, conn)
             }
             ForwardResult::LocalError { meta, .. } => {
-                panic!("expected Success, got LocalError with status {}", meta.status);
+                panic!(
+                    "expected Success, got LocalError with status {}",
+                    meta.status
+                );
             }
         }
     }
@@ -370,11 +369,16 @@ mod tests {
         let addr = start_test_server(app).await;
         let fwd = Forwarder::new(addr);
 
-        let result = fwd.forward(test_meta("GET", "/headers"), Bytes::new()).await;
+        let result = fwd
+            .forward(test_meta("GET", "/headers"), Bytes::new())
+            .await;
         let (meta, _, _conn) = collect_success(result).await;
 
         assert_eq!(meta.status, 200);
-        assert_eq!(meta.headers.get("x-custom").map(|v| v.as_slice()), Some(["test-val".to_string()].as_slice()));
+        assert_eq!(
+            meta.headers.get("x-custom").map(Vec::as_slice),
+            Some(["test-val".to_string()].as_slice())
+        );
         Ok(())
     }
 
@@ -382,9 +386,7 @@ mod tests {
     async fn forward_strips_hop_by_hop_response_headers() -> TestResult {
         let app = Router::new().route(
             "/hop",
-            get(|| async {
-                ([("connection", "keep-alive"), ("x-real", "value")], "ok")
-            }),
+            get(|| async { ([("connection", "keep-alive"), ("x-real", "value")], "ok") }),
         );
         let addr = start_test_server(app).await;
         let fwd = Forwarder::new(addr);
@@ -403,7 +405,9 @@ mod tests {
         let addr = start_test_server(app).await;
         let fwd = Forwarder::new(addr);
 
-        let result = fwd.forward(test_meta("GET", "/missing"), Bytes::new()).await;
+        let result = fwd
+            .forward(test_meta("GET", "/missing"), Bytes::new())
+            .await;
         let (meta, _, _conn) = collect_success(result).await;
 
         assert_eq!(meta.status, 404);
@@ -444,8 +448,7 @@ mod tests {
         let fwd = Forwarder::new(addr);
 
         let mut meta = test_meta("GET", "/check");
-        meta.headers
-            .insert("x-test".into(), vec!["present".into()]);
+        meta.headers.insert("x-test".into(), vec!["present".into()]);
 
         let result = fwd.forward(meta, Bytes::new()).await;
         let (resp, body, _conn) = collect_success(result).await;
@@ -489,10 +492,10 @@ mod tests {
             if matches!(msg, Message::Close(_)) {
                 break;
             }
-            if matches!(msg, Message::Text(_) | Message::Binary(_)) {
-                if socket.send(msg).await.is_err() {
-                    break;
-                }
+            if matches!(msg, Message::Text(_) | Message::Binary(_))
+                && socket.send(msg).await.is_err()
+            {
+                break;
             }
         }
     }
@@ -514,7 +517,10 @@ mod tests {
                 assert!(u.meta.headers.contains_key("connection"));
             }
             ForwardUpgradeResult::Rejected(meta, _) => {
-                panic!("expected upgrade, got rejection with status {}", meta.status);
+                panic!(
+                    "expected upgrade, got rejection with status {}",
+                    meta.status
+                );
             }
         }
         Ok(())
