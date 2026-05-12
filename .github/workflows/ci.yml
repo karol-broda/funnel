@@ -30,8 +30,12 @@ jobs:
         with:
           extra-conf: accept-flake-config = true
       - uses: DeterminateSystems/magic-nix-cache-action@v13
-      - run: nix develop -c cargo nextest run --workspace --exclude funnel-e2e
-      - run: nix develop -c cargo test --doc --workspace
+      - uses: nicknovitski/nix-develop@v1
+        with:
+          arguments: .#ci
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo nextest run --workspace --exclude funnel-e2e
+      - run: cargo test --doc --workspace
 
   deny:
     name: Deny (${{ matrix.check }})

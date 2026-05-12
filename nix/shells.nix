@@ -52,5 +52,13 @@ in {
     ];
   };
 
+  ci = mkRustShell {
+    toolchain = toolchains.default;
+    includeDevTools = false;
+    extraPackages = with pkgs; [
+      cargo-nextest
+    ];
+  };
+
   inherit mkRustShell;
 }
