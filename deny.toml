@@ -7,7 +7,17 @@ targets = [
 ]
 
 [advisories]
-ignore = []
+ignore = [
+    # number_prefix unmaintained — transitive via indicatif, no alternative
+    "RUSTSEC-2025-0119",
+    # paste unmaintained — transitive via leptos ecosystem
+    "RUSTSEC-2024-0436",
+    # rustls-webpki 0.101.x vulnerabilities — pinned by aws-sdk via rustls 0.21,
+    # no fix available for this major version line
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
+]
 
 [licenses]
 allow = [

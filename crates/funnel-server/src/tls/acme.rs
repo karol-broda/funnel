@@ -1,4 +1,3 @@
-use std::io::BufReader;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -154,13 +153,17 @@ pub async fn order_certificate(
 }
 
 pub fn load_certified_key(cert_pem: &str, key_pem: &str) -> Result<CertifiedKey> {
-    let certs = rustls_pemfile::certs(&mut BufReader::new(cert_pem.as_bytes()))
+    use rustls_pki_types::pem::PemObject;
+    use rustls_pki_types::{CertificateDer, PrivateKeyDer};
+
+    let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(cert_pem.as_bytes())
         .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| anyhow::anyhow!(e))
         .context("failed to parse certificate PEM")?;
 
-    let key = rustls_pemfile::private_key(&mut BufReader::new(key_pem.as_bytes()))
-        .context("failed to parse private key PEM")?
-        .context("no private key found")?;
+    let key = PrivateKeyDer::from_pem_slice(key_pem.as_bytes())
+        .map_err(|e| anyhow::anyhow!(e))
+        .context("failed to parse private key PEM")?;
 
     let signing_key = rustls::crypto::ring::sign::any_supported_type(&key)
         .map_err(|e| anyhow::anyhow!(e))
@@ -170,8 +173,13 @@ pub fn load_certified_key(cert_pem: &str, key_pem: &str) -> Result<CertifiedKey>
 }
 
 pub fn parse_cert_expiry(cert_pem: &str) -> Result<SystemTime> {
-    let certs: Vec<_> = rustls_pemfile::certs(&mut BufReader::new(cert_pem.as_bytes()))
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+    use rustls_pki_types::pem::PemObject;
+    use rustls_pki_types::CertificateDer;
+
+    let certs: Vec<CertificateDer<'static>> =
+        CertificateDer::pem_slice_iter(cert_pem.as_bytes())
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| anyhow::anyhow!(e))?;
     let cert = certs.first().context("no certificate found")?;
     let (_, parsed) = X509Certificate::from_der(cert.as_ref())
         .map_err(|e| anyhow::anyhow!("failed to parse x509 certificate: {e}"))?;
