@@ -26,11 +26,12 @@ impl ApiKey {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ApiKeyView {
     pub id: Uuid,
     pub name: String,
     pub key_prefix: String,
+    #[schema(value_type = Vec<String>)]
     pub scopes: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,

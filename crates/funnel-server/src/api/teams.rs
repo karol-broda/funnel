@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::app::AppState;
 use crate::auth::{Management, RequireAdmin, Scoped};
 use crate::db::teams::{Team, TeamMembership, TEAM_ROLE_MEMBER, TEAM_ROLE_OWNER};
-use crate::error::AppError;
+use crate::error::{ApiErrorBody, AppError};
 
 async fn can_manage_team(state: &AppState, team_id: Uuid, auth: &Scoped<Management>) -> Result<bool, AppError> {
     if auth.is_admin() {
@@ -18,6 +18,17 @@ async fn can_manage_team(state: &AppState, team_id: Uuid, auth: &Scoped<Manageme
     Ok(membership.map_or(false, |m| m.role == TEAM_ROLE_OWNER))
 }
 
+#[utoipa::path(
+    get,
+    path = "/teams",
+    operation_id = "list_teams",
+    tag = "Teams",
+    security(("bearer" = [])),
+    responses(
+        (status = 200, description = "List of teams", body = Vec<Team>),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+    )
+)]
 pub async fn list(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
@@ -30,12 +41,26 @@ pub async fn list(
     Ok(Json(teams))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateTeamRequest {
     pub name: String,
     pub owner_id: Option<Uuid>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/teams",
+    operation_id = "create_team",
+    tag = "Teams",
+    security(("bearer" = [])),
+    request_body = CreateTeamRequest,
+    responses(
+        (status = 200, description = "Team created", body = Team),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 403, description = "Admin role required", body = ApiErrorBody),
+        (status = 409, description = "Team name already exists", body = ApiErrorBody),
+    )
+)]
 pub async fn create(
     State(state): State<Arc<AppState>>,
     admin: RequireAdmin,
@@ -50,6 +75,20 @@ pub async fn create(
     Ok(Json(team))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/teams/{id}",
+    operation_id = "delete_team",
+    tag = "Teams",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path, description = "Team ID")),
+    responses(
+        (status = 200, description = "Team deleted", body = Object),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 403, description = "Admin role required", body = ApiErrorBody),
+        (status = 404, description = "Team not found", body = ApiErrorBody),
+    )
+)]
 pub async fn delete(
     State(state): State<Arc<AppState>>,
     _admin: RequireAdmin,
@@ -62,6 +101,20 @@ pub async fn delete(
     Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
+#[utoipa::path(
+    get,
+    path = "/teams/{id}/members",
+    operation_id = "list_team_members",
+    tag = "Teams",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path, description = "Team ID")),
+    responses(
+        (status = 200, description = "List of team members", body = Vec<TeamMembership>),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 403, description = "Not a team member", body = ApiErrorBody),
+        (status = 404, description = "Team not found", body = ApiErrorBody),
+    )
+)]
 pub async fn list_members(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
@@ -84,11 +137,27 @@ pub async fn list_members(
     Ok(Json(members))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct AddMemberRequest {
     pub user_id: Uuid,
 }
 
+#[utoipa::path(
+    post,
+    path = "/teams/{id}/members",
+    operation_id = "add_team_member",
+    tag = "Teams",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path, description = "Team ID")),
+    request_body = AddMemberRequest,
+    responses(
+        (status = 200, description = "Member added", body = TeamMembership),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 403, description = "Not a team owner", body = ApiErrorBody),
+        (status = 404, description = "Team not found", body = ApiErrorBody),
+        (status = 409, description = "Already a member", body = ApiErrorBody),
+    )
+)]
 pub async fn add_member(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
@@ -112,6 +181,24 @@ pub async fn add_member(
     Ok(Json(membership))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/teams/{id}/members/{user_id}",
+    operation_id = "remove_team_member",
+    tag = "Teams",
+    security(("bearer" = [])),
+    params(
+        ("id" = Uuid, Path, description = "Team ID"),
+        ("user_id" = Uuid, Path, description = "User ID"),
+    ),
+    responses(
+        (status = 200, description = "Member removed", body = Object),
+        (status = 400, description = "Cannot remove last owner", body = ApiErrorBody),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 403, description = "Not a team owner", body = ApiErrorBody),
+        (status = 404, description = "Membership not found", body = ApiErrorBody),
+    )
+)]
 pub async fn remove_member(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
@@ -141,11 +228,31 @@ pub async fn remove_member(
     Ok(Json(serde_json::json!({ "removed": true })))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
+#[schema(as = SetTeamMemberRoleRequest)]
 pub struct SetRoleRequest {
     pub role: String,
 }
 
+#[utoipa::path(
+    put,
+    path = "/teams/{id}/members/{user_id}/role",
+    operation_id = "set_team_member_role",
+    tag = "Teams",
+    security(("bearer" = [])),
+    params(
+        ("id" = Uuid, Path, description = "Team ID"),
+        ("user_id" = Uuid, Path, description = "User ID"),
+    ),
+    request_body = SetRoleRequest,
+    responses(
+        (status = 200, description = "Member role updated", body = TeamMembership),
+        (status = 400, description = "Invalid role or last owner", body = ApiErrorBody),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 403, description = "Not a team owner", body = ApiErrorBody),
+        (status = 404, description = "Membership not found", body = ApiErrorBody),
+    )
+)]
 pub async fn set_member_role(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,

@@ -9,7 +9,7 @@ publish = false
 workspace = true
 
 [dependencies]
-funnel-core.workspace = true
+funnel-core = { workspace = true, features = ["openapi"] }
 
 anyhow.workspace = true
 axum.workspace = true
@@ -37,6 +37,8 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["json"] }
 urlencoding = "2"
+utoipa.workspace = true
+scalar_api_reference.workspace = true
 uuid.workspace = true
 
 # tls

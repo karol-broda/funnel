@@ -6,13 +6,14 @@ use uuid::Uuid;
 pub const ROLE_ADMIN: &str = "admin";
 pub const ROLE_MEMBER: &str = "member";
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct User {
     pub id: Uuid,
     pub email: String,
     pub name: Option<String>,
     pub avatar_url: Option<String>,
     pub role: String,
+    #[schema(value_type = Object)]
     pub metadata: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

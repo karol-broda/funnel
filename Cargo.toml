@@ -55,6 +55,10 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v7", "serde"] }
 ipnetwork = "0.20"
 
+# openapi
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+scalar_api_reference = { version = "0.1", features = ["axum"] }
+
 # misc
 pretty_assertions = "1"
 

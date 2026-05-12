@@ -6,8 +6,20 @@ use axum::extract::State;
 use crate::app::AppState;
 use crate::auth::{Management, Scoped};
 use crate::db::users::User;
-use crate::error::AppError;
+use crate::error::{ApiErrorBody, AppError};
 
+#[utoipa::path(
+    get,
+    path = "/me",
+    operation_id = "get_current_user",
+    tag = "Profile",
+    security(("bearer" = [])),
+    responses(
+        (status = 200, description = "Current user profile", body = User),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 404, description = "User not found", body = ApiErrorBody),
+    )
+)]
 pub async fn handler(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,

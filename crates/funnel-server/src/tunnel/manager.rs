@@ -16,7 +16,7 @@ pub struct TunnelManager {
     tunnels: DashMap<TunnelId, Arc<ActiveTunnel>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct TunnelInfo {
     pub id: String,
     pub uptime_secs: f64,

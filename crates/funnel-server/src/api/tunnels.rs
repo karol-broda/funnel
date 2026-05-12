@@ -7,9 +7,21 @@ use funnel_core::tunnel::id::TunnelId;
 
 use crate::app::AppState;
 use crate::auth::{Management, Scoped};
-use crate::error::AppError;
+use crate::error::{ApiErrorBody, AppError};
 use crate::tunnel::manager::TunnelInfo;
 
+#[utoipa::path(
+    get,
+    path = "/tunnels",
+    operation_id = "list_tunnels",
+    tag = "Tunnels",
+    security(("bearer" = [])),
+    responses(
+        (status = 200, description = "List of active tunnels", body = Vec<TunnelInfo>),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 403, description = "Forbidden", body = ApiErrorBody),
+    )
+)]
 pub async fn list(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
@@ -42,6 +54,20 @@ fn can_access(tunnel: &TunnelInfo, user_id: uuid::Uuid, team_ids: &[uuid::Uuid])
         || tunnel.team_id.is_some_and(|tid| team_ids.contains(&tid))
 }
 
+#[utoipa::path(
+    get,
+    path = "/tunnels/{id}",
+    operation_id = "get_tunnel",
+    tag = "Tunnels",
+    security(("bearer" = [])),
+    params(("id" = String, Path, description = "Tunnel ID")),
+    responses(
+        (status = 200, description = "Tunnel details", body = TunnelInfo),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 403, description = "Forbidden", body = ApiErrorBody),
+        (status = 404, description = "Tunnel not found", body = ApiErrorBody),
+    )
+)]
 pub async fn get_tunnel(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
@@ -76,6 +102,20 @@ pub async fn get_tunnel(
     Ok(Json(info))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/tunnels/{id}",
+    operation_id = "delete_tunnel",
+    tag = "Tunnels",
+    security(("bearer" = [])),
+    params(("id" = String, Path, description = "Tunnel ID")),
+    responses(
+        (status = 200, description = "Tunnel disconnected", body = Object),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 403, description = "Forbidden", body = ApiErrorBody),
+        (status = 404, description = "Tunnel not found", body = ApiErrorBody),
+    )
+)]
 pub async fn delete(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,

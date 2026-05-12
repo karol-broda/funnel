@@ -3,7 +3,7 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Team {
     pub id: Uuid,
     pub name: String,
@@ -14,7 +14,7 @@ pub struct Team {
 pub const TEAM_ROLE_OWNER: &str = "owner";
 pub const TEAM_ROLE_MEMBER: &str = "member";
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct TeamMembership {
     pub id: Uuid,
     pub team_id: Uuid,

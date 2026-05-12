@@ -8,6 +8,9 @@ publish = false
 [lints]
 workspace = true
 
+[features]
+openapi = ["utoipa"]
+
 [dependencies]
 base64 = "0.22"
 getrandom = "0.3"
@@ -19,6 +22,7 @@ serde.workspace = true
 sha2 = "0.10"
 thiserror.workspace = true
 tokio = { version = "1", features = ["io-util"] }
+utoipa = { workspace = true, optional = true }
 
 [dev-dependencies]
 pretty_assertions.workspace = true

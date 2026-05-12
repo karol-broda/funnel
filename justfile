@@ -48,6 +48,10 @@ audit:
 machete:
     cargo machete
 
+# generate openapi.json for the docs site
+gen-openapi:
+    cargo run -p funnel-server -- --dump-openapi > docs/openapi.json
+
 # build nix packages
 nix-build:
     nix build .#funnel-server .#funnel-client

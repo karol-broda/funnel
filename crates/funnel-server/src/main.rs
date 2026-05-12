@@ -4,6 +4,7 @@ mod auth;
 mod db;
 mod error;
 mod metrics;
+mod openapi;
 mod proxy;
 mod quic;
 mod store;
@@ -96,6 +97,10 @@ struct Cli {
     #[arg(long, default_value = "./funnel.db", env = "FUNNEL_TURSO_DB_PATH")]
     turso_db_path: String,
 
+    /// Dump the OpenAPI spec as JSON to stdout and exit
+    #[arg(long)]
+    dump_openapi: bool,
+
     /// Email of the initial admin user (auto promotes on first login)
     #[arg(long, env = "FUNNEL_INITIAL_ADMIN_EMAIL")]
     initial_admin_email: Option<String>,
@@ -172,6 +177,14 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
+
+    if cli.dump_openapi {
+        let spec = openapi::spec();
+        let json = serde_json::to_string_pretty(&spec)
+            .map_err(|e| anyhow::anyhow!("failed to serialize openapi spec: {e}"))?;
+        print!("{json}");
+        return Ok(());
+    }
 
     tracing::info!(host = %cli.host, port = cli.port, quic_port = cli.quic_port, "starting funnel server");
 

@@ -10,6 +10,7 @@ use axum::routing::get;
 use metrics_exporter_prometheus::PrometheusHandle;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
+use scalar_api_reference::axum::scalar_response;
 
 use funnel_core::protocol::PROTOCOL_VERSION;
 use funnel_core::tunnel::id::TunnelId;
@@ -92,6 +93,25 @@ pub fn build_router(state: Arc<AppState>, metrics_handle: PrometheusHandle) -> R
 
     let api_prefix = format!("/api/v{PROTOCOL_VERSION}");
     let auth_prefix = format!("/auth/v{PROTOCOL_VERSION}");
+
+    let scalar_config = serde_json::json!({
+        "url": format!("{api_prefix}/openapi.json"),
+        "hideClientButton": true,
+        "agent": { "disabled": true },
+        "mcp": { "disabled": true },
+    });
+
+    let scalar_routes = Router::new()
+        .route(
+            "/scalar",
+            get(move || {
+                let config = scalar_config.clone();
+                async move { scalar_response(&config, None) }
+            }),
+        )
+        .route("/openapi.json", get(crate::openapi::json_handler));
+
+    let api_routes = api_routes.merge(scalar_routes);
 
     Router::new()
         .nest(&api_prefix, api_routes)

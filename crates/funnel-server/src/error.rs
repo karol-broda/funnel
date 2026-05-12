@@ -6,8 +6,8 @@ use serde::Serialize;
 
 use crate::store::StoreError;
 
-#[derive(Debug, Serialize)]
-struct ApiErrorBody {
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct ApiErrorBody {
     error: String,
 }
 

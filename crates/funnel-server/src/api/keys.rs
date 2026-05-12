@@ -9,21 +9,32 @@ use uuid::Uuid;
 use crate::app::AppState;
 use crate::auth::{Management, Scoped};
 use crate::db::api_keys::{ApiKeyView, default_scopes};
-use crate::error::AppError;
+use crate::error::{ApiErrorBody, AppError};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateKeyRequest {
     pub name: String,
     pub scopes: Option<Vec<String>>,
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct CreateKeyResponse {
     pub key: String,
     pub info: ApiKeyView,
 }
 
+#[utoipa::path(
+    get,
+    path = "/keys",
+    operation_id = "list_keys",
+    tag = "API Keys",
+    security(("bearer" = [])),
+    responses(
+        (status = 200, description = "List of API keys for the current user", body = Vec<ApiKeyView>),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+    )
+)]
 pub async fn list(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
@@ -32,6 +43,18 @@ pub async fn list(
     Ok(Json(keys))
 }
 
+#[utoipa::path(
+    post,
+    path = "/keys",
+    operation_id = "create_key",
+    tag = "API Keys",
+    security(("bearer" = [])),
+    request_body = CreateKeyRequest,
+    responses(
+        (status = 200, description = "API key created", body = CreateKeyResponse),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+    )
+)]
 pub async fn create(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
@@ -52,6 +75,19 @@ pub async fn create(
     }))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/keys/{id}",
+    operation_id = "revoke_key",
+    tag = "API Keys",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path, description = "API key ID")),
+    responses(
+        (status = 200, description = "API key revoked", body = Object),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 404, description = "Key not found", body = ApiErrorBody),
+    )
+)]
 pub async fn revoke(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,

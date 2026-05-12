@@ -7,9 +7,9 @@ use serde::Deserialize;
 use crate::app::AppState;
 use crate::auth::{Management, Scoped};
 use crate::db::tunnel_sessions::TunnelSession;
-use crate::error::AppError;
+use crate::error::{ApiErrorBody, AppError};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::IntoParams)]
 pub struct ListParams {
     #[serde(default = "default_limit")]
     limit: i64,
@@ -21,6 +21,18 @@ const fn default_limit() -> i64 {
     50
 }
 
+#[utoipa::path(
+    get,
+    path = "/sessions",
+    operation_id = "list_sessions",
+    tag = "Profile",
+    security(("bearer" = [])),
+    params(ListParams),
+    responses(
+        (status = 200, description = "Tunnel session history", body = Vec<TunnelSession>),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+    )
+)]
 pub async fn list(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,

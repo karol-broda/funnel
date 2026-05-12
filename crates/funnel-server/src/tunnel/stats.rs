@@ -8,7 +8,7 @@ pub struct TunnelStats {
     requests: AtomicU64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct TunnelStatsSnapshot {
     pub bytes_in: u64,
     pub bytes_out: u64,

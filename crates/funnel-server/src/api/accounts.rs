@@ -7,15 +7,26 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::auth::{Management, Scoped};
-use crate::error::AppError;
+use crate::error::{ApiErrorBody, AppError};
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct AccountView {
     pub id: Uuid,
     pub provider: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/accounts",
+    operation_id = "list_accounts",
+    tag = "Profile",
+    security(("bearer" = [])),
+    responses(
+        (status = 200, description = "Linked OAuth accounts", body = Vec<AccountView>),
+        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+    )
+)]
 pub async fn list(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
