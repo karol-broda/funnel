@@ -1,0 +1,59 @@
+---
+title: Teams
+description: Team management and team-scoped tunnels
+---
+
+Teams group users together and scope tunnel visibility.
+
+## Roles
+
+**User roles** (server-wide):
+- **admin**: full access to all resources
+- **member**: access to own resources and team resources
+
+**Team roles**:
+- **owner**: can manage team members
+- **member**: can create tunnels under the team
+
+## Create a team
+
+Admins can create teams:
+
+```bash
+funnel teams create --name backend
+```
+
+## Manage members
+
+```bash
+funnel teams add-member --team <team_id> --user <user_id>
+funnel teams remove-member --team <team_id> --user <user_id>
+funnel teams set-member-role --team <team_id> --user <user_id> --role owner
+```
+
+List members:
+
+```bash
+funnel teams list-members --team <team_id>
+```
+
+## Team-scoped tunnels
+
+Associate a tunnel with a team using `--team`:
+
+```bash
+funnel http 3000 --team <team_id>
+```
+
+Team-scoped tunnels are visible to all team members in the status and sessions views. Non-members cannot see or interact with them.
+
+## User management
+
+Admins can list users, change roles, and deactivate accounts:
+
+```bash
+funnel users list
+funnel users set-role --user <user_id> --role admin
+```
+
+Deactivated users cannot authenticate and their active tunnels are rejected.

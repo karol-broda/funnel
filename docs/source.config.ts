@@ -1,26 +1,16 @@
-import { defineConfig, defineDocs } from 'fumadocs-mdx/config';
-import { rehypeCodeDefaultOptions } from 'fumadocs-core/mdx-plugins';
-import { transformerTwoslash } from 'fumadocs-twoslash';
-import rehypeKatex from 'rehype-katex';
-import remarkMath from 'remark-math';
+import { defineDocs, defineConfig } from 'fumadocs-mdx/config'
 
 export const docs = defineDocs({
   dir: 'content/docs',
-});
+})
 
 export default defineConfig({
   mdxOptions: {
-    remarkPlugins: [remarkMath],
-    rehypePlugins: (v) => [rehypeKatex, ...v],
     rehypeCodeOptions: {
       themes: {
-        light: 'github-light',
-        dark: 'github-dark',
+        light: 'github-light-default',
+        dark: 'github-dark-default',
       },
-      transformers: [
-        ...(rehypeCodeDefaultOptions.transformers ?? []),
-        transformerTwoslash(),
-      ],
     },
   },
-});
+})

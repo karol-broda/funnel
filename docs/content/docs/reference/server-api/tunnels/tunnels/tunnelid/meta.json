@@ -1,4 +1,0 @@
-{
-  "title": "Specific Tunnel",
-  "pages": ["get", "delete", "stats", "metrics", "historical"]
-}

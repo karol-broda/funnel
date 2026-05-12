@@ -1,99 +1,51 @@
 ---
-title: installation
-icon: DownloadSimpleIcon
-description: how to install the funnel client and server.
+title: Installation
+description: Install the funnel client and server
 ---
 
-import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
-import { Callout } from 'fumadocs-ui/components/callout';
-import { File, Folder, Files } from 'fumadocs-ui/components/files';
+## Nix flake
 
-get started with funnel by installing the client and running the server using docker.
+Add funnel as a flake input:
 
-## client installation
-
-<Tabs items={['Quick Install', 'Manual Install', 'Build from Source']}>
-<Tab value="Quick Install">
-the easiest way to install the `funnel` client:
-
-```bash
-curl -LsSf https://raw.githubusercontent.com/karol-broda/funnel/master/scripts/install.sh | sh
+```nix
+{
+  inputs.funnel.url = "github:karol-broda/funnel";
+}
 ```
 
-supports linux and macos on both amd64 and arm64 architectures.
-</Tab>
-
-<Tab value="Manual Install">
-download from the [releases page](https://github.com/karol-broda/funnel/releases) and install:
+Then use the package directly:
 
 ```bash
-# example for linux amd64
-sudo mv funnel /usr/local/bin/funnel
-sudo chmod +x /usr/local/bin/funnel
+nix run github:karol-broda/funnel -- http 3000
 ```
-</Tab>
 
-<Tab value="Build from Source">
-requires [go](https://go.dev/doc/install) 1.21 or later:
+Or install it to your profile:
 
 ```bash
-git clone https://github.com/karol-broda/funnel.git
-cd funnel
-make build-client
-sudo mv ./bin/funnel /usr/local/bin/funnel
+nix profile install github:karol-broda/funnel
 ```
-</Tab>
-</Tabs>
 
-## server installation
+See [NixOS module](/docs/nix/nixos-module) and [Home Manager](/docs/nix/home-manager) for declarative setups.
 
-<Callout title="docker required" intent="warning">
-the server runs as a docker container. you'll need [docker](https://docs.docker.com/get-docker/) installed.
-</Callout>
-
-### using docker image
+## Cargo
 
 ```bash
-# pull and verify the server image
-docker pull ghcr.io/karol-broda/funnel-server:latest
-docker run --rm ghcr.io/karol-broda/funnel-server:latest version
+cargo install funnel-client
+cargo install funnel-server
 ```
 
-### building from source
+## Binary download
+
+Pre-built binaries are available for Linux and macOS (amd64 and arm64) from [GitHub releases](https://github.com/karol-broda/funnel/releases).
 
 ```bash
-git clone https://github.com/karol-broda/funnel.git
-cd funnel
-make build-server-docker
+curl -fsSL https://github.com/karol-broda/funnel/releases/latest/download/install.sh | sh
 ```
 
-## project structure
+The install script verifies checksums before placing binaries in your PATH.
 
-<Files>
-  <Folder name="funnel" defaultOpen>
-    <Folder name="client" defaultOpen>
-      <File name="client.go" />
-      <File name="connection.go" />
-      <File name="runner.go" />
-    </Folder>
-    <Folder name="server" defaultOpen>
-      <File name="server.go" />
-      <File name="router.go" />
-      <File name="tunnel.go" />
-    </Folder>
-    <Folder name="cmd" defaultOpen>
-      <Folder name="funnel" defaultOpen>
-        <File name="main.go" />
-      </Folder>
-      <Folder name="server" defaultOpen>
-        <File name="main.go" />
-      </Folder>
-    </Folder>
-  </Folder>
-</Files>
+## Verify
 
-## next steps
-
-**[basic usage](/docs/getting-started/basic-usage)** - create your first tunnel  
-**[server deployment](/docs/server/deployment)** - deploy for production  
-**[cli reference](/docs/reference/client-cli)** - explore all commands 
+```bash
+funnel --version
+```

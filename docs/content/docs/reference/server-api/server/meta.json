@@ -1,9 +1,0 @@
-{
-  "title": "Server",
-  "icon": "HardDrivesIcon",
-  "pages": [
-    "health",
-    "metrics",
-    "server"
-  ]
-}

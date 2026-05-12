@@ -1,6 +1,133 @@
 @import 'tailwindcss';
-@import 'fumadocs-ui/css/catppuccin.css';
+@import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
-@import 'fumadocs-openapi/css/preset.css';
-@import 'fumadocs-twoslash/twoslash.css';
-@import '@catppuccin/palette/css/catppuccin.css';
+
+@theme {
+  --font-display: var(--font-display);
+}
+
+:root {
+  --fd-layout-width: 1400px;
+
+  --accent: oklch(0.55 0.13 65);
+  --fg: oklch(0.18 0.035 230);
+  --scroll: oklch(0.82 0.015 65);
+
+
+  --color-fd-background: oklch(0.975 0.008 70);
+  --color-fd-foreground: var(--fg);
+  --color-fd-card: oklch(0.96 0.010 70);
+  --color-fd-card-foreground: var(--fg);
+  --color-fd-muted: oklch(0.935 0.010 70);
+  --color-fd-muted-foreground: oklch(0.42 0.025 230);
+  --color-fd-popover: oklch(0.975 0.008 70);
+  --color-fd-popover-foreground: var(--fg);
+  --color-fd-border: oklch(0.895 0.012 70);
+  --color-fd-accent: oklch(0.93 0.010 70);
+  --color-fd-accent-foreground: var(--fg);
+
+
+  --color-fd-primary: var(--accent);
+  --color-fd-primary-foreground: oklch(0.98 0.008 70);
+  --color-fd-ring: var(--accent);
+
+  --color-fd-secondary: oklch(0.94 0.010 70);
+  --color-fd-secondary-foreground: oklch(0.30 0.03 230);
+}
+
+.dark {
+  --accent: oklch(0.78 0.12 65);
+  --fg: oklch(0.92 0.012 60);
+  --scroll: oklch(0.32 0.04 230);
+
+
+  --color-fd-background: oklch(0.20 0.045 230);
+  --color-fd-foreground: var(--fg);
+  --color-fd-card: oklch(0.23 0.048 230);
+  --color-fd-card-foreground: var(--fg);
+  --color-fd-muted: oklch(0.26 0.045 230);
+  --color-fd-muted-foreground: oklch(0.62 0.025 230);
+  --color-fd-popover: oklch(0.22 0.046 230);
+  --color-fd-popover-foreground: var(--fg);
+  --color-fd-border: oklch(0.30 0.042 230);
+  --color-fd-accent: oklch(0.27 0.045 230);
+  --color-fd-accent-foreground: var(--fg);
+
+  --color-fd-primary: var(--accent);
+  --color-fd-primary-foreground: oklch(0.20 0.045 230);
+  --color-fd-ring: var(--accent);
+
+  --color-fd-secondary: oklch(0.27 0.045 230);
+  --color-fd-secondary-foreground: oklch(0.76 0.015 60);
+}
+
+.dark #nd-sidebar {
+  --color-fd-muted: oklch(0.26 0.045 230);
+  --color-fd-secondary: oklch(0.27 0.045 230);
+  --color-fd-muted-foreground: oklch(0.62 0.025 230);
+}
+
+html[data-scroll-behavior='smooth'] {
+  scroll-behavior: smooth;
+}
+
+.shiki code span {
+  border-style: none;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll) transparent;
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scroll);
+  border-radius: 3px;
+}
+
+::selection {
+  background: color-mix(in oklch, var(--accent) 25%, transparent);
+}
+
+.prose a:not([class]) {
+  text-decoration: none;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-position: left bottom;
+  background-repeat: no-repeat;
+  transition: background-size 0.25s ease;
+}
+.prose a:not([class]):hover {
+  background-size: 100% 1px;
+}
+
+.prose h1,
+.prose h2,
+.prose h3 {
+  font-family: var(--font-display), serif;
+  letter-spacing: -0.02em;
+}
+
+@keyframes mesh-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(5%, -8%) scale(1.05); }
+  66% { transform: translate(-3%, 5%) scale(0.97); }
+}
+
+@keyframes mesh-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-6%, 4%) scale(0.95); }
+  66% { transform: translate(4%, -6%) scale(1.04); }
+}
+
+@keyframes mesh-c {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(6%, -4%) scale(1.06); }
+}
+

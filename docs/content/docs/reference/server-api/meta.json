@@ -1,8 +1,12 @@
 {
   "title": "Server API",
-  "icon": "CodeIcon",
   "pages": [
+    "index",
     "server",
-    "tunnels"
+    "tunnels",
+    "api-keys",
+    "profile",
+    "users",
+    "teams"
   ]
 }

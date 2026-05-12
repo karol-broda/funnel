@@ -1,12 +1,26 @@
 {
-  "title": "documentation",
-  "icon": "BookOpenIcon",
+  "title": "Documentation",
+  "root": true,
   "pages": [
     "index",
-    "getting-started",
-    "core-concepts",
-    "reference",
-    "server",
+    "---Getting Started---",
+    "getting-started/installation",
+    "getting-started/quickstart",
+    "getting-started/contexts",
+    "---Server---",
+    "server/deployment",
+    "server/tls",
+    "server/authentication",
+    "server/teams",
+    "---Client---",
+    "client/cli",
+    "---NixOS---",
+    "nix/flake",
+    "nix/nixos-module",
+    "nix/home-manager",
+    "---Reference---",
+    "reference/architecture",
+    "reference/server-api",
     "roadmap"
   ]
 }

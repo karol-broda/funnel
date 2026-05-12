@@ -1,0 +1,58 @@
+---
+title: Flake
+description: Using funnel as a Nix flake input
+---
+
+Funnel provides a Nix flake with packages, NixOS modules, and Home Manager modules.
+
+## Add as input
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    funnel.url = "github:karol-broda/funnel";
+  };
+}
+```
+
+## Packages
+
+The flake exports packages for the client and server:
+
+```nix
+{
+  # use directly
+  environment.systemPackages = [
+    inputs.funnel.packages.${system}.default  # client
+    inputs.funnel.packages.${system}.server
+  ];
+}
+```
+
+## Overlay
+
+Apply the overlay to get funnel packages in your pkgs set:
+
+```nix
+{
+  nixpkgs.overlays = [ inputs.funnel.overlays.default ];
+}
+```
+
+Then reference as `pkgs.funnel` and `pkgs.funnel-server`.
+
+## Run without installing
+
+```bash
+nix run github:karol-broda/funnel -- http 3000
+nix run github:karol-broda/funnel#server -- --seed-api-key
+```
+
+## OCI containers
+
+The flake also builds OCI container images:
+
+```nix
+inputs.funnel.packages.${system}.oci-server
+```

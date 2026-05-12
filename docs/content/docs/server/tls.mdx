@@ -1,0 +1,89 @@
+---
+title: TLS
+description: Automatic TLS with Let's Encrypt
+---
+
+Funnel can automatically obtain and renew TLS certificates from Let's Encrypt using DNS-01 challenges. This is required for wildcard certificates that cover all tunnel subdomains.
+
+## Enable TLS
+
+```bash
+funnel-server \
+  --enable-tls \
+  --tls-port 443 \
+  --letsencrypt-email admin@example.com \
+  --dns-providers-config ./dns-providers.json
+```
+
+| Flag | Env | Default | Description |
+| --- | --- | --- | --- |
+| `--enable-tls` | `FUNNEL_ENABLE_TLS` | `false` | Enable TLS |
+| `--tls-port` | `FUNNEL_TLS_PORT` | `8443` | HTTPS port |
+| `--cert-dir` | `FUNNEL_CERT_DIR` | `./certs` | Certificate storage directory |
+| `--letsencrypt-email` | `LETSENCRYPT_EMAIL` | - | ACME registration email |
+| `--dns-providers-config` | `DNS_PROVIDERS_CONFIG` | - | Path to DNS provider config |
+| `--acme-staging` | `FUNNEL_ACME_STAGING` | `false` | Use Let's Encrypt staging |
+
+When TLS is enabled, the HTTP port serves redirects to HTTPS.
+
+## DNS provider config
+
+The `--dns-providers-config` flag points to a JSON file that maps domain patterns to DNS providers. This tells funnel which provider to use for DNS-01 challenges.
+
+### Cloudflare
+
+```json
+[
+  {
+    "pattern": "*.tunnel.example.com",
+    "provider": "cloudflare",
+    "api_token": "your-cloudflare-api-token",
+    "zone_id": "your-zone-id"
+  }
+]
+```
+
+The API token needs `Zone:DNS:Edit` permissions for the relevant zone.
+
+### Route53
+
+```json
+[
+  {
+    "pattern": "*.tunnel.example.com",
+    "provider": "route53",
+    "access_key_id": "AKIA...",
+    "secret_access_key": "...",
+    "hosted_zone_id": "Z1234..."
+  }
+]
+```
+
+### Exec provider
+
+For DNS providers not natively supported, use the `exec` provider which calls a script:
+
+```json
+[
+  {
+    "pattern": "*.tunnel.example.com",
+    "provider": "exec",
+    "create_command": "/usr/local/bin/dns-create.sh",
+    "delete_command": "/usr/local/bin/dns-delete.sh"
+  }
+]
+```
+
+The scripts receive the domain and TXT record value as arguments.
+
+## Certificate storage
+
+Certificates and private keys are stored in `--cert-dir`. On restart, the server loads existing certificates before requesting new ones. Renewal happens automatically before expiry.
+
+## Development
+
+Use `--acme-staging` during development to avoid Let's Encrypt rate limits:
+
+```bash
+funnel-server --enable-tls --acme-staging --letsencrypt-email dev@example.com --dns-providers-config ./dns.json
+```

@@ -1,62 +1,23 @@
 ---
-title: introduction
-icon: HouseIcon
-description: expose local services to the internet through websocket connections
+title: funnel
+description: Self-hosted tunneling over QUIC
 ---
 
-import { Card, Cards } from 'fumadocs-ui/components/card';
-import { Callout } from 'fumadocs-ui/components/callout';
+Funnel exposes local services through secure tunnels. It runs over QUIC with per-request streams, handles TLS automatically via Let's Encrypt, and ships as a single binary for both server and client.
 
-<div align="center">
-
-<h1 align="center">🕳️ funnel</h1>
-
-*a tunneling solution built with go*
-
-**expose local services to the internet through websocket connections**
-
-</div>
-
-<Callout title="⚠️ disclaimer" intent="warning">
-this tunneling solution is intended for development and testing purposes. while functional, it may not include all security features required for production environments.
-</Callout>
-
-funnel is a lightweight tunneling solution that allows you to expose your local development services to the internet. it works by creating a persistent websocket connection between a client on your machine and a remote server.
-
-## key features
-
-- **http tunneling**: expose any local http service with a single command
-- **secure connections**: supports tls with let's encrypt for secure tunnels
-- **custom subdomains**: use your own memorable tunnel ids
-- **automatic reconnection**: client automatically reconnects if connection is lost
-- **cross-platform**: single binary for linux, macos, and windows
-
-## how it works
-
-the flow is straightforward:
-
-1. **the funnel client** starts on your local machine and connects to **the funnel server**
-2. **the funnel server** registers a unique public url for your tunnel
-3. when a request comes in, the server proxies it through the websocket to the client
-4. the client forwards the request to your local service
-5. the response travels back through the same path
-
-## getting started
+## Quick links
 
 <Cards>
-<Card 
-  title="🚀 quick start" 
-  description="install and create your first tunnel"
-  href="/docs/getting-started/installation"
-/>
-<Card 
-  title="📦 self-hosting" 
-  description="deploy your own server"
-  href="/docs/server/deployment"
-/>
-<Card 
-  title="🗺️ roadmap" 
-  description="see what's coming next"
-  href="/docs/roadmap"
-/>
+  <Card title="Installation" href="/docs/getting-started/installation">
+    Install the client and server via Nix, Cargo, or binary download.
+  </Card>
+  <Card title="Quickstart" href="/docs/getting-started/quickstart">
+    Get a tunnel running in under two minutes.
+  </Card>
+  <Card title="Server deployment" href="/docs/server/deployment">
+    Run your own funnel server with PostgreSQL or embedded Turso.
+  </Card>
+  <Card title="Architecture" href="/docs/reference/architecture">
+    How QUIC streams, tunnel routing, and request proxying work.
+  </Card>
 </Cards>

@@ -1,0 +1,134 @@
+---
+title: CLI Reference
+description: All funnel client commands and flags
+---
+
+## funnel http
+
+Create an HTTP tunnel to a local service.
+
+```bash
+funnel http <address>
+```
+
+`<address>` is a port number or `host:port`. If only a port is given, `localhost` is assumed.
+
+| Flag | Description |
+| --- | --- |
+| `--id`, `-i` | Tunnel ID (subdomain). Generated if omitted |
+| `--server`, `-s` | Server URL, overrides context config |
+| `--token`, `-t` | Auth token, overrides context config |
+| `--quic-port` | QUIC port on the server, overrides auto-discovery |
+| `--insecure` | Skip TLS certificate verification |
+| `--team` | Associate tunnel with a team |
+
+```bash
+funnel http 3000
+funnel http 3000 --id my-app
+funnel http 127.0.0.1:8080 --server https://tunnel.example.com
+```
+
+## funnel login
+
+Authenticate via OAuth. Opens a browser for the OAuth flow and stores the received token.
+
+```bash
+funnel login
+funnel login --provider gitlab
+```
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--provider` | `github` | OAuth provider name |
+
+## funnel logout
+
+Clear the stored token for the current context.
+
+```bash
+funnel logout
+```
+
+## funnel whoami
+
+Show the currently authenticated user.
+
+```bash
+funnel whoami
+```
+
+## funnel status
+
+List active tunnels on the server.
+
+```bash
+funnel status
+```
+
+## funnel keys
+
+Manage API keys.
+
+```bash
+funnel keys create --name "deploy-key"
+funnel keys list
+```
+
+## funnel sessions
+
+View tunnel session history.
+
+```bash
+funnel sessions
+funnel sessions --all    # admin only: show all users
+funnel sessions --limit 100
+```
+
+## funnel users
+
+Manage users (admin only).
+
+```bash
+funnel users list
+funnel users set-role --user <id> --role admin
+```
+
+## funnel teams
+
+Manage teams.
+
+```bash
+funnel teams create --name backend
+funnel teams list
+funnel teams add-member --team <id> --user <id>
+funnel teams remove-member --team <id> --user <id>
+funnel teams list-members --team <id>
+funnel teams set-member-role --team <id> --user <id> --role owner
+```
+
+## funnel context
+
+Manage server contexts. See [contexts](/docs/getting-started/contexts) for details.
+
+```bash
+funnel context create <name> --server <url>
+funnel context use <name>
+funnel context list
+funnel context delete <name>
+```
+
+## funnel config
+
+View the current configuration.
+
+```bash
+funnel config show
+```
+
+## Global flags
+
+| Flag | Description |
+| --- | --- |
+| `--context`, `-c` | Use a specific context for this command |
+| `--version` | Print version and protocol info |
+| `--help` | Print help |

@@ -1,143 +1,63 @@
 ---
-title: deployment
-icon: PackageIcon
+title: Deployment
+description: Run the funnel server
 ---
-import { Step, Steps } from 'fumadocs-ui/components/steps';
 
-this guide will walk you through deploying the funnel server using docker.
+The server is a single binary that handles HTTP API, QUIC tunnel connections, and optionally TLS termination.
 
-## prerequisites
+## Minimal startup
 
-- docker installed on your machine.
-- a domain name for your server (for tls/https tunnels).
-- dns provider credentials for automatic tls certificate generation (optional but recommended).
-
-## docker deployment
-
-the recommended way to deploy the server is using the official docker image.
-
-<Steps>
-
-<Step>
-### create a volume for certificates
-
-the server needs to persist tls certificates. create a docker volume to store them.
+With the embedded Turso database (no external dependencies):
 
 ```bash
-docker volume create funnel-certs
+funnel-server --seed-api-key
 ```
-</Step>
 
-<Step>
-### basic deployment
+This starts the server on port `8080` (HTTP) and `4433` (QUIC), creates an embedded database at `./funnel.db`, and prints a seed API key to stdout.
 
-for a basic deployment without tls, you can run:
+## With PostgreSQL
 
 ```bash
-docker run -d --name funnel-server \
-  -p 8080:8080 \
-  --restart unless-stopped \
-  ghcr.io/karol-broda/funnel-server:latest
+funnel-server \
+  --database-url postgres://user:pass@localhost/funnel \
+  --seed-api-key
 ```
 
-this will start the server on port 8080 and make it accessible at `http://your-server-ip:8080`.
-</Step>
+Migrations run automatically on startup. The server verifies schema version compatibility before accepting connections.
 
-<Step>
-### deployment with tls (recommended)
+## Configuration
 
-for a production deployment with automatic tls certificates, you'll need to provide your domain name and dns provider configuration.
+All options can be set via CLI flags or environment variables.
 
-first, create a dns provider configuration file (see the [server cli reference](/docs/reference/server-cli) for details):
+| Flag | Env | Default | Description |
+| --- | --- | --- | --- |
+| `--host` | `FUNNEL_HOST` | `0.0.0.0` | Bind address |
+| `--port` | `FUNNEL_PORT` | `8080` | HTTP port |
+| `--quic-port` | `FUNNEL_QUIC_PORT` | `4433` | QUIC port for tunnel connections |
+| `--database-url` | `DATABASE_URL` | - | PostgreSQL connection URL |
+| `--db-max-connections` | `FUNNEL_DB_MAX_CONNECTIONS` | `10` | Connection pool size |
+| `--turso-db-path` | `FUNNEL_TURSO_DB_PATH` | `./funnel.db` | Embedded database path |
+| `--seed-api-key` | `FUNNEL_SEED_API_KEY` | `false` | Create a seed API key on startup |
+| `--initial-admin-email` | `FUNNEL_INITIAL_ADMIN_EMAIL` | - | Auto-promote this email to admin on first login |
 
-```json title="dns-providers.json"
-{
-  "providers": [
-    {
-      "name": "cloudflare",
-      "env": {
-        "CF_API_TOKEN": "your-cloudflare-api-token"
-      }
-    }
-  ]
-}
-```
+For TLS and OAuth options, see [TLS](/docs/server/tls) and [authentication](/docs/server/authentication).
 
-then run the server with tls enabled:
+## Database choice
+
+**PostgreSQL** is the production choice. It supports concurrent access, has proper ACID guarantees, and scales with connection pooling.
+
+**Embedded Turso** (libsql) is useful for development, single-user setups, or environments where running PostgreSQL is impractical. Data is stored in a single file. No external process needed.
+
+If `--database-url` is set, PostgreSQL is used. Otherwise the server falls back to the embedded database at `--turso-db-path`.
+
+## Docker
+
+OCI images are published for `linux/amd64` and `linux/arm64`:
 
 ```bash
-docker run -d --name funnel-server \
-  -p 80:8080 \
-  -p 443:8443 \
-  -v $(pwd)/dns-providers.json:/etc/funnel/dns-providers.json \
-  -v funnel-certs:/var/lib/funnel/certs \
-  -e FUNNEL_ENABLE_TLS=true \
-  -e FUNNEL_LETSENCRYPT_EMAIL=your-email@example.com \
-  -e FUNNEL_DNS_PROVIDERS_CONFIG=/etc/funnel/dns-providers.json \
-  --restart unless-stopped \
-  ghcr.io/karol-broda/funnel-server:latest
+docker run -p 8080:8080 -p 4433:4433/udp ghcr.io/karol-broda/funnel-server
 ```
 
-replace `your-email@example.com` with your actual email address.
-</Step>
+## NixOS
 
-<Step>
-### verify the deployment
-
-check the logs to ensure the server started correctly:
-
-```bash
-docker logs -f funnel-server
-```
-
-you should see logs indicating that the server is listening on the configured ports. if tls is enabled, you'll also see logs about certificate generation.
-
-</Step>
-</Steps>
-
-## configuration
-
-the server can be configured using environment variables:
-
-| Variable | Description | Default |
-| --- | --- | --- |
-| `FUNNEL_HOST` | the host to listen on. | `0.0.0.0` |
-| `FUNNEL_PORT` | the port for http traffic. | `8080` |
-| `FUNNEL_TLS_PORT` | the port for https/tls traffic. | `8443` |
-| `FUNNEL_ENABLE_TLS` | enable automatic tls certificate generation. | `false` |
-| `FUNNEL_LETSENCRYPT_EMAIL` | email address for let's encrypt account (required for tls). | `""` |
-| `FUNNEL_DNS_PROVIDERS_CONFIG` | path to the dns provider config file (required for tls). | `""` |
-| `FUNNEL_CERT_DIR` | directory to store tls certificates. | `/var/lib/funnel/certs` |
-
-## docker compose (alternative)
-
-you can also use docker compose for easier management:
-
-```yaml title="docker-compose.yml"
-version: '3.8'
-services:
-  funnel-server:
-    image: ghcr.io/karol-broda/funnel-server:latest
-    container_name: funnel-server
-    ports:
-      - "80:8080"
-      - "443:8443"
-    volumes:
-      - ./dns-providers.json:/etc/funnel/dns-providers.json
-      - funnel-certs:/var/lib/funnel/certs
-    environment:
-      - FUNNEL_ENABLE_TLS=true
-      - FUNNEL_LETSENCRYPT_EMAIL=your-email@example.com
-      - FUNNEL_DNS_PROVIDERS_CONFIG=/etc/funnel/dns-providers.json
-    restart: unless-stopped
-
-volumes:
-  funnel-certs:
-```
-
-then run:
-```bash
-docker-compose up -d
-```
-
-for a complete list of configuration options, please refer to the [server cli reference](/docs/reference/server-cli). 
+For declarative NixOS deployments with systemd hardening, see the [NixOS module](/docs/nix/nixos-module).

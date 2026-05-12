@@ -1,0 +1,64 @@
+---
+title: Quickstart
+description: Get a tunnel running in under two minutes
+---
+
+This guide assumes you have a funnel server running and the client installed. If not, see [installation](/docs/getting-started/installation) and [server deployment](/docs/server/deployment).
+
+## Connect to a server
+
+Create a context pointing to your server:
+
+```bash
+funnel context create default --server https://tunnel.example.com
+```
+
+## Authenticate
+
+Log in via OAuth (GitHub by default):
+
+```bash
+funnel login
+```
+
+This opens your browser, completes the OAuth flow, and stores the token in your local config.
+
+## Start a tunnel
+
+Expose a local service on port 3000:
+
+```bash
+funnel http 3000
+```
+
+```
+funnel
+
+  public url  https://abc123.tunnel.example.com
+  forwarding  localhost:3000
+  tunnel id   abc123
+```
+
+The tunnel is live. Requests to the public URL are forwarded to your local service over QUIC.
+
+## Custom subdomain
+
+Pick your own tunnel ID:
+
+```bash
+funnel http 3000 --id my-app
+```
+
+This gives you `https://my-app.tunnel.example.com`.
+
+## Check active tunnels
+
+```bash
+funnel status
+```
+
+## Next steps
+
+- [Contexts](/docs/getting-started/contexts): manage multiple servers
+- [CLI reference](/docs/client/cli): all commands and flags
+- [Teams](/docs/server/teams): team-scoped tunnels

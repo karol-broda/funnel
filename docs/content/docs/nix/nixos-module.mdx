@@ -1,0 +1,169 @@
+---
+title: NixOS Module
+description: Declarative server deployment with NixOS
+---
+
+The funnel NixOS module runs the server as a systemd service with hardened security settings.
+
+## Import
+
+```nix
+{
+  imports = [ inputs.funnel.nixosModules.default ];
+}
+```
+
+## Basic configuration
+
+```nix
+{
+  services.funnel.server = {
+    enable = true;
+    host = "0.0.0.0";
+    port = 8080;
+    quicPort = 4433;
+    seedApiKey = true;
+  };
+}
+```
+
+## Database
+
+### Embedded Turso
+
+```nix
+{
+  services.funnel.server = {
+    enable = true;
+    database.tursoPath = "/var/lib/funnel/funnel.db";
+  };
+}
+```
+
+### PostgreSQL
+
+```nix
+{
+  services.funnel.server = {
+    enable = true;
+    database = {
+      postgresUrl = "postgres://funnel:password@localhost/funnel";
+      maxConnections = 20;
+    };
+  };
+}
+```
+
+To create a local PostgreSQL database automatically:
+
+```nix
+{
+  services.funnel.server = {
+    enable = true;
+    database.createLocally = true;
+  };
+}
+```
+
+## TLS
+
+```nix
+{
+  services.funnel.server = {
+    enable = true;
+    tls = {
+      enable = true;
+      port = 443;
+      certDir = "/var/lib/funnel/certs";
+      acme = {
+        email = "admin@example.com";
+        staging = false;
+        dnsProvidersConfigFile = "/run/secrets/dns-providers.json";
+      };
+    };
+  };
+}
+```
+
+## OAuth
+
+### GitHub
+
+```nix
+{
+  services.funnel.server = {
+    enable = true;
+    auth = {
+      baseUrl = "https://tunnel.example.com";
+      initialAdminEmail = "admin@example.com";
+      github.clientId = "your-client-id";
+    };
+    # secret via environment file
+    environmentFile = "/run/secrets/funnel-env";
+  };
+}
+```
+
+The environment file should contain:
+
+```
+GITHUB_CLIENT_SECRET=your-client-secret
+```
+
+### Generic OIDC
+
+```nix
+{
+  services.funnel.server.auth.oauth = {
+    providerName = "gitlab";
+    clientId = "your-client-id";
+    authorizeUrl = "https://gitlab.com/oauth/authorize";
+    tokenUrl = "https://gitlab.com/oauth/token";
+    userinfoUrl = "https://gitlab.com/api/v4/user";
+  };
+}
+```
+
+## Secrets
+
+Use `environmentFile` or `environmentFiles` to inject secrets without putting them in the Nix store:
+
+```nix
+{
+  services.funnel.server.environmentFile = "/run/secrets/funnel-env";
+}
+```
+
+This integrates with sops-nix, agenix, or any secret management tool that writes files.
+
+## Firewall
+
+```nix
+{
+  services.funnel.server = {
+    enable = true;
+    openFirewall = true; # opens port and quicPort
+  };
+}
+```
+
+## Systemd hardening
+
+The module applies these security settings by default:
+
+- `DynamicUser`: runs as a transient system user
+- `PrivateTmp`: isolated temp directory
+- `ProtectSystem=strict`: read-only filesystem
+- `ProtectHome`: no access to home directories
+- `NoNewPrivileges`: prevents privilege escalation
+- Restricted syscall filters and namespaces
+
+Override with `serviceConfig`:
+
+```nix
+{
+  services.funnel.server.serviceConfig = {
+    MemoryMax = "512M";
+  };
+}
+```

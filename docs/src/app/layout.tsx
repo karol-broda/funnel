@@ -1,58 +1,97 @@
-import "katex/dist/katex.min.css";
-import "./global.css";
-import { RootProvider } from "fumadocs-ui/provider";
-import { Inter } from "next/font/google";
-import type { ReactNode } from "react";
-import { createMetadata, generateStructuredData, siteConfig } from "@/lib/seo";
+/* oxlint-disable new-cap -- Next.js font loaders are factory functions, not constructors */
+import { RootProvider } from 'fumadocs-ui/provider/next'
+import { DM_Sans, DM_Serif_Display } from 'next/font/google'
+import type { ReactNode } from 'react'
+import type { Metadata } from 'next'
+import './global.css'
 
-const inter = Inter({
-  subsets: ["latin"],
-});
+const body = DM_Sans({
+  subsets: ['latin'],
+  variable: '--font-body',
+})
 
-export const metadata = createMetadata(
-  siteConfig.name,
-  siteConfig.description,
-  siteConfig.ogImage,
-  "/"
-);
+const display = DM_Serif_Display({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-display',
+})
 
-export default function Layout({ children }: { children: ReactNode }) {
-  const structuredData = generateStructuredData("website", {
-    title: siteConfig.name,
-    description: siteConfig.description,
-    url: siteConfig.url,
-    image: siteConfig.ogImage,
-  });
+const siteDescription =
+  'Self-hosted tunneling over QUIC. Expose local services with automatic TLS, team management, and first-class NixOS support.'
 
+export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_URL ?? 'https://funnel.karolbroda.com',
+  ),
+  title: {
+    template: '%s | funnel',
+    default: 'funnel - Self-hosted tunnels over QUIC',
+  },
+  description: siteDescription,
+  icons: {
+    icon: '/icon.svg',
+  },
+  other: {
+    'color-scheme': 'dark light',
+  },
+  openGraph: {
+    title: 'funnel - Self-hosted tunnels over QUIC',
+    description: siteDescription,
+    siteName: 'funnel',
+    locale: 'en_US',
+    type: 'website',
+    images: [{ url: '/og', width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'funnel - Self-hosted tunnels over QUIC',
+    description: siteDescription,
+    images: ['/og'],
+  },
+}
+
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={inter.className} suppressHydrationWarning>
+    <html
+      lang="en"
+      data-scroll-behavior="smooth"
+      className={`${body.variable} ${display.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(structuredData),
+            __html: JSON.stringify([
+              {
+                '@context': 'https://schema.org',
+                '@type': 'WebSite',
+                name: 'funnel',
+                url: 'https://funnel.karolbroda.com',
+                description: siteDescription,
+              },
+              {
+                '@context': 'https://schema.org',
+                '@type': 'SoftwareSourceCode',
+                name: 'funnel',
+                description: siteDescription,
+                url: 'https://funnel.karolbroda.com',
+                codeRepository: 'https://github.com/karol-broda/funnel',
+                programmingLanguage: 'Rust',
+                license: 'https://opensource.org/licenses/MIT',
+                author: {
+                  '@type': 'Person',
+                  name: 'Karol Broda',
+                  url: 'https://karolbroda.com',
+                },
+              },
+            ]),
           }}
         />
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        <meta name="msapplication-TileColor" content="#000000" />
-        <link rel="manifest" href="/site.webmanifest" />
-        <meta name="theme-color" content="#000000" />
-        <meta name="color-scheme" content="dark light" />
-        <meta name="robots" content="index,follow" />
-        <meta name="googlebot" content="index,follow" />
-        <link rel="author" href="/humans.txt" />
-        <link rel="alternate" type="application/rss+xml" title="funnel RSS Feed" href="/feed.xml" />
       </head>
-      <body>
-        <RootProvider
-          theme={{
-            defaultTheme: "dark",
-            storageKey: "theme",
-          }}
-        >
-          {children}
-        </RootProvider>
+      <body className="font-[family-name:var(--font-body)] antialiased">
+        <RootProvider>{children}</RootProvider>
       </body>
     </html>
-  );
+  )
 }

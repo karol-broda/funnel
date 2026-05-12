@@ -1,128 +1,46 @@
-import { ImageResponse } from "next/og";
-import { flavors } from "@catppuccin/palette";
+import { palette } from '@/lib/colors'
+import { createOGResponse, OGFrame } from '@/lib/og'
 
-const macchiato = flavors.macchiato;
+export const revalidate = 3600
 
-export const runtime = "edge";
-
-export async function GET() {
-  try {
-    const title = "localhost wants to see other people";
-    const description = "yet another tunneling tool nobody asked for";
-
-    return new ImageResponse(
-      (
+export function GET() {
+  return createOGResponse(
+    <OGFrame>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          height: '100%',
+          position: 'relative',
+        }}
+      >
         <div
           style={{
-            height: "100%",
-            width: "100%",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            background: `linear-gradient(135deg, ${macchiato.colors.crust.hex} 0%, #1e1e2e 50%, ${macchiato.colors.crust.hex} 100%)`,
-            position: "relative",
-            padding: "60px",
+            display: 'flex',
+            fontFamily: 'DM Serif Display',
+            fontSize: 120,
+            letterSpacing: '-0.03em',
+            color: palette.text,
           }}
         >
-          <div
-            style={{
-              position: "absolute",
-              top: "50px",
-              right: "50px",
-              width: "60px",
-              height: "60px",
-              backgroundColor: macchiato.colors.mauve.hex,
-              opacity: 0.3,
-              borderRadius: "8px",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              bottom: "80px",
-              left: "80px",
-              width: "40px",
-              height: "40px",
-              backgroundColor: macchiato.colors.green.hex,
-              opacity: 0.4,
-              borderRadius: "50%",
-            }}
-          />
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              marginBottom: "30px",
-              backgroundColor: `${macchiato.colors.surface0.hex}40`,
-              borderRadius: "25px",
-              padding: "12px 24px",
-              border: `1px solid ${macchiato.colors.surface1.hex}40`,
-            }}
-          >
-            <span style={{ marginRight: "12px", fontSize: "20px" }}>✨</span>
-            <span
-              style={{
-                color: macchiato.colors.subtext1.hex,
-                fontSize: "18px",
-              }}
-            >
-              {description}
-            </span>
-          </div>
-          <h1
-            style={{
-              fontSize: "72px",
-              fontWeight: "bold",
-              background: `linear-gradient(135deg, ${macchiato.colors.mauve.hex}, ${macchiato.colors.pink.hex})`,
-              backgroundClip: "text",
-              color: "transparent",
-              lineHeight: "1.1",
-              margin: "0 0 40px 0",
-              textAlign: "center",
-              maxWidth: "1000px",
-            }}
-          >
-            {title}
-          </h1>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              color: macchiato.colors.green.hex,
-              fontSize: "24px",
-              fontWeight: "600",
-              backgroundColor: `${macchiato.colors.base.hex}80`,
-              borderRadius: "16px",
-              padding: "16px 32px",
-              border: `1px solid ${macchiato.colors.surface0.hex}`,
-            }}
-          >
-            <span style={{ marginRight: "12px" }}>$</span>
-            <span
-              style={{ color: macchiato.colors.blue.hex, marginRight: "12px" }}
-            >
-              funnel
-            </span>
-            <span
-              style={{
-                color: macchiato.colors.yellow.hex,
-                marginRight: "12px",
-              }}
-            >
-              http
-            </span>
-            <span style={{ color: macchiato.colors.text.hex }}>3000</span>
-          </div>
+          funnel
         </div>
-      ),
-      {
-        width: 1200,
-        height: 630,
-      }
-    );
-  } catch (error) {
-    console.error("Error generating OG image:", error);
-    return new Response("Failed to generate image", { status: 500 });
-  }
+        <div
+          style={{
+            display: 'flex',
+            fontSize: 24,
+            color: palette.muted,
+            marginTop: 12,
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase' as const,
+          }}
+        >
+          Self-hosted tunnels over QUIC
+        </div>
+      </div>
+    </OGFrame>,
+  )
 }
