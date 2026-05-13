@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 32" fill="none">
+  <path d="M4 5h16l-5.5 12h-5L4 5z M18.625 8L22 5.5" stroke="#d4a844" stroke-width="1.5" stroke-linejoin="miter" fill="none"/>
+  <path d="M12 17v6" stroke="#d4a844" stroke-width="1.5"/>
+  <text x="30" y="22" font-family="DM Serif Display, Georgia, serif" font-size="18" letter-spacing="-0.02em" fill="#f0ebe3">funnel</text>
+</svg>

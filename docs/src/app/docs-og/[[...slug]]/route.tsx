@@ -1,4 +1,5 @@
 import { source } from '@/lib/source'
+import { palette } from '@/lib/colors'
 import {
   createOGResponse,
   OGFrame,
@@ -21,7 +22,9 @@ export async function GET(
   }
 
   const title = page.data.title ?? ''
-  const titleSize = title.length > 30 ? 52 : 64
+  const titleSize = title.length > 40 ? 48 : title.length > 25 ? 56 : 64
+
+  const breadcrumb = params.slug?.slice(0, -1).join(' / ') ?? ''
 
   return createOGResponse(
     <OGFrame>
@@ -32,12 +35,27 @@ export async function GET(
           justifyContent: 'space-between',
           width: '100%',
           height: '100%',
-          padding: '56px 64px',
+          padding: '56px 72px',
           position: 'relative',
         }}
       >
         <OGLogo />
+
         <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {breadcrumb && (
+            <div
+              style={{
+                display: 'flex',
+                fontSize: 14,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase' as const,
+                color: palette.muted,
+                marginBottom: 12,
+              }}
+            >
+              {breadcrumb}
+            </div>
+          )}
           <OGTitle size={titleSize}>{page.data.title}</OGTitle>
           {page.data.description && (
             <OGDescription>{page.data.description}</OGDescription>
