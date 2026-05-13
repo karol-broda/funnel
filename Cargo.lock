@@ -1741,6 +1741,7 @@ dependencies = [
  "anyhow",
  "axum",
  "bytes",
+ "chrono",
  "clap",
  "config",
  "console",
@@ -1764,6 +1765,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "uuid",
  "webpki-roots 1.0.7",
 ]
 
@@ -1772,18 +1774,32 @@ name = "funnel-core"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "chrono",
+ "funnel-derive",
  "getrandom 0.3.4",
  "hex",
  "http 1.4.0",
+ "ipnetwork",
  "nanoid",
  "pretty_assertions",
  "rmp-serde",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sqlx",
  "thiserror 2.0.18",
  "tokio",
  "utoipa",
+ "uuid",
+]
+
+[[package]]
+name = "funnel-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1803,6 +1819,7 @@ name = "funnel-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "aws-config",
  "aws-sdk-route53",
  "axum",

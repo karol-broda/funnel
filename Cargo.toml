@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/funnel-derive",
     "crates/funnel-core",
     "crates/funnel-server",
     "crates/funnel-client",
@@ -17,6 +18,7 @@ repository = "https://github.com/karol-broda/funnel"
 [workspace.dependencies]
 # internal
 funnel-core = { path = "crates/funnel-core" }
+funnel-derive = { path = "crates/funnel-derive" }
 
 # serialization
 serde = { version = "1", features = ["derive"] }
@@ -30,6 +32,9 @@ tokio-util = { version = "0.7", features = ["io"] }
 # error handling
 thiserror = "2"
 anyhow = "1"
+
+# async
+async-trait = "0.1"
 
 # networking
 quinn = "0.11"
