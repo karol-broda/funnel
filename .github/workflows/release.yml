@@ -1,53 +1,126 @@
-name: GoReleaser
+name: Release
 
 on:
   push:
-    tags:
-      - "v*.*.*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'The tag to release (e.g. v1.2.3)'
-        required: true
+    tags: ["v*"]
 
 permissions:
   contents: write
   packages: write
 
 jobs:
-  goreleaser:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-linux
+            os: ubuntu-latest
+          - target: aarch64-linux
+            os: ubuntu-24.04-arm
+          - target: x86_64-darwin
+            os: macos-13
+          - target: aarch64-darwin
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          extra-conf: accept-flake-config = true
+
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+
+      - name: Build packages
+        run: |
+          nix build .#funnel-server -o result-server
+          nix build .#funnel-client -o result-client
+
+      - name: Create archive
+        run: |
+          mkdir -p dist
+          cp -L result-server/bin/funnel-server dist/
+          cp -L result-client/bin/funnel-client dist/
+          cp -L result-client/bin/funnel dist/
+          cd dist
+          tar czf ../funnel-${{ matrix.target }}.tar.gz *
+          cd ..
+          shasum -a 256 funnel-${{ matrix.target }}.tar.gz > funnel-${{ matrix.target }}.tar.gz.sha256
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            funnel-${{ matrix.target }}.tar.gz
+            funnel-${{ matrix.target }}.tar.gz.sha256
+
+      - name: Build and stage container image
+        if: contains(matrix.target, 'linux')
+        run: |
+          nix build .#funnel-server-image -o result-container
+          cp -L result-container funnel-server-image.tar.gz
+
+      - name: Upload container artifact
+        if: contains(matrix.target, 'linux')
+        uses: actions/upload-artifact@v7
+        with:
+          name: container-${{ matrix.target }}
+          path: funnel-server-image.tar.gz
+          retention-days: 1
+
+  push-container:
+    name: Push Container
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: 'go.work'
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Login to GHCR
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v5
-        with:
-          version: ~> v2
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
- 
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: container-x86_64-linux
+          path: container-amd64
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: container-aarch64-linux
+          path: container-arm64
+
+      - name: Push arch-specific images
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}/funnel-server
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          docker load < container-amd64/funnel-server-image.tar.gz
+          docker tag funnel-server:latest "$REGISTRY:$VERSION-amd64"
+          docker push "$REGISTRY:$VERSION-amd64"
+          docker rmi funnel-server:latest
+
+          docker load < container-arm64/funnel-server-image.tar.gz
+          docker tag funnel-server:latest "$REGISTRY:$VERSION-arm64"
+          docker push "$REGISTRY:$VERSION-arm64"
+          docker rmi funnel-server:latest
+
+      - name: Create and push manifests
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}/funnel-server
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          docker manifest create "$REGISTRY:$VERSION" \
+            "$REGISTRY:$VERSION-amd64" \
+            "$REGISTRY:$VERSION-arm64"
+          docker manifest push "$REGISTRY:$VERSION"
+
+          docker manifest create "$REGISTRY:latest" \
+            "$REGISTRY:$VERSION-amd64" \
+            "$REGISTRY:$VERSION-arm64"
+          docker manifest push "$REGISTRY:latest"

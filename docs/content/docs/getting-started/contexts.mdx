@@ -1,0 +1,78 @@
+---
+title: Contexts
+description: Manage connections to multiple funnel servers
+---
+
+Contexts let you configure and switch between multiple funnel servers. Each context stores a server URL and authentication token.
+
+## Config file
+
+Contexts are stored in `~/.config/funnel/config.toml`:
+
+```toml
+current_context = "production"
+
+[contexts.production]
+server = "https://tunnel.example.com"
+token = "fnl_abc123..."
+
+[contexts.staging]
+server = "https://staging.tunnel.example.com"
+token = "fnl_def456..."
+```
+
+The file is created with `0600` permissions to protect tokens.
+
+## Create a context
+
+```bash
+funnel context create production --server https://tunnel.example.com
+```
+
+The first context you create automatically becomes the active one.
+
+## Switch contexts
+
+```bash
+funnel context use staging
+```
+
+All subsequent commands use the staging server and token.
+
+## List contexts
+
+```bash
+funnel context list
+```
+
+## Delete a context
+
+```bash
+funnel context delete staging
+```
+
+If you delete the active context, funnel switches to the next available one.
+
+## Environment overrides
+
+Environment variables take precedence over the config file:
+
+| Variable | Overrides |
+| --- | --- |
+| `FUNNEL_CONTEXT` | Active context name |
+| `FUNNEL_SERVER` | Server URL for the resolved context |
+| `FUNNEL_TOKEN` | Token for the resolved context |
+
+This is useful in CI or scripts where you don't want to modify the config file:
+
+```bash
+FUNNEL_SERVER=https://ci.tunnel.example.com FUNNEL_TOKEN=fnl_ci_key funnel http 3000
+```
+
+## Per-command override
+
+You can also override the context for a single command with `--context`:
+
+```bash
+funnel --context staging status
+```

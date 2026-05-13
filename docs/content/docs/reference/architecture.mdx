@@ -1,0 +1,72 @@
+---
+title: Architecture
+description: How funnel tunnels work under the hood
+---
+
+## Overview
+
+Funnel is a client-server system where the client maintains a persistent QUIC connection to the server. When a public request arrives at the server, it opens a new QUIC stream to the client, which forwards the request to the local service and sends the response back.
+
+```
+                        QUIC connection
+  ┌────────┐         (persistent, muxed)          ┌────────┐
+  │ Client │ ◄──────────────────────────────────► │ Server │
+  └───┬────┘                                      └───┬────┘
+      │                                               │
+      │ HTTP                                     HTTP │
+      ▼                                               ▼
+  ┌────────┐                                   ┌──────────┐
+  │ Local  │                                   │ Public   │
+  │ Service│                                   │ Internet │
+  └────────┘                                   └──────────┘
+```
+
+## Why QUIC
+
+Funnel uses QUIC instead of WebSocket or plain TCP for tunnel transport:
+
+- **Per-request streams**: each HTTP request gets its own QUIC stream. No head-of-line blocking. A slow response on one request doesn't delay others.
+- **Built-in multiplexing**: multiple concurrent requests share a single connection without framing overhead.
+- **Connection migration**: QUIC connections survive network changes (e.g. switching from WiFi to cellular).
+- **0-RTT reconnection**: after the initial handshake, reconnections can send data immediately.
+
+## Connection flow
+
+1. Client connects to the server's QUIC port (default `4433`)
+2. Client opens an initial stream and sends a registration message with the tunnel ID and auth token
+3. Server validates the token, checks for ID conflicts, and registers the tunnel
+4. Server assigns a subdomain: `<tunnel_id>.<base_domain>`
+5. The QUIC connection stays open. The server opens new streams as requests arrive.
+
+## Request proxying
+
+When a request arrives at `<tunnel_id>.<base_domain>`:
+
+1. Server matches the subdomain to a registered tunnel
+2. Server opens a new QUIC stream to the client
+3. Server serializes the HTTP request (method, path, headers, body) and sends it over the stream
+4. Client deserializes the request and forwards it to the local service via HTTP
+5. Client reads the local response, serializes it, and sends it back over the same stream
+6. Server reconstructs the HTTP response and sends it to the original caller
+
+Each request uses its own stream, so the server can handle many concurrent requests to the same tunnel without coordination.
+
+## WebSocket forwarding
+
+WebSocket upgrade requests are detected and handled specially. The tunnel transparently forwards WebSocket frames between the public client and the local service, maintaining the bidirectional connection.
+
+## Reconnection
+
+If the QUIC connection drops, the client reconnects with exponential backoff. During reconnection, the tunnel subdomain is unavailable. Once reconnected, the same tunnel ID is re-registered (if still available).
+
+## Subdomain routing
+
+The server uses a middleware layer that inspects the `Host` header of incoming requests. If the subdomain matches a registered tunnel, the request is routed to the tunnel proxy. Otherwise, it falls through to the API routes.
+
+## Proxy headers
+
+The server adds standard proxy headers to forwarded requests:
+
+- `X-Forwarded-For`: client IP address
+- `X-Forwarded-Host`: original host header
+- `X-Forwarded-Proto`: `http` or `https`

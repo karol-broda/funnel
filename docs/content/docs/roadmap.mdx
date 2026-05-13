@@ -1,172 +1,89 @@
 ---
-title: roadmap
-icon: MapTrifoldIcon
-description: current features and future plans for funnel development.
+title: Roadmap
+description: Planned features and future direction
 ---
 
-import { Callout } from 'fumadocs-ui/components/callout';
-import { Card, Cards } from 'fumadocs-ui/components/card';
-import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+## Project config file
 
-<Callout title="project vision" intent="info">
-funnel aims to be a simple, secure, and powerful tunneling solution for developers. this roadmap outlines our progress and future plans.
-</Callout>
+A `funnel.toml` in the project root that declares tunnels. `funnel up` reads it and starts everything.
 
-## current status
+```toml
+[tunnels.api]
+port = 3000
+id = "my-api"
+team = "backend"
 
-<Tabs items={['Completed', 'In Progress', 'Planned']}>
-<Tab value="Completed">
-<Cards>
-<Card title="✅ http tunneling" description="expose local web services through websocket tunnels" />
-<Card title="✅ custom tunnel ids" description="use your own subdomain names or auto-generate them" />
-<Card title="✅ auto-reconnection" description="clients automatically reconnect with exponential backoff" />
-<Card title="✅ cross-platform support" description="builds for linux, macos, windows (amd64/arm64)" />
-<Card title="✅ custom domains" description="works with any domain, not just localhost" />
-<Card title="✅ server api" description="comprehensive rest api for tunnel management and monitoring" />
-<Card title="✅ tunnel statistics" description="detailed metrics, historical data, and performance monitoring" />
-<Card title="✅ openapi documentation" description="interactive api docs with swagger ui integration" />
-<Card title="✅ client authentication" description="api key-based authentication for secure access" />
-</Cards>
-</Tab>
+[tunnels.frontend]
+port = 5173
+id = "my-frontend"
+```
 
-<Tab value="In Progress">
-<Cards>
-<Card title="🔄 web dashboard" description="browser-based tunnel monitoring and control interface" />
-</Cards>
+Committable to the repo so anyone on the team gets the same tunnel setup with one command.
 
-<Callout title="next milestone" intent="tip">
-our current focus is on building a web dashboard for visual tunnel management.
-</Callout>
-</Tab>
+## Multiple tunnels per client
 
-<Tab value="Planned">
-<Cards>
-<Card title="📋 client api" description="programmatic client control and configuration sdk" />
-<Card title="📋 https by default" description="automatic tls for all tunnel endpoints" />
-<Card title="📋 oauth integration" description="secure tunnels with tokens generated via oauth" />
-<Card title="📋 tcp forwarding" description="tunnel any tcp service, not just http" />
-<Card title="📋 multiple tunnels per client" description="run multiple services through single client" />
-</Cards>
-</Tab>
-</Tabs>
+Run multiple tunnels from a single process, sharing a single QUIC connection:
 
-## feature breakdown
+```bash
+funnel http 3000 --id api -- http 5173 --id frontend
+```
 
-### ✅ **what works now**
+## Shell completions
 
-**http tunneling** - the core functionality is complete and stable:
-- websocket-based communication between client and server
-- http request/response proxying through the tunnel
-- subdomain-based routing for tunnel identification
+```bash
+funnel completion bash > /etc/bash_completion.d/funnel
+funnel completion zsh > ~/.zfunc/_funnel
+```
 
-**custom tunnel ids** - flexible tunnel naming:
-- use your own memorable subdomain names
-- auto-generated ids using domain-safe alphabet
-- 3-63 character length with validation
+## Request inspection
 
-**auto-reconnection** - reliable connection management:
-- clients automatically reconnect when connection is lost
-- exponential backoff prevents connection storms
-- graceful handling of network interruptions
+A local web UI at `http://127.0.0.1:4040` for inspecting requests flowing through tunnels. Live feed with headers, body, timing. Filter, replay, export as curl.
 
-**cross-platform support** - works everywhere:
-- builds for linux, macos, windows
-- supports both amd64 and arm64 architectures
-- single binary distribution
+## File serving
 
-**custom domains** - flexible deployment:
-- works with any domain name, not just localhost
-- supports production deployments with real domains
-- integrates with existing dns infrastructure
+```bash
+funnel file ./dist
+```
 
-**server api** - comprehensive rest api:
-- complete tunnel lifecycle management (create, read, delete)
-- detailed monitoring and statistics endpoints
-- server health and metrics tracking
-- historical data with configurable time ranges
+Embedded static file server with directory listing and content-type detection.
 
-**tunnel statistics** - comprehensive monitoring:
-- real-time request counts and bandwidth usage
-- connection health and uptime monitoring
-- historical data and performance analytics
-- detailed metrics for individual tunnels and server-wide stats
+## Tunnel access control
 
-**openapi documentation** - interactive api docs:
-- auto-generated swagger documentation from go annotations
-- interactive api playground with try-it-out functionality
-- comprehensive request/response schemas and examples
-- integrated with fumadocs for seamless documentation experience
+```bash
+funnel http 3000 --auth user:pass
+funnel http 3000 --allow-ip 10.0.0.0/8
+funnel http 3000 --expires 2h
+```
 
-**client authentication** - secure access control:
-- api key-based authentication for clients
-- token creation, listing, and revocation via cli
-- tokens hashed with sha-256 on server (secure storage)
-- client config file support for token storage
-- tokens persist across server restarts
+## TCP tunneling
 
-### 🔄 **working on next**
+```bash
+funnel tcp 5432 --id my-db
+```
 
-**web dashboard** - visual tunnel management:
-- browser-based tunnel monitoring interface
-- real-time connection status and metrics
-- graphical configuration and control
-- integrated with server api for complete management
+Raw TCP forwarding. The server allocates a port and forwards bytes bidirectionally.
 
-### 📋 **planned improvements**
+## TLS passthrough
 
-**client api** - programmatic client control:
-- sdk for embedding client functionality
-- configuration management and control
-- integration with existing applications
+```bash
+funnel tls 8443 --id secure-app
+```
 
-**https by default** - automatic security:
-- automatic tls certificate generation
-- secure tunnel endpoints by default
-- let's encrypt integration
+Forward TLS connections without terminating them. Routes via SNI.
 
-**oauth integration** - enterprise security:
-- secure tunnel access with oauth tokens
-- integration with popular oauth providers
-- token-based access control
+## UDP tunneling
 
-**tcp forwarding** - broader protocol support:
-- tunnel any tcp service, not just http
-- support for databases, ssh, and other tcp services
-- port forwarding capabilities
+```bash
+funnel udp 51820 --id wireguard
+```
 
-**multiple tunnels per client** - improved efficiency:
-- run multiple services through a single client connection
-- shared connection overhead
-- simplified client management
+QUIC already runs over UDP, so the transport is a natural fit.
 
-## contributing
+## Other planned work
 
-<Callout title="get involved" intent="tip">
-we welcome contributions! check out our github repository to see how you can help with these features.
-</Callout>
-
-**ways to contribute:**
-- **feature development** - help implement planned features
-- **bug fixes** - improve stability and reliability
-- **documentation** - enhance guides and examples
-- **testing** - help test new features and find issues
-- **feedback** - share your use cases and feature requests
-
-**development workflow:**
-1. fork the repository
-2. create feature branch: `git checkout -b feature/your-awesome-feature`
-3. set up development: `make dev-setup`
-4. make changes and test: `make build && make test`
-5. format and lint: `make fmt && make lint`
-6. commit changes: `git commit -m "description"`
-7. push and create pull request
-
-## legend
-
-- **✅ completed** - ready to use in current release
-- **🔄 in progress** - actively being developed
-- **📋 planned** - scheduled for future development
-
-<Callout title="feedback welcome" intent="info">
-have ideas for features not on this roadmap? open an issue on github to discuss your suggestions!
-</Callout> 
+- Self-update mechanism (`funnel update`)
+- Rate limiting (per-user, per-team, per-tunnel)
+- Audit logging (structured JSON events)
+- OpenTelemetry integration
+- HTTP/2 proxying (enables gRPC tunneling)
+- Web dashboard (Leptos)

@@ -1,0 +1,17 @@
+[package]
+name = "funnel-e2e"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+tokio-tungstenite = "0.26"
+reqwest = { workspace = true, features = ["rustls", "json"] }
+serde_json.workspace = true
+axum = { workspace = true, features = ["ws"] }
+futures-util = "0.3"

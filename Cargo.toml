@@ -1,0 +1,89 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/funnel-core",
+    "crates/funnel-server",
+    "crates/funnel-client",
+    "crates/funnel-web",
+    "crates/funnel-e2e",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/karol-broda/funnel"
+
+[workspace.dependencies]
+# internal
+funnel-core = { path = "crates/funnel-core" }
+
+# serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rmp-serde = "1"
+
+# async
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
+
+# error handling
+thiserror = "2"
+anyhow = "1"
+
+# networking
+quinn = "0.11"
+rustls = { version = "0.23", default-features = false }
+reqwest = { version = "0.13", default-features = false }
+
+# http
+axum = "0.8"
+http = "1"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# cli
+clap = { version = "4", features = ["derive", "env"] }
+
+# database
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "migrate", "ipnetwork"] }
+turso = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v7", "serde"] }
+ipnetwork = "0.20"
+
+# openapi
+utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
+scalar_api_reference = { version = "0.1", features = ["axum"] }
+
+# misc
+pretty_assertions = "1"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+doc_markdown = "allow"
+similar_names = "allow"
+struct_excessive_bools = "allow"
+too_many_lines = "allow"
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+items_after_statements = "allow"
+future_not_send = "allow"
+option_if_let_else = "allow"
+
+unwrap_used = "deny"
+expect_used = "deny"
+
+[workspace.lints.rust]
+unsafe_code = "deny"

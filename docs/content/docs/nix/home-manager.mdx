@@ -1,0 +1,74 @@
+---
+title: Home Manager
+description: Declarative client configuration with Home Manager
+---
+
+The funnel Home Manager module manages the client config file declaratively.
+
+## Import
+
+```nix
+{
+  imports = [ inputs.funnel.homeManagerModules.default ];
+}
+```
+
+## Basic configuration
+
+```nix
+{
+  programs.funnel = {
+    enable = true;
+    settings = {
+      currentContext = "production";
+      contexts.production = {
+        server = "https://tunnel.example.com";
+      };
+    };
+  };
+}
+```
+
+This generates `~/.config/funnel/config.toml` with the specified settings.
+
+## Multiple contexts
+
+```nix
+{
+  programs.funnel.settings.contexts = {
+    production = {
+      server = "https://tunnel.example.com";
+    };
+    staging = {
+      server = "https://staging.tunnel.example.com";
+    };
+  };
+}
+```
+
+## Tokens with sops-nix
+
+For tokens that shouldn't be in the Nix store, use `tokenFile`:
+
+```nix
+{
+  programs.funnel.settings.contexts.production = {
+    server = "https://tunnel.example.com";
+    tokenFile = config.sops.secrets."funnel/production-token".path;
+  };
+}
+```
+
+When any context uses `tokenFile`, the module generates the config at activation time instead of symlinking to the Nix store, substituting the file contents at the token placeholder.
+
+## Environment variables
+
+Set environment variables for the funnel client:
+
+```nix
+{
+  programs.funnel.environment = {
+    FUNNEL_LOG_LEVEL = "debug";
+  };
+}
+```

@@ -1,0 +1,122 @@
+---
+title: Authentication
+description: API keys, OAuth, and access control
+---
+
+Funnel uses API keys for all authenticated requests. OAuth provides a way to obtain keys through a browser flow.
+
+## API keys
+
+Every API request requires an `Authorization: Bearer <key>` header. Keys are created with scoped permissions:
+
+- **`tunnels`**: can create and use tunnels
+- **`management`**: can manage keys, users, teams, and view sessions
+
+Keys are stored as hashes. The plaintext is only returned once at creation.
+
+### Seed key
+
+On first startup, use `--seed-api-key` to create an initial admin key:
+
+```bash
+funnel-server --seed-api-key
+```
+
+The key is printed to the server logs. Use it to bootstrap your setup, then create dedicated keys for users.
+
+### Create keys via CLI
+
+```bash
+funnel keys create --name "ci-deploy"
+```
+
+### Create keys via API
+
+```bash
+curl -X POST https://tunnel.example.com/api/v1/keys \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "ci-deploy", "scopes": ["tunnels"]}'
+```
+
+### Key expiry
+
+Keys can be created with an expiry time. After expiry, the key is rejected.
+
+### Revoke keys
+
+```bash
+funnel keys list
+# find the key ID, then:
+curl -X DELETE https://tunnel.example.com/api/v1/keys/<id> \
+  -H "Authorization: Bearer $ADMIN_KEY"
+```
+
+## OAuth
+
+OAuth lets users log in through a browser and receive an API key automatically. Two providers are supported.
+
+### GitHub
+
+```bash
+funnel-server \
+  --base-url https://tunnel.example.com \
+  --github-client-id <client_id> \
+  --github-client-secret <client_secret>
+```
+
+| Flag | Env |
+| --- | --- |
+| `--github-client-id` | `GITHUB_CLIENT_ID` |
+| `--github-client-secret` | `GITHUB_CLIENT_SECRET` |
+| `--base-url` | `BASE_URL` |
+
+Set the GitHub OAuth callback URL to `https://tunnel.example.com/auth/v1/github/callback`.
+
+### Generic OIDC
+
+Any OpenID Connect provider (GitLab, Google, Keycloak, etc.):
+
+```bash
+funnel-server \
+  --base-url https://tunnel.example.com \
+  --oauth-provider-name gitlab \
+  --oauth-client-id <id> \
+  --oauth-client-secret <secret> \
+  --oauth-authorize-url https://gitlab.com/oauth/authorize \
+  --oauth-token-url https://gitlab.com/oauth/token \
+  --oauth-userinfo-url https://gitlab.com/api/v4/user
+```
+
+| Flag | Env | Default |
+| --- | --- | --- |
+| `--oauth-provider-name` | `OAUTH_PROVIDER_NAME` | - |
+| `--oauth-client-id` | `OAUTH_CLIENT_ID` | - |
+| `--oauth-client-secret` | `OAUTH_CLIENT_SECRET` | - |
+| `--oauth-authorize-url` | `OAUTH_AUTHORIZE_URL` | - |
+| `--oauth-token-url` | `OAUTH_TOKEN_URL` | - |
+| `--oauth-userinfo-url` | `OAUTH_USERINFO_URL` | - |
+| `--oauth-scopes` | `OAUTH_SCOPES` | `openid email profile` |
+| `--oauth-id-field` | `OAUTH_ID_FIELD` | `sub` |
+| `--oauth-email-field` | `OAUTH_EMAIL_FIELD` | `email` |
+| `--oauth-name-field` | `OAUTH_NAME_FIELD` | `name` |
+| `--oauth-avatar-field` | `OAUTH_AVATAR_FIELD` | `picture` |
+
+The callback URL is `https://tunnel.example.com/auth/v1/<provider_name>/callback`.
+
+### Client login
+
+```bash
+funnel login                     # uses github by default
+funnel login --provider gitlab   # use a specific provider
+```
+
+The CLI starts a local HTTP server, opens the browser for the OAuth flow, and stores the received API key in the context config.
+
+## Initial admin
+
+Set `--initial-admin-email` to auto-promote a user to admin on their first OAuth login:
+
+```bash
+funnel-server --initial-admin-email admin@example.com
+```
