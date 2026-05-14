@@ -3,6 +3,8 @@ use std::hash::BuildHasher;
 
 use serde::{Deserialize, Serialize};
 
+use crate::tunnel::id::TunnelId;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ProtocolTypeError {
     #[error("invalid http method: {0}")]
@@ -13,7 +15,9 @@ pub enum ProtocolTypeError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestMeta {
+pub struct HttpRequest {
+    pub tunnel_id: TunnelId,
+    pub remote_addr: String,
     pub method: String,
     pub path: String,
     pub headers: HashMap<String, Vec<String>>,
@@ -21,7 +25,7 @@ pub struct RequestMeta {
     pub upgrade: bool,
 }
 
-impl RequestMeta {
+impl HttpRequest {
     pub fn http_method(&self) -> Result<http::Method, ProtocolTypeError> {
         self.method
             .parse()
@@ -30,12 +34,12 @@ impl RequestMeta {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResponseMeta {
+pub struct HttpResponse {
     pub status: u16,
     pub headers: HashMap<String, Vec<String>>,
 }
 
-impl ResponseMeta {
+impl HttpResponse {
     pub fn http_status(&self) -> Result<http::StatusCode, ProtocolTypeError> {
         http::StatusCode::from_u16(self.status)
             .map_err(|_| ProtocolTypeError::InvalidStatus(self.status))
@@ -65,8 +69,10 @@ mod tests {
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     #[test]
-    fn request_meta_roundtrip() -> TestResult {
-        let meta = RequestMeta {
+    fn http_request_roundtrip() -> TestResult {
+        let meta = HttpRequest {
+            tunnel_id: TunnelId::new("test").unwrap(),
+            remote_addr: "127.0.0.1:0".into(),
             method: "POST".into(),
             path: "/api/data".into(),
             headers: {
@@ -78,28 +84,30 @@ mod tests {
         };
 
         let encoded = rmp_serde::to_vec_named(&meta)?;
-        let decoded: RequestMeta = rmp_serde::from_slice(&encoded)?;
+        let decoded: HttpRequest = rmp_serde::from_slice(&encoded)?;
         assert_eq!(decoded.method, "POST");
         assert_eq!(decoded.path, "/api/data");
         Ok(())
     }
 
     #[test]
-    fn response_meta_roundtrip() -> TestResult {
-        let meta = ResponseMeta {
+    fn http_response_roundtrip() -> TestResult {
+        let meta = HttpResponse {
             status: 200,
             headers: HashMap::new(),
         };
 
         let encoded = rmp_serde::to_vec_named(&meta)?;
-        let decoded: ResponseMeta = rmp_serde::from_slice(&encoded)?;
+        let decoded: HttpResponse = rmp_serde::from_slice(&encoded)?;
         assert_eq!(decoded.status, 200);
         Ok(())
     }
 
     #[test]
     fn valid_http_method() {
-        let meta = RequestMeta {
+        let meta = HttpRequest {
+            tunnel_id: TunnelId::new("test").unwrap(),
+            remote_addr: "127.0.0.1:0".into(),
             method: "GET".into(),
             path: "/".into(),
             headers: HashMap::new(),
@@ -110,7 +118,9 @@ mod tests {
 
     #[test]
     fn invalid_http_method() {
-        let meta = RequestMeta {
+        let meta = HttpRequest {
+            tunnel_id: TunnelId::new("test").unwrap(),
+            remote_addr: "127.0.0.1:0".into(),
             method: String::new(),
             path: "/".into(),
             headers: HashMap::new(),
@@ -121,7 +131,7 @@ mod tests {
 
     #[test]
     fn valid_http_status() {
-        let meta = ResponseMeta {
+        let meta = HttpResponse {
             status: 404,
             headers: HashMap::new(),
         };
@@ -130,7 +140,7 @@ mod tests {
 
     #[test]
     fn invalid_http_status() {
-        let meta = ResponseMeta {
+        let meta = HttpResponse {
             status: 9999,
             headers: HashMap::new(),
         };
