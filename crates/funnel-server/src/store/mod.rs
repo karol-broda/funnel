@@ -9,10 +9,6 @@ pub mod turso;
 pub mod user_store;
 
 use std::fmt;
-use std::future::Future;
-use std::pin::Pin;
-
-pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 #[derive(Debug)]
 pub enum StoreError {
@@ -50,5 +46,61 @@ impl From<sqlx::Error> for StoreError {
             return Self::Conflict(db_err.message().to_string());
         }
         Self::Database(e)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_not_found() {
+        assert_eq!(StoreError::NotFound.to_string(), "not found");
+    }
+
+    #[test]
+    fn display_conflict() {
+        let err = StoreError::Conflict("duplicate key".into());
+        assert_eq!(err.to_string(), "conflict: duplicate key");
+    }
+
+    #[test]
+    fn display_other() {
+        let err = StoreError::Other("something went wrong".into());
+        assert_eq!(err.to_string(), "something went wrong");
+    }
+
+    #[test]
+    fn display_database() {
+        let sqlx_err = sqlx::Error::RowNotFound;
+        let err = StoreError::Database(sqlx_err);
+        let display = err.to_string();
+        assert!(display.starts_with("database error:"), "got: {display}");
+    }
+
+    #[test]
+    fn from_sqlx_row_not_found_becomes_database() {
+        let err: StoreError = sqlx::Error::RowNotFound.into();
+        assert!(matches!(err, StoreError::Database(_)));
+    }
+
+    #[test]
+    fn from_sqlx_protocol_becomes_database() {
+        let err: StoreError = sqlx::Error::Protocol("bad".into()).into();
+        assert!(matches!(err, StoreError::Database(_)));
+    }
+
+    #[test]
+    fn source_returns_inner_for_database() {
+        let sqlx_err = sqlx::Error::RowNotFound;
+        let err = StoreError::Database(sqlx_err);
+        assert!(std::error::Error::source(&err).is_some());
+    }
+
+    #[test]
+    fn source_returns_none_for_non_database() {
+        assert!(std::error::Error::source(&StoreError::NotFound).is_none());
+        assert!(std::error::Error::source(&StoreError::Conflict("x".into())).is_none());
+        assert!(std::error::Error::source(&StoreError::Other("x".into())).is_none());
     }
 }

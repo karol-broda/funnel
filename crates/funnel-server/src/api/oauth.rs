@@ -5,11 +5,13 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
+use funnel_core::api::Role;
+use funnel_core::protocol::PROTOCOL_VERSION;
+
 use crate::app::AppState;
 use crate::db::accounts::NewAccount;
 use crate::db::api_keys::default_scopes;
 use crate::db::users::NewUser;
-use funnel_core::protocol::PROTOCOL_VERSION;
 
 #[derive(Deserialize)]
 pub struct AuthorizeParams {
@@ -211,7 +213,7 @@ pub async fn callback(
         };
 
         if should_promote {
-            match state.users.update_role(user.id, "admin").await {
+            match state.users.update_role(user.id, Role::Admin).await {
                 Ok(promoted) => {
                     tracing::info!(
                         user_id = %promoted.id,
@@ -271,13 +273,13 @@ mod tests {
     use crate::api;
     use crate::app::AppState;
     use crate::auth::oauth::{OAuthError, OAuthProvider, OAuthState, OAuthUserInfo};
-    use crate::store::BoxFuture;
     use crate::store::health::UptimeHealthReporter;
     use crate::store::turso;
     use crate::tunnel::manager::TunnelManager;
 
     struct MockProvider;
 
+    #[async_trait::async_trait]
     impl OAuthProvider for MockProvider {
         fn name(&self) -> &'static str {
             "mock"
@@ -287,33 +289,28 @@ mod tests {
             format!("https://mock.example.com/auth?redirect_uri={redirect_uri}&state={state}")
         }
 
-        fn exchange_code(
+        async fn exchange_code(
             &self,
             code: &str,
             _redirect_uri: &str,
-        ) -> BoxFuture<'_, Result<String, OAuthError>> {
-            let code = code.to_string();
-            Box::pin(async move {
-                if code == "valid_code" {
-                    Ok("mock_access_token".into())
-                } else {
-                    Err(OAuthError::Provider("bad code".into()))
-                }
-            })
+        ) -> Result<String, OAuthError> {
+            if code == "valid_code" {
+                Ok("mock_access_token".into())
+            } else {
+                Err(OAuthError::Provider("bad code".into()))
+            }
         }
 
-        fn fetch_user_info(
+        async fn fetch_user_info(
             &self,
             _access_token: &str,
-        ) -> BoxFuture<'_, Result<OAuthUserInfo, OAuthError>> {
-            Box::pin(async {
-                Ok(OAuthUserInfo {
-                    email: "test@example.com".into(),
-                    name: Some("Test User".into()),
-                    avatar_url: None,
-                    provider: "mock".into(),
-                    provider_id: "12345".into(),
-                })
+        ) -> Result<OAuthUserInfo, OAuthError> {
+            Ok(OAuthUserInfo {
+                email: "test@example.com".into(),
+                name: Some("Test User".into()),
+                avatar_url: None,
+                provider: "mock".into(),
+                provider_id: "12345".into(),
             })
         }
     }
@@ -350,6 +347,7 @@ mod tests {
             oauth_state,
             initial_admin_email: None,
             quic_port: 4433,
+            server_id: "test".into(),
         })
     }
 
@@ -578,7 +576,8 @@ mod tests {
             .await;
         assert_eq!(resp.status_code(), 200);
 
-        let user: serde_json::Value = resp.json();
+        let envelope: serde_json::Value = resp.json();
+        let user = &envelope["data"];
         assert_eq!(user["email"], "test@example.com");
         assert_eq!(user["name"], "Test User");
         assert_eq!(user["role"], "admin");

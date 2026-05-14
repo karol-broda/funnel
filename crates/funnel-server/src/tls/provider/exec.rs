@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 
-use super::{BoxFuture, DnsChallenger};
+use super::DnsChallenger;
 
 pub struct ExecProvider {
     command: String,
@@ -26,16 +26,13 @@ impl ExecProvider {
     }
 }
 
+#[async_trait::async_trait]
 impl DnsChallenger for ExecProvider {
-    fn present(&self, record_name: &str, value: &str) -> BoxFuture<'_, Result<()>> {
-        let record_name = record_name.to_string();
-        let value = value.to_string();
-        Box::pin(async move { self.run("present", &record_name, &value).await })
+    async fn present(&self, record_name: &str, value: &str) -> Result<()> {
+        self.run("present", record_name, value).await
     }
 
-    fn cleanup(&self, record_name: &str, value: &str) -> BoxFuture<'_, Result<()>> {
-        let record_name = record_name.to_string();
-        let value = value.to_string();
-        Box::pin(async move { self.run("cleanup", &record_name, &value).await })
+    async fn cleanup(&self, record_name: &str, value: &str) -> Result<()> {
+        self.run("cleanup", record_name, value).await
     }
 }

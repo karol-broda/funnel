@@ -8,22 +8,24 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use uuid::Uuid;
 
+use funnel_core::api::{ApiScope, Role};
+
 use crate::app::AppState;
 use crate::error::AppError;
 
 pub struct AuthUser {
     pub user_id: Uuid,
-    pub scopes: Vec<String>,
-    pub role: String,
+    pub scopes: Vec<ApiScope>,
+    pub role: Role,
 }
 
 impl AuthUser {
-    fn has_scope(&self, scope: &str) -> bool {
-        self.scopes.iter().any(|s| s == scope)
+    fn has_scope(&self, scope: ApiScope) -> bool {
+        self.scopes.contains(&scope)
     }
 
     pub fn is_admin(&self) -> bool {
-        self.role == "admin"
+        self.role == Role::Admin
     }
 }
 
@@ -59,15 +61,7 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
             return Err(AppError::Unauthorized);
         }
 
-        let scopes = api_key
-            .scopes
-            .as_array()
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(ToString::to_string))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let scopes = api_key.parsed_scopes();
 
         Ok(Self {
             user_id: api_key.user_id,
@@ -85,29 +79,29 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
 // the extractor validates auth and checks the scope, returning 403 if missing.
 
 pub trait Scope: Send + Sync + 'static {
-    const NAME: &'static str;
+    const SCOPE: ApiScope;
 }
 
 pub struct Management;
 impl Scope for Management {
-    const NAME: &'static str = "management";
+    const SCOPE: ApiScope = ApiScope::Management;
 }
 
 #[allow(dead_code)]
 pub struct Tunnels;
 impl Scope for Tunnels {
-    const NAME: &'static str = "tunnels";
+    const SCOPE: ApiScope = ApiScope::Tunnels;
 }
 
 pub struct Scoped<S: Scope> {
     pub user_id: Uuid,
-    pub role: String,
+    pub role: Role,
     _scope: std::marker::PhantomData<S>,
 }
 
 impl<S: Scope> Scoped<S> {
     pub fn is_admin(&self) -> bool {
-        self.role == "admin"
+        self.role == Role::Admin
     }
 }
 
@@ -120,7 +114,7 @@ impl<S: Scope> FromRequestParts<Arc<AppState>> for Scoped<S> {
     ) -> Result<Self, Self::Rejection> {
         let auth = AuthUser::from_request_parts(parts, state).await?;
 
-        if !auth.has_scope(S::NAME) {
+        if !auth.has_scope(S::SCOPE) {
             return Err(AppError::Forbidden);
         }
 
@@ -147,7 +141,7 @@ impl FromRequestParts<Arc<AppState>> for RequireAdmin {
     ) -> Result<Self, Self::Rejection> {
         let auth = AuthUser::from_request_parts(parts, state).await?;
 
-        if !auth.has_scope("management") || !auth.is_admin() {
+        if !auth.has_scope(ApiScope::Management) || !auth.is_admin() {
             return Err(AppError::Forbidden);
         }
 

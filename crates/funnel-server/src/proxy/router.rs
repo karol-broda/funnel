@@ -7,7 +7,7 @@ use hyper_util::rt::TokioIo;
 use tokio::io;
 use tokio_util::io::ReaderStream;
 
-use funnel_core::protocol::request::{self as proto, RequestMeta, ResponseMeta};
+use funnel_core::protocol::request::{self as proto, HttpRequest, HttpResponse};
 use funnel_core::tunnel::id::TunnelId;
 
 use super::headers::prepare_forwarding_headers;
@@ -64,7 +64,9 @@ pub async fn handle_tunnel_request(
 
     let headers = prepare_forwarding_headers(request.headers(), &host, remote_addr, state.is_tls);
 
-    let meta = RequestMeta {
+    let meta = HttpRequest {
+        tunnel_id: tunnel_id.clone(),
+        remote_addr: remote_addr.to_string(),
         method,
         path,
         headers,
@@ -104,7 +106,9 @@ async fn handle_upgrade(
 
     let headers = prepare_forwarding_headers(request.headers(), host, remote_addr, state.is_tls);
 
-    let meta = RequestMeta {
+    let meta = HttpRequest {
+        tunnel_id: tunnel.id().clone(),
+        remote_addr: remote_addr.to_string(),
         method,
         path,
         headers,
@@ -198,7 +202,7 @@ pub fn extract_subdomain(host: &str) -> Option<&str> {
     }
 }
 
-fn build_response(meta: &ResponseMeta, recv: CountedRecvStream) -> Response<Body> {
+fn build_response(meta: &HttpResponse, recv: CountedRecvStream) -> Response<Body> {
     let status = meta.http_status().unwrap_or(StatusCode::BAD_GATEWAY);
     let mut builder = Response::builder().status(status);
 

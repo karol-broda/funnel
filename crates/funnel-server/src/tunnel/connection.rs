@@ -7,7 +7,7 @@ use http_body_util::BodyExt;
 use tokio::io::{AsyncRead, ReadBuf};
 
 use funnel_core::protocol::frame::{self as frame, FrameError};
-use funnel_core::protocol::request::{RequestMeta, ResponseMeta};
+use funnel_core::protocol::request::{HttpRequest, HttpResponse};
 use funnel_core::tunnel::id::TunnelId;
 
 use super::stats::TunnelStats;
@@ -64,9 +64,9 @@ impl ActiveTunnel {
     /// response metadata along with a counted recv stream for body streaming.
     pub async fn send_request(
         &self,
-        meta: RequestMeta,
+        meta: HttpRequest,
         body: axum::body::Body,
-    ) -> Result<(ResponseMeta, CountedRecvStream), SendError> {
+    ) -> Result<(HttpResponse, CountedRecvStream), SendError> {
         self.stats.inc_requests();
 
         let start = std::time::Instant::now();
@@ -94,7 +94,7 @@ impl ActiveTunnel {
             metrics::counter!("funnel_bytes_out_total").increment(bytes_sent);
             metrics::histogram!("funnel_request_body_bytes").record(bytes_sent as f64);
 
-            let resp_meta: ResponseMeta = frame::read_meta(&mut recv)
+            let resp_meta: HttpResponse = frame::read_meta(&mut recv)
                 .await
                 .map_err(SendError::ReadResponse)?;
 
@@ -128,8 +128,8 @@ impl ActiveTunnel {
     /// unlike send_request, this does not send a body or call finish().
     pub async fn send_upgrade_request(
         &self,
-        meta: RequestMeta,
-    ) -> Result<(ResponseMeta, quinn::SendStream, quinn::RecvStream), SendError> {
+        meta: HttpRequest,
+    ) -> Result<(HttpResponse, quinn::SendStream, quinn::RecvStream), SendError> {
         self.stats.inc_requests();
 
         let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
@@ -139,7 +139,7 @@ impl ActiveTunnel {
                 .await
                 .map_err(SendError::SendMeta)?;
 
-            let resp_meta: ResponseMeta = frame::read_meta(&mut recv)
+            let resp_meta: HttpResponse = frame::read_meta(&mut recv)
                 .await
                 .map_err(SendError::ReadResponse)?;
 

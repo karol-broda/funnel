@@ -4,8 +4,6 @@ use std::time::Instant;
 
 use dashmap::DashMap;
 
-use crate::store::BoxFuture;
-
 #[derive(Debug, Clone)]
 pub struct OAuthUserInfo {
     pub email: String,
@@ -28,18 +26,19 @@ pub enum OAuthError {
 }
 
 #[allow(dead_code)]
+#[async_trait::async_trait]
 pub trait OAuthProvider: Send + Sync {
     fn name(&self) -> &'static str;
     fn authorize_url(&self, redirect_uri: &str, state: &str) -> String;
-    fn exchange_code(
+    async fn exchange_code(
         &self,
         code: &str,
         redirect_uri: &str,
-    ) -> BoxFuture<'_, Result<String, OAuthError>>;
-    fn fetch_user_info(
+    ) -> Result<String, OAuthError>;
+    async fn fetch_user_info(
         &self,
         access_token: &str,
-    ) -> BoxFuture<'_, Result<OAuthUserInfo, OAuthError>>;
+    ) -> Result<OAuthUserInfo, OAuthError>;
 }
 
 pub struct PendingAuth {

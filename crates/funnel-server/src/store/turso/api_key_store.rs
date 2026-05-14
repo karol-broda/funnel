@@ -7,7 +7,8 @@ use uuid::Uuid;
 use super::{format_dt, map_err, parse_dt, parse_optional_dt, parse_uuid};
 use crate::db::api_keys::{ApiKey, ApiKeyView};
 use crate::store::api_key_store::ApiKeyStore;
-use crate::store::{BoxFuture, StoreError};
+use crate::store::StoreError;
+use funnel_core::api::ApiScope;
 use funnel_core::auth::token as auth;
 
 pub struct TursoApiKeyStore {
@@ -35,126 +36,114 @@ fn row_to_api_key(row: &turso::Row) -> Result<ApiKey, StoreError> {
     })
 }
 
+#[async_trait::async_trait]
 impl ApiKeyStore for TursoApiKeyStore {
-    fn create(
+    async fn create(
         &self,
         user_id: Uuid,
         name: &str,
-        scopes: &serde_json::Value,
+        scopes: &[ApiScope],
         expires_at: Option<DateTime<Utc>>,
-    ) -> BoxFuture<'_, Result<(String, ApiKeyView), StoreError>> {
-        let name = name.to_string();
-        let scopes = scopes.clone();
-        Box::pin(async move {
-            let plaintext = auth::generate_api_key()
-                .map_err(|e| StoreError::Other(format!("failed to generate api key: {e}")))?;
-            let hash = auth::hash_token(&plaintext);
-            let prefix = auth::ApiKeyPrefix::from_key(&plaintext);
+    ) -> Result<(String, ApiKeyView), StoreError> {
+        let plaintext = auth::generate_api_key()
+            .map_err(|e| StoreError::Other(format!("failed to generate api key: {e}")))?;
+        let hash = auth::hash_token(&plaintext);
+        let prefix = auth::ApiKeyPrefix::from_key(&plaintext);
 
-            let conn = self.db.connect().map_err(|e| map_err(&e))?;
-            let id = Uuid::now_v7();
-            let now = Utc::now();
-            let scopes_str = serde_json::to_string(&scopes)
-                .map_err(|e| StoreError::Other(format!("invalid json: {e}")))?;
-            let expires_str = expires_at.map(format_dt);
+        let conn = self.db.connect().map_err(|e| map_err(&e))?;
+        let id = Uuid::now_v7();
+        let now = Utc::now();
+        let scopes_str = serde_json::to_string(scopes)
+            .map_err(|e| StoreError::Other(format!("invalid json: {e}")))?;
+        let expires_str = expires_at.map(format_dt);
 
-            conn.execute(
-                "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, scopes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                turso::params![
-                    id.to_string(),
-                    user_id.to_string(),
-                    name.clone(),
-                    hash,
-                    prefix.as_ref().to_string(),
-                    scopes_str,
-                    format_dt(now),
-                    expires_str.unwrap_or_default()
-                ],
+        conn.execute(
+            "INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, scopes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            turso::params![
+                id.to_string(),
+                user_id.to_string(),
+                name.to_string(),
+                hash,
+                prefix.as_ref().to_string(),
+                scopes_str,
+                format_dt(now),
+                expires_str.unwrap_or_default()
+            ],
+        )
+        .await
+        .map_err(|e| map_err(&e))?;
+
+        let view = ApiKeyView {
+            id,
+            name: name.to_string(),
+            key_prefix: prefix.as_ref().to_string(),
+            scopes: scopes.to_vec(),
+            created_at: now,
+            revoked_at: None,
+            expires_at,
+        };
+
+        Ok((plaintext, view))
+    }
+
+    async fn validate(&self, plaintext: &str) -> Result<Option<ApiKey>, StoreError> {
+        let hash = auth::hash_token(plaintext);
+        let conn = self.db.connect().map_err(|e| map_err(&e))?;
+        let now = format_dt(Utc::now());
+        let mut rows = conn
+            .query(
+                "SELECT id, user_id, name, key_hash, key_prefix, scopes, created_at, revoked_at, expires_at FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at = '' OR expires_at > ?)",
+                turso::params![hash, now],
             )
             .await
             .map_err(|e| map_err(&e))?;
-
-            let view = ApiKeyView {
-                id,
-                name,
-                key_prefix: prefix.as_ref().to_string(),
-                scopes,
-                created_at: now,
-                revoked_at: None,
-                expires_at,
-            };
-
-            Ok((plaintext, view))
-        })
+        match rows.next().await.map_err(|e| map_err(&e))? {
+            Some(row) => Ok(Some(row_to_api_key(&row)?)),
+            None => Ok(None),
+        }
     }
 
-    fn validate(&self, plaintext: &str) -> BoxFuture<'_, Result<Option<ApiKey>, StoreError>> {
-        let hash = auth::hash_token(plaintext);
-        Box::pin(async move {
-            let conn = self.db.connect().map_err(|e| map_err(&e))?;
-            let now = format_dt(Utc::now());
-            let mut rows = conn
-                .query(
-                    "SELECT id, user_id, name, key_hash, key_prefix, scopes, created_at, revoked_at, expires_at FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at = '' OR expires_at > ?)",
-                    turso::params![hash, now],
-                )
-                .await
-                .map_err(|e| map_err(&e))?;
-            match rows.next().await.map_err(|e| map_err(&e))? {
-                Some(row) => Ok(Some(row_to_api_key(&row)?)),
-                None => Ok(None),
-            }
-        })
+    async fn list_for_user(&self, user_id: Uuid) -> Result<Vec<ApiKeyView>, StoreError> {
+        let conn = self.db.connect().map_err(|e| map_err(&e))?;
+        let mut rows = conn
+            .query(
+                "SELECT id, user_id, name, key_hash, key_prefix, scopes, created_at, revoked_at, expires_at FROM api_keys WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC",
+                turso::params![user_id.to_string()],
+            )
+            .await
+            .map_err(|e| map_err(&e))?;
+        let mut keys = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
+            let key = row_to_api_key(&row)?;
+            keys.push(ApiKeyView::from(key));
+        }
+        Ok(keys)
     }
 
-    fn list_for_user(&self, user_id: Uuid) -> BoxFuture<'_, Result<Vec<ApiKeyView>, StoreError>> {
-        Box::pin(async move {
-            let conn = self.db.connect().map_err(|e| map_err(&e))?;
-            let mut rows = conn
-                .query(
-                    "SELECT id, user_id, name, key_hash, key_prefix, scopes, created_at, revoked_at, expires_at FROM api_keys WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC",
-                    turso::params![user_id.to_string()],
-                )
-                .await
-                .map_err(|e| map_err(&e))?;
-            let mut keys = Vec::new();
-            while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
-                let key = row_to_api_key(&row)?;
-                keys.push(ApiKeyView::from(key));
-            }
-            Ok(keys)
-        })
+    async fn revoke(&self, key_id: Uuid, user_id: Uuid) -> Result<bool, StoreError> {
+        let conn = self.db.connect().map_err(|e| map_err(&e))?;
+        let now = format_dt(Utc::now());
+        let rows_affected = conn
+            .execute(
+                "UPDATE api_keys SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL",
+                turso::params![now, key_id.to_string(), user_id.to_string()],
+            )
+            .await
+            .map_err(|e| map_err(&e))?;
+        Ok(rows_affected > 0)
     }
 
-    fn revoke(&self, key_id: Uuid, user_id: Uuid) -> BoxFuture<'_, Result<bool, StoreError>> {
-        Box::pin(async move {
-            let conn = self.db.connect().map_err(|e| map_err(&e))?;
-            let now = format_dt(Utc::now());
-            let rows_affected = conn
-                .execute(
-                    "UPDATE api_keys SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL",
-                    turso::params![now, key_id.to_string(), user_id.to_string()],
-                )
-                .await
-                .map_err(|e| map_err(&e))?;
-            Ok(rows_affected > 0)
-        })
-    }
-
-    fn revoke_by_name(&self, user_id: Uuid, name: &str) -> BoxFuture<'_, Result<bool, StoreError>> {
-        let name = name.to_string();
-        Box::pin(async move {
-            let conn = self.db.connect().map_err(|e| map_err(&e))?;
-            let now = format_dt(Utc::now());
-            let rows_affected = conn
-                .execute(
-                    "UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND name = ? AND revoked_at IS NULL",
-                    turso::params![now, user_id.to_string(), name],
-                )
-                .await
-                .map_err(|e| map_err(&e))?;
-            Ok(rows_affected > 0)
-        })
+    async fn revoke_by_name(&self, user_id: Uuid, name: &str) -> Result<bool, StoreError> {
+        let conn = self.db.connect().map_err(|e| map_err(&e))?;
+        let now = format_dt(Utc::now());
+        let rows_affected = conn
+            .execute(
+                "UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND name = ? AND revoked_at IS NULL",
+                turso::params![now, user_id.to_string(), name.to_string()],
+            )
+            .await
+            .map_err(|e| map_err(&e))?;
+        Ok(rows_affected > 0)
     }
 }
 
@@ -308,17 +297,17 @@ mod tests {
     #[tokio::test]
     async fn scopes_are_preserved() {
         let (store, uid) = setup().await;
-        let scopes = serde_json::json!(["tunnels"]);
+        let scopes = &[ApiScope::Tunnels];
 
         let (plaintext, view) = store
-            .create(uid, "tunnel-only", &scopes, None)
+            .create(uid, "tunnel-only", scopes, None)
             .await
             .unwrap();
-        assert_eq!(view.scopes, scopes);
+        assert_eq!(view.scopes, vec![ApiScope::Tunnels]);
 
         let key = store.validate(&plaintext).await.unwrap().unwrap();
-        assert!(key.has_scope("tunnels"));
-        assert!(!key.has_scope("management"));
+        assert!(key.has_scope(ApiScope::Tunnels));
+        assert!(!key.has_scope(ApiScope::Management));
     }
 
     #[tokio::test]

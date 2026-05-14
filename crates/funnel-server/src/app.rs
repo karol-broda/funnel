@@ -39,6 +39,7 @@ pub struct AppState {
     pub oauth_state: Option<Arc<OAuthState>>,
     pub initial_admin_email: Option<String>,
     pub quic_port: u16,
+    pub server_id: String,
 }
 
 pub fn build_router(state: Arc<AppState>, metrics_handle: PrometheusHandle) -> Router {

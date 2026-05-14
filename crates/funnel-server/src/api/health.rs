@@ -1,16 +1,11 @@
 use std::sync::Arc;
 
-use axum::Json;
 use axum::extract::State;
-use serde::Serialize;
+
+use funnel_core::api::HealthResponse;
 
 use crate::app::AppState;
-
-#[derive(Serialize, utoipa::ToSchema)]
-pub struct HealthResponse {
-    pub status: &'static str,
-    pub uptime_secs: u64,
-}
+use crate::response::One;
 
 #[utoipa::path(
     get,
@@ -21,9 +16,10 @@ pub struct HealthResponse {
         (status = 200, description = "Server is healthy", body = HealthResponse),
     )
 )]
-pub async fn handler(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
-    Json(HealthResponse {
-        status: state.health.status(),
+pub async fn handler(State(state): State<Arc<AppState>>) -> One<HealthResponse> {
+    let resp = HealthResponse {
+        status: state.health.status().to_string(),
         uptime_secs: state.health.uptime_secs(),
-    })
+    };
+    One(resp)
 }

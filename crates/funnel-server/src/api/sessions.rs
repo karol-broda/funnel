@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
-use axum::Json;
 use axum::extract::{Query, State};
 use serde::Deserialize;
 
 use crate::app::AppState;
 use crate::auth::{Management, Scoped};
-use crate::db::tunnel_sessions::TunnelSession;
-use crate::error::{ApiErrorBody, AppError};
+use funnel_core::api::TunnelSession;
+use crate::error::AppError;
+use crate::response::Many;
+use funnel_core::api::envelope::ErrorData;
 
 #[derive(Deserialize, utoipa::IntoParams)]
 pub struct ListParams {
@@ -30,14 +31,14 @@ const fn default_limit() -> i64 {
     params(ListParams),
     responses(
         (status = 200, description = "Tunnel session history", body = Vec<TunnelSession>),
-        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 401, description = "Unauthorized", body = ErrorData),
     )
 )]
 pub async fn list(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
     Query(params): Query<ListParams>,
-) -> Result<Json<Vec<TunnelSession>>, AppError> {
+) -> Result<Many<TunnelSession>, AppError> {
     let sessions = if params.all && auth.is_admin() {
         state.sessions.list_all(params.limit).await?
     } else {
@@ -47,5 +48,5 @@ pub async fn list(
             .await?
     };
 
-    Ok(Json(sessions))
+    Ok(Many(sessions))
 }

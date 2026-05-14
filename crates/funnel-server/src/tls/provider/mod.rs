@@ -3,8 +3,6 @@ mod exec;
 mod route53;
 
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -14,11 +12,10 @@ use self::exec::ExecProvider;
 use self::route53::Route53Provider;
 use super::config::{ProviderConfig, ProviderType};
 
-pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-
+#[async_trait::async_trait]
 pub trait DnsChallenger: Send + Sync {
-    fn present(&self, record_name: &str, value: &str) -> BoxFuture<'_, Result<()>>;
-    fn cleanup(&self, record_name: &str, value: &str) -> BoxFuture<'_, Result<()>>;
+    async fn present(&self, record_name: &str, value: &str) -> Result<()>;
+    async fn cleanup(&self, record_name: &str, value: &str) -> Result<()>;
 }
 
 /// maps domains to their DNS challenge providers, walking the domain hierarchy for lookups

@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
-use axum::Json;
 use axum::extract::{Path, State};
 
 use funnel_core::tunnel::id::TunnelId;
 
 use crate::app::AppState;
 use crate::auth::{Management, Scoped};
-use crate::error::{ApiErrorBody, AppError};
-use crate::tunnel::manager::TunnelInfo;
+use crate::error::AppError;
+use crate::response::{Many, One};
+use funnel_core::api::TunnelInfo;
+use funnel_core::api::envelope::ErrorData;
 
 #[utoipa::path(
     get,
@@ -18,34 +19,33 @@ use crate::tunnel::manager::TunnelInfo;
     security(("bearer" = [])),
     responses(
         (status = 200, description = "List of active tunnels", body = Vec<TunnelInfo>),
-        (status = 401, description = "Unauthorized", body = ApiErrorBody),
-        (status = 403, description = "Forbidden", body = ApiErrorBody),
+        (status = 401, description = "Unauthorized", body = ErrorData),
+        (status = 403, description = "Forbidden", body = ErrorData),
     )
 )]
 pub async fn list(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
-) -> Result<Json<Vec<TunnelInfo>>, AppError> {
+) -> Result<Many<TunnelInfo>, AppError> {
     let all = state.tunnels.list();
 
-    if auth.is_admin() {
-        return Ok(Json(all));
-    }
+    let tunnels = if auth.is_admin() {
+        all
+    } else {
+        let team_ids = state
+            .teams
+            .get_team_ids_for_user(auth.user_id)
+            .await
+            .map_err(AppError::Store)?;
 
-    let team_ids = state
-        .teams
-        .get_team_ids_for_user(auth.user_id)
-        .await
-        .map_err(AppError::Store)?;
+        all.into_iter()
+            .filter(|t| {
+                t.owner_id == auth.user_id || t.team_id.is_some_and(|tid| team_ids.contains(&tid))
+            })
+            .collect()
+    };
 
-    let visible: Vec<TunnelInfo> = all
-        .into_iter()
-        .filter(|t| {
-            t.owner_id == auth.user_id || t.team_id.is_some_and(|tid| team_ids.contains(&tid))
-        })
-        .collect();
-
-    Ok(Json(visible))
+    Ok(Many(tunnels))
 }
 
 fn can_access(tunnel: &TunnelInfo, user_id: uuid::Uuid, team_ids: &[uuid::Uuid]) -> bool {
@@ -61,16 +61,16 @@ fn can_access(tunnel: &TunnelInfo, user_id: uuid::Uuid, team_ids: &[uuid::Uuid])
     params(("id" = String, Path, description = "Tunnel ID")),
     responses(
         (status = 200, description = "Tunnel details", body = TunnelInfo),
-        (status = 401, description = "Unauthorized", body = ApiErrorBody),
-        (status = 403, description = "Forbidden", body = ApiErrorBody),
-        (status = 404, description = "Tunnel not found", body = ApiErrorBody),
+        (status = 401, description = "Unauthorized", body = ErrorData),
+        (status = 403, description = "Forbidden", body = ErrorData),
+        (status = 404, description = "Tunnel not found", body = ErrorData),
     )
 )]
 pub async fn get_tunnel(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
     Path(id): Path<String>,
-) -> Result<Json<TunnelInfo>, AppError> {
+) -> Result<One<TunnelInfo>, AppError> {
     let tunnel_id = TunnelId::new(id.clone())?;
 
     let tunnel = state
@@ -97,7 +97,7 @@ pub async fn get_tunnel(
         }
     }
 
-    Ok(Json(info))
+    Ok(One(info))
 }
 
 #[utoipa::path(
@@ -109,16 +109,16 @@ pub async fn get_tunnel(
     params(("id" = String, Path, description = "Tunnel ID")),
     responses(
         (status = 200, description = "Tunnel disconnected", body = Object),
-        (status = 401, description = "Unauthorized", body = ApiErrorBody),
-        (status = 403, description = "Forbidden", body = ApiErrorBody),
-        (status = 404, description = "Tunnel not found", body = ApiErrorBody),
+        (status = 401, description = "Unauthorized", body = ErrorData),
+        (status = 403, description = "Forbidden", body = ErrorData),
+        (status = 404, description = "Tunnel not found", body = ErrorData),
     )
 )]
 pub async fn delete(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
     Path(id): Path<String>,
-) -> Result<Json<serde_json::Value>, AppError> {
+) -> Result<One<serde_json::Value>, AppError> {
     let tunnel_id = TunnelId::new(id.clone())?;
 
     let tunnel = state
@@ -154,5 +154,5 @@ pub async fn delete(
 
     tunnel.close();
 
-    Ok(Json(serde_json::json!({ "deleted": true })))
+    Ok(One(serde_json::json!({ "deleted": true })))
 }

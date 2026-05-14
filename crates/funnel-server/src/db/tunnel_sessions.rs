@@ -1,22 +1,8 @@
-use chrono::{DateTime, Utc};
 use ipnetwork::IpNetwork;
-use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
-pub struct TunnelSession {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub tunnel_id: String,
-    #[schema(value_type = Option<String>)]
-    pub client_ip: Option<IpNetwork>,
-    pub connected_at: DateTime<Utc>,
-    pub disconnected_at: Option<DateTime<Utc>>,
-    pub bytes_in: i64,
-    pub bytes_out: i64,
-    pub requests: i64,
-}
+pub use funnel_core::api::TunnelSession;
 
 pub async fn create(
     pool: &PgPool,

@@ -7,6 +7,7 @@ mod metrics;
 mod openapi;
 mod proxy;
 mod quic;
+pub mod response;
 mod store;
 mod tls;
 mod tunnel;
@@ -205,11 +206,10 @@ async fn main() -> anyhow::Result<()> {
                 .fetch_one(&pool)
                 .await?;
 
-        let expected = i32::try_from(funnel_core::protocol::PROTOCOL_VERSION)
-            .map_err(|_| anyhow::anyhow!("protocol version exceeds i32 range"))?;
-        if db_version != expected {
+        let expected_schema_version: i32 = 1;
+        if db_version != expected_schema_version {
             anyhow::bail!(
-                "schema version mismatch: database is v{db_version} but server expects v{expected}"
+                "schema version mismatch: database is v{db_version} but server expects v{expected_schema_version}"
             );
         }
 
@@ -313,6 +313,7 @@ async fn build_state(
             oauth_state,
             initial_admin_email,
             quic_port,
+            server_id: generate_server_id(),
         }))
     } else {
         let db = store::turso::open(turso_db_path)
@@ -341,8 +342,15 @@ async fn build_state(
             oauth_state,
             initial_admin_email,
             quic_port,
+            server_id: generate_server_id(),
         }))
     }
+}
+
+fn generate_server_id() -> String {
+    let mut bytes = [0u8; 8];
+    getrandom::fill(&mut bytes).expect("failed to generate random bytes");
+    hex::encode(bytes)
 }
 
 async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
@@ -406,7 +414,7 @@ async fn create_seed_key(state: &Arc<app::AppState>) -> anyhow::Result<()> {
             // promote to admin
             state
                 .users
-                .update_role(u.id, "admin")
+                .update_role(u.id, funnel_core::api::Role::Admin)
                 .await
                 .map_err(|e| anyhow::anyhow!("failed to promote seed user: {e}"))?
         }
@@ -416,7 +424,8 @@ async fn create_seed_key(state: &Arc<app::AppState>) -> anyhow::Result<()> {
     let scopes = db::api_keys::default_scopes();
     match state.api_keys.create(user.id, "seed", &scopes, None).await {
         Ok((plaintext, _)) => {
-            tracing::info!(seed_api_key = %plaintext, "seed api key created");
+            println!("{plaintext}");
+            tracing::info!("seed api key created");
         }
         Err(store::StoreError::Conflict(_)) => {
             tracing::info!("seed key already exists, skipping");

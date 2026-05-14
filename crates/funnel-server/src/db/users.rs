@@ -1,34 +1,7 @@
-use chrono::{DateTime, Utc};
-use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-pub const ROLE_ADMIN: &str = "admin";
-pub const ROLE_MEMBER: &str = "member";
-
-#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
-pub struct User {
-    pub id: Uuid,
-    pub email: String,
-    pub name: Option<String>,
-    pub avatar_url: Option<String>,
-    pub role: String,
-    #[schema(value_type = Object)]
-    pub metadata: serde_json::Value,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub deactivated_at: Option<DateTime<Utc>>,
-}
-
-impl User {
-    pub fn is_admin(&self) -> bool {
-        self.role == ROLE_ADMIN
-    }
-
-    pub const fn is_active(&self) -> bool {
-        self.deactivated_at.is_none()
-    }
-}
+pub use funnel_core::api::{Role, User};
 
 pub struct NewUser {
     pub email: String,
@@ -85,7 +58,7 @@ pub async fn update_profile(
     .await
 }
 
-pub async fn update_role(pool: &PgPool, id: Uuid, role: &str) -> Result<User, sqlx::Error> {
+pub async fn update_role(pool: &PgPool, id: Uuid, role: Role) -> Result<User, sqlx::Error> {
     sqlx::query_as::<_, User>(
         r"
         UPDATE users SET role = $2, updated_at = now()
@@ -94,7 +67,7 @@ pub async fn update_role(pool: &PgPool, id: Uuid, role: &str) -> Result<User, sq
         ",
     )
     .bind(id)
-    .bind(role)
+    .bind(role.as_str())
     .fetch_one(pool)
     .await
 }

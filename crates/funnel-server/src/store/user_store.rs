@@ -1,22 +1,23 @@
 use uuid::Uuid;
 
-use super::{BoxFuture, StoreError};
-use crate::db::users::{NewUser, User};
+use super::StoreError;
+use crate::db::users::{NewUser, Role, User};
 
+#[async_trait::async_trait]
 pub trait UserStore: Send + Sync {
-    fn find_by_id(&self, id: Uuid) -> BoxFuture<'_, Result<Option<User>, StoreError>>;
-    fn find_by_email(&self, email: &str) -> BoxFuture<'_, Result<Option<User>, StoreError>>;
-    fn create(&self, new_user: NewUser) -> BoxFuture<'_, Result<User, StoreError>>;
-    fn update_profile(
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, StoreError>;
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>, StoreError>;
+    async fn create(&self, new_user: NewUser) -> Result<User, StoreError>;
+    async fn update_profile(
         &self,
         id: Uuid,
         name: Option<&str>,
         avatar_url: Option<&str>,
-    ) -> BoxFuture<'_, Result<User, StoreError>>;
-    fn update_role(&self, id: Uuid, role: &str) -> BoxFuture<'_, Result<User, StoreError>>;
-    fn deactivate(&self, id: Uuid) -> BoxFuture<'_, Result<User, StoreError>>;
-    fn reactivate(&self, id: Uuid) -> BoxFuture<'_, Result<User, StoreError>>;
-    fn list_all(&self, limit: i64) -> BoxFuture<'_, Result<Vec<User>, StoreError>>;
-    fn count(&self) -> BoxFuture<'_, Result<i64, StoreError>>;
-    fn count_admins(&self) -> BoxFuture<'_, Result<i64, StoreError>>;
+    ) -> Result<User, StoreError>;
+    async fn update_role(&self, id: Uuid, role: Role) -> Result<User, StoreError>;
+    async fn deactivate(&self, id: Uuid) -> Result<User, StoreError>;
+    async fn reactivate(&self, id: Uuid) -> Result<User, StoreError>;
+    async fn list_all(&self, limit: i64) -> Result<Vec<User>, StoreError>;
+    async fn count(&self) -> Result<i64, StoreError>;
+    async fn count_admins(&self) -> Result<i64, StoreError>;
 }

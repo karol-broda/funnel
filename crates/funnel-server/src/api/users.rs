@@ -5,10 +5,13 @@ use axum::extract::{Path, Query, State};
 use serde::Deserialize;
 use uuid::Uuid;
 
+use funnel_core::api::{Role, SetUserRoleRequest, User};
+
 use crate::app::AppState;
 use crate::auth::RequireAdmin;
-use crate::db::users::{ROLE_ADMIN, ROLE_MEMBER, User};
-use crate::error::{ApiErrorBody, AppError};
+use crate::error::AppError;
+use crate::response::{Many, One};
+use funnel_core::api::envelope::ErrorData;
 
 #[derive(Deserialize, utoipa::IntoParams)]
 pub struct ListParams {
@@ -29,24 +32,20 @@ const fn default_limit() -> i64 {
     params(ListParams),
     responses(
         (status = 200, description = "List of all users", body = Vec<User>),
-        (status = 401, description = "Unauthorized", body = ApiErrorBody),
-        (status = 403, description = "Admin role required", body = ApiErrorBody),
+        (status = 401, description = "Unauthorized", body = ErrorData),
+        (status = 403, description = "Admin role required", body = ErrorData),
     )
 )]
 pub async fn list(
     State(state): State<Arc<AppState>>,
     _admin: RequireAdmin,
     Query(params): Query<ListParams>,
-) -> Result<Json<Vec<User>>, AppError> {
+) -> Result<Many<User>, AppError> {
     let users = state.users.list_all(params.limit).await?;
-    Ok(Json(users))
+    Ok(Many(users))
 }
 
-#[derive(Deserialize, utoipa::ToSchema)]
-#[schema(as = SetUserRoleRequest)]
-pub struct SetRoleRequest {
-    pub role: String,
-}
+pub type SetRoleRequest = SetUserRoleRequest;
 
 #[utoipa::path(
     put,
@@ -58,10 +57,10 @@ pub struct SetRoleRequest {
     request_body = SetRoleRequest,
     responses(
         (status = 200, description = "User role updated", body = User),
-        (status = 400, description = "Invalid role or last admin", body = ApiErrorBody),
-        (status = 401, description = "Unauthorized", body = ApiErrorBody),
-        (status = 403, description = "Admin role required", body = ApiErrorBody),
-        (status = 404, description = "User not found", body = ApiErrorBody),
+        (status = 400, description = "Invalid role or last admin", body = ErrorData),
+        (status = 401, description = "Unauthorized", body = ErrorData),
+        (status = 403, description = "Admin role required", body = ErrorData),
+        (status = 404, description = "User not found", body = ErrorData),
     )
 )]
 pub async fn set_role(
@@ -69,16 +68,9 @@ pub async fn set_role(
     _admin: RequireAdmin,
     Path(id): Path<Uuid>,
     Json(req): Json<SetRoleRequest>,
-) -> Result<Json<User>, AppError> {
-    if req.role != ROLE_ADMIN && req.role != ROLE_MEMBER {
-        return Err(AppError::BadRequest(format!(
-            "invalid role: {}, must be '{}' or '{}'",
-            req.role, ROLE_ADMIN, ROLE_MEMBER
-        )));
-    }
-
+) -> Result<One<User>, AppError> {
     // prevent demotion of the last admin
-    if req.role == ROLE_MEMBER {
+    if req.role == Role::Member {
         let target = state
             .users
             .find_by_id(id)
@@ -93,8 +85,8 @@ pub async fn set_role(
         }
     }
 
-    let user = state.users.update_role(id, &req.role).await?;
-    Ok(Json(user))
+    let user = state.users.update_role(id, req.role).await?;
+    Ok(One(user))
 }
 
 #[utoipa::path(
@@ -106,17 +98,17 @@ pub async fn set_role(
     params(("id" = Uuid, Path, description = "User ID")),
     responses(
         (status = 200, description = "User deactivated", body = User),
-        (status = 400, description = "Cannot deactivate last admin", body = ApiErrorBody),
-        (status = 401, description = "Unauthorized", body = ApiErrorBody),
-        (status = 403, description = "Admin role required", body = ApiErrorBody),
-        (status = 404, description = "User not found", body = ApiErrorBody),
+        (status = 400, description = "Cannot deactivate last admin", body = ErrorData),
+        (status = 401, description = "Unauthorized", body = ErrorData),
+        (status = 403, description = "Admin role required", body = ErrorData),
+        (status = 404, description = "User not found", body = ErrorData),
     )
 )]
 pub async fn deactivate(
     State(state): State<Arc<AppState>>,
     _admin: RequireAdmin,
     Path(id): Path<Uuid>,
-) -> Result<Json<User>, AppError> {
+) -> Result<One<User>, AppError> {
     let target = state
         .users
         .find_by_id(id)
@@ -133,7 +125,7 @@ pub async fn deactivate(
     }
 
     let user = state.users.deactivate(id).await?;
-    Ok(Json(user))
+    Ok(One(user))
 }
 
 #[utoipa::path(
@@ -145,15 +137,15 @@ pub async fn deactivate(
     params(("id" = Uuid, Path, description = "User ID")),
     responses(
         (status = 200, description = "User reactivated", body = User),
-        (status = 401, description = "Unauthorized", body = ApiErrorBody),
-        (status = 403, description = "Admin role required", body = ApiErrorBody),
+        (status = 401, description = "Unauthorized", body = ErrorData),
+        (status = 403, description = "Admin role required", body = ErrorData),
     )
 )]
 pub async fn reactivate(
     State(state): State<Arc<AppState>>,
     _admin: RequireAdmin,
     Path(id): Path<Uuid>,
-) -> Result<Json<User>, AppError> {
+) -> Result<One<User>, AppError> {
     let user = state.users.reactivate(id).await?;
-    Ok(Json(user))
+    Ok(One(user))
 }

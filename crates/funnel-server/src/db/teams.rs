@@ -1,27 +1,7 @@
-use chrono::{DateTime, Utc};
-use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
-pub struct Team {
-    pub id: Uuid,
-    pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-pub const TEAM_ROLE_OWNER: &str = "owner";
-pub const TEAM_ROLE_MEMBER: &str = "member";
-
-#[derive(Debug, Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
-pub struct TeamMembership {
-    pub id: Uuid,
-    pub team_id: Uuid,
-    pub user_id: Uuid,
-    pub role: String,
-    pub created_at: DateTime<Utc>,
-}
+pub use funnel_core::api::{Team, TeamMembership, TeamRole};
 
 pub async fn create(pool: &PgPool, name: &str) -> Result<Team, sqlx::Error> {
     sqlx::query_as::<_, Team>(
@@ -68,7 +48,7 @@ pub async fn add_member(
     pool: &PgPool,
     team_id: Uuid,
     user_id: Uuid,
-    role: &str,
+    role: TeamRole,
 ) -> Result<TeamMembership, sqlx::Error> {
     sqlx::query_as::<_, TeamMembership>(
         r"
@@ -79,7 +59,7 @@ pub async fn add_member(
     )
     .bind(team_id)
     .bind(user_id)
-    .bind(role)
+    .bind(role.as_str())
     .fetch_one(pool)
     .await
 }
@@ -88,7 +68,7 @@ pub async fn update_member_role(
     pool: &PgPool,
     team_id: Uuid,
     user_id: Uuid,
-    role: &str,
+    role: TeamRole,
 ) -> Result<TeamMembership, sqlx::Error> {
     sqlx::query_as::<_, TeamMembership>(
         r"
@@ -99,7 +79,7 @@ pub async fn update_member_role(
     )
     .bind(team_id)
     .bind(user_id)
-    .bind(role)
+    .bind(role.as_str())
     .fetch_one(pool)
     .await
 }

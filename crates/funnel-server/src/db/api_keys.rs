@@ -3,7 +3,10 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use funnel_core::api::ApiScope;
 use funnel_core::auth::token as auth;
+
+pub use funnel_core::api::ApiKeyView;
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct ApiKey {
@@ -19,32 +22,31 @@ pub struct ApiKey {
 }
 
 impl ApiKey {
-    pub fn has_scope(&self, scope: &str) -> bool {
+    pub fn has_scope(&self, scope: ApiScope) -> bool {
+        self.parsed_scopes().contains(&scope)
+    }
+
+    pub fn parsed_scopes(&self) -> Vec<ApiScope> {
         self.scopes
             .as_array()
-            .is_some_and(|arr| arr.iter().any(|s| s.as_str() == Some(scope)))
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .filter_map(|s| serde_json::from_value(serde_json::Value::String(s.to_string())).ok())
+                    .collect()
+            })
+            .unwrap_or_default()
     }
-}
-
-#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
-pub struct ApiKeyView {
-    pub id: Uuid,
-    pub name: String,
-    pub key_prefix: String,
-    #[schema(value_type = Vec<String>)]
-    pub scopes: serde_json::Value,
-    pub created_at: DateTime<Utc>,
-    pub revoked_at: Option<DateTime<Utc>>,
-    pub expires_at: Option<DateTime<Utc>>,
 }
 
 impl From<ApiKey> for ApiKeyView {
     fn from(key: ApiKey) -> Self {
+        let scopes = key.parsed_scopes();
         Self {
             id: key.id,
             name: key.name,
             key_prefix: key.key_prefix,
-            scopes: key.scopes,
+            scopes,
             created_at: key.created_at,
             revoked_at: key.revoked_at,
             expires_at: key.expires_at,
@@ -52,21 +54,28 @@ impl From<ApiKey> for ApiKeyView {
     }
 }
 
-pub fn default_scopes() -> serde_json::Value {
-    serde_json::json!(["management", "tunnels"])
+pub fn default_scopes() -> Vec<ApiScope> {
+    vec![ApiScope::Management, ApiScope::Tunnels]
+}
+
+fn scopes_to_json(scopes: &[ApiScope]) -> serde_json::Value {
+    serde_json::Value::Array(
+        scopes.iter().map(|s| serde_json::to_value(s).unwrap_or_default()).collect()
+    )
 }
 
 pub async fn create(
     pool: &PgPool,
     user_id: Uuid,
     name: &str,
-    scopes: &serde_json::Value,
+    scopes: &[ApiScope],
     expires_at: Option<DateTime<Utc>>,
 ) -> Result<(String, ApiKey), sqlx::Error> {
     let plaintext = auth::generate_api_key()
         .map_err(|e| sqlx::Error::Protocol(format!("failed to generate api key: {e}")))?;
     let hash = auth::hash_token(&plaintext);
     let prefix = auth::ApiKeyPrefix::from_key(&plaintext);
+    let scopes_json = scopes_to_json(scopes);
 
     let key = sqlx::query_as::<_, ApiKey>(
         r"
@@ -79,7 +88,7 @@ pub async fn create(
     .bind(name)
     .bind(&hash)
     .bind(prefix.as_ref())
-    .bind(scopes)
+    .bind(&scopes_json)
     .bind(expires_at)
     .fetch_one(pool)
     .await?;

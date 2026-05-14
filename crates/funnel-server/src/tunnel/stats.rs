@@ -1,18 +1,11 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use serde::Serialize;
+pub use funnel_core::api::TunnelStatsSnapshot;
 
 pub struct TunnelStats {
     bytes_in: AtomicU64,
     bytes_out: AtomicU64,
     requests: AtomicU64,
-}
-
-#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
-pub struct TunnelStatsSnapshot {
-    pub bytes_in: u64,
-    pub bytes_out: u64,
-    pub requests: u64,
 }
 
 impl TunnelStats {

@@ -3,7 +3,7 @@ use aws_sdk_route53::types::{
     Change, ChangeAction, ChangeBatch, ResourceRecord, ResourceRecordSet, RrType,
 };
 
-use super::{BoxFuture, DnsChallenger};
+use super::DnsChallenger;
 
 const TXT_TTL: i64 = 60;
 
@@ -91,22 +91,13 @@ impl Route53Provider {
     }
 }
 
+#[async_trait::async_trait]
 impl DnsChallenger for Route53Provider {
-    fn present(&self, record_name: &str, value: &str) -> BoxFuture<'_, Result<()>> {
-        let record_name = record_name.to_string();
-        let value = value.to_string();
-        Box::pin(async move {
-            self.change_record(ChangeAction::Upsert, &record_name, &value)
-                .await
-        })
+    async fn present(&self, record_name: &str, value: &str) -> Result<()> {
+        self.change_record(ChangeAction::Upsert, record_name, value).await
     }
 
-    fn cleanup(&self, record_name: &str, value: &str) -> BoxFuture<'_, Result<()>> {
-        let record_name = record_name.to_string();
-        let value = value.to_string();
-        Box::pin(async move {
-            self.change_record(ChangeAction::Delete, &record_name, &value)
-                .await
-        })
+    async fn cleanup(&self, record_name: &str, value: &str) -> Result<()> {
+        self.change_record(ChangeAction::Delete, record_name, value).await
     }
 }

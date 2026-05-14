@@ -1,20 +1,14 @@
 use std::sync::Arc;
 
-use axum::Json;
 use axum::extract::State;
-use serde::Serialize;
-use uuid::Uuid;
+
+use funnel_core::api::AccountView;
 
 use crate::app::AppState;
 use crate::auth::{Management, Scoped};
-use crate::error::{ApiErrorBody, AppError};
-
-#[derive(Serialize, utoipa::ToSchema)]
-pub struct AccountView {
-    pub id: Uuid,
-    pub provider: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
+use crate::error::AppError;
+use crate::response::Many;
+use funnel_core::api::envelope::ErrorData;
 
 #[utoipa::path(
     get,
@@ -24,13 +18,13 @@ pub struct AccountView {
     security(("bearer" = [])),
     responses(
         (status = 200, description = "Linked OAuth accounts", body = Vec<AccountView>),
-        (status = 401, description = "Unauthorized", body = ApiErrorBody),
+        (status = 401, description = "Unauthorized", body = ErrorData),
     )
 )]
 pub async fn list(
     State(state): State<Arc<AppState>>,
     auth: Scoped<Management>,
-) -> Result<Json<Vec<AccountView>>, AppError> {
+) -> Result<Many<AccountView>, AppError> {
     let accounts = state.accounts.list_for_user(auth.user_id).await?;
 
     let views: Vec<AccountView> = accounts
@@ -42,5 +36,5 @@ pub async fn list(
         })
         .collect();
 
-    Ok(Json(views))
+    Ok(Many(views))
 }

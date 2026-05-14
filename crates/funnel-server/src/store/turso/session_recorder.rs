@@ -8,7 +8,7 @@ use uuid::Uuid;
 use super::{format_dt, map_err, parse_dt, parse_optional_dt, parse_uuid};
 use crate::db::tunnel_sessions::TunnelSession;
 use crate::store::session_recorder::SessionRecorder;
-use crate::store::{BoxFuture, StoreError};
+use crate::store::StoreError;
 
 pub struct TursoSessionRecorder {
     db: Arc<Database>,
@@ -42,124 +42,114 @@ fn row_to_session(row: &turso::Row) -> Result<TunnelSession, StoreError> {
     })
 }
 
+#[async_trait::async_trait]
 impl SessionRecorder for TursoSessionRecorder {
-    fn record_connect(
+    async fn record_connect(
         &self,
         user_id: Uuid,
         tunnel_id: &str,
         client_ip: Option<IpNetwork>,
-    ) -> BoxFuture<'_, Result<TunnelSession, StoreError>> {
-        let tunnel_id = tunnel_id.to_string();
-        Box::pin(async move {
-            let conn = self.db.connect().map_err(|e| map_err(&e))?;
-            let id = Uuid::now_v7();
-            let now = Utc::now();
-            let ip_str = client_ip.map(|ip| ip.to_string()).unwrap_or_default();
+    ) -> Result<TunnelSession, StoreError> {
+        let conn = self.db.connect().map_err(|e| map_err(&e))?;
+        let id = Uuid::now_v7();
+        let now = Utc::now();
+        let ip_str = client_ip.map(|ip| ip.to_string()).unwrap_or_default();
 
-            conn.execute(
-                "INSERT INTO tunnel_sessions (id, user_id, tunnel_id, client_ip, connected_at) VALUES (?, ?, ?, ?, ?)",
-                turso::params![
-                    id.to_string(),
-                    user_id.to_string(),
-                    tunnel_id.clone(),
-                    ip_str,
-                    format_dt(now)
-                ],
-            )
-            .await
-            .map_err(|e| map_err(&e))?;
+        conn.execute(
+            "INSERT INTO tunnel_sessions (id, user_id, tunnel_id, client_ip, connected_at) VALUES (?, ?, ?, ?, ?)",
+            turso::params![
+                id.to_string(),
+                user_id.to_string(),
+                tunnel_id.to_string(),
+                ip_str,
+                format_dt(now)
+            ],
+        )
+        .await
+        .map_err(|e| map_err(&e))?;
 
-            Ok(TunnelSession {
-                id,
-                user_id,
-                tunnel_id,
-                client_ip,
-                connected_at: now,
-                disconnected_at: None,
-                bytes_in: 0,
-                bytes_out: 0,
-                requests: 0,
-            })
+        Ok(TunnelSession {
+            id,
+            user_id,
+            tunnel_id: tunnel_id.to_string(),
+            client_ip,
+            connected_at: now,
+            disconnected_at: None,
+            bytes_in: 0,
+            bytes_out: 0,
+            requests: 0,
         })
     }
 
-    fn record_disconnect(
+    async fn record_disconnect(
         &self,
         session_id: Uuid,
         bytes_in: i64,
         bytes_out: i64,
         requests: i64,
-    ) -> BoxFuture<'_, Result<bool, StoreError>> {
-        Box::pin(async move {
-            let conn = self.db.connect().map_err(|e| map_err(&e))?;
-            let now = format_dt(Utc::now());
-            let rows_affected = conn
-                .execute(
-                    "UPDATE tunnel_sessions SET disconnected_at = ?, bytes_in = ?, bytes_out = ?, requests = ? WHERE id = ? AND disconnected_at IS NULL",
-                    turso::params![now, bytes_in, bytes_out, requests, session_id.to_string()],
-                )
-                .await
-                .map_err(|e| map_err(&e))?;
-            Ok(rows_affected > 0)
-        })
+    ) -> Result<bool, StoreError> {
+        let conn = self.db.connect().map_err(|e| map_err(&e))?;
+        let now = format_dt(Utc::now());
+        let rows_affected = conn
+            .execute(
+                "UPDATE tunnel_sessions SET disconnected_at = ?, bytes_in = ?, bytes_out = ?, requests = ? WHERE id = ? AND disconnected_at IS NULL",
+                turso::params![now, bytes_in, bytes_out, requests, session_id.to_string()],
+            )
+            .await
+            .map_err(|e| map_err(&e))?;
+        Ok(rows_affected > 0)
     }
 
-    fn list_active(&self) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>> {
-        Box::pin(async move {
-            let conn = self.db.connect().map_err(|e| map_err(&e))?;
-            let mut rows = conn
-                .query(
-                    "SELECT id, user_id, tunnel_id, client_ip, connected_at, disconnected_at, bytes_in, bytes_out, requests FROM tunnel_sessions WHERE disconnected_at IS NULL ORDER BY connected_at DESC",
-                    (),
-                )
-                .await
-                .map_err(|e| map_err(&e))?;
-            let mut sessions = Vec::new();
-            while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
-                sessions.push(row_to_session(&row)?);
-            }
-            Ok(sessions)
-        })
+    async fn list_active(&self) -> Result<Vec<TunnelSession>, StoreError> {
+        let conn = self.db.connect().map_err(|e| map_err(&e))?;
+        let mut rows = conn
+            .query(
+                "SELECT id, user_id, tunnel_id, client_ip, connected_at, disconnected_at, bytes_in, bytes_out, requests FROM tunnel_sessions WHERE disconnected_at IS NULL ORDER BY connected_at DESC",
+                (),
+            )
+            .await
+            .map_err(|e| map_err(&e))?;
+        let mut sessions = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
+            sessions.push(row_to_session(&row)?);
+        }
+        Ok(sessions)
     }
 
-    fn list_for_user(
+    async fn list_for_user(
         &self,
         user_id: Uuid,
         limit: i64,
-    ) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>> {
-        Box::pin(async move {
-            let conn = self.db.connect().map_err(|e| map_err(&e))?;
-            let mut rows = conn
-                .query(
-                    "SELECT id, user_id, tunnel_id, client_ip, connected_at, disconnected_at, bytes_in, bytes_out, requests FROM tunnel_sessions WHERE user_id = ? ORDER BY connected_at DESC LIMIT ?",
-                    turso::params![user_id.to_string(), limit],
-                )
-                .await
-                .map_err(|e| map_err(&e))?;
-            let mut sessions = Vec::new();
-            while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
-                sessions.push(row_to_session(&row)?);
-            }
-            Ok(sessions)
-        })
+    ) -> Result<Vec<TunnelSession>, StoreError> {
+        let conn = self.db.connect().map_err(|e| map_err(&e))?;
+        let mut rows = conn
+            .query(
+                "SELECT id, user_id, tunnel_id, client_ip, connected_at, disconnected_at, bytes_in, bytes_out, requests FROM tunnel_sessions WHERE user_id = ? ORDER BY connected_at DESC LIMIT ?",
+                turso::params![user_id.to_string(), limit],
+            )
+            .await
+            .map_err(|e| map_err(&e))?;
+        let mut sessions = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
+            sessions.push(row_to_session(&row)?);
+        }
+        Ok(sessions)
     }
 
-    fn list_all(&self, limit: i64) -> BoxFuture<'_, Result<Vec<TunnelSession>, StoreError>> {
-        Box::pin(async move {
-            let conn = self.db.connect().map_err(|e| map_err(&e))?;
-            let mut rows = conn
-                .query(
-                    "SELECT id, user_id, tunnel_id, client_ip, connected_at, disconnected_at, bytes_in, bytes_out, requests FROM tunnel_sessions ORDER BY connected_at DESC LIMIT ?",
-                    turso::params![limit],
-                )
-                .await
-                .map_err(|e| map_err(&e))?;
-            let mut sessions = Vec::new();
-            while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
-                sessions.push(row_to_session(&row)?);
-            }
-            Ok(sessions)
-        })
+    async fn list_all(&self, limit: i64) -> Result<Vec<TunnelSession>, StoreError> {
+        let conn = self.db.connect().map_err(|e| map_err(&e))?;
+        let mut rows = conn
+            .query(
+                "SELECT id, user_id, tunnel_id, client_ip, connected_at, disconnected_at, bytes_in, bytes_out, requests FROM tunnel_sessions ORDER BY connected_at DESC LIMIT ?",
+                turso::params![limit],
+            )
+            .await
+            .map_err(|e| map_err(&e))?;
+        let mut sessions = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|e| map_err(&e))? {
+            sessions.push(row_to_session(&row)?);
+        }
+        Ok(sessions)
     }
 }
 

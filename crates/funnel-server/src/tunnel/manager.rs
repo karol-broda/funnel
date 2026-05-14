@@ -2,27 +2,16 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
-use serde::Serialize;
 
 use funnel_core::tunnel::id::TunnelId;
 
-use uuid::Uuid;
+pub use funnel_core::api::TunnelInfo;
 
 use super::connection::ActiveTunnel;
-use super::stats::TunnelStatsSnapshot;
 use crate::store::tunnel_registry::TunnelRegistry;
 
 pub struct TunnelManager {
     tunnels: DashMap<TunnelId, Arc<ActiveTunnel>>,
-}
-
-#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
-pub struct TunnelInfo {
-    pub id: String,
-    pub uptime_secs: f64,
-    pub stats: TunnelStatsSnapshot,
-    pub owner_id: Uuid,
-    pub team_id: Option<Uuid>,
 }
 
 impl TunnelManager {

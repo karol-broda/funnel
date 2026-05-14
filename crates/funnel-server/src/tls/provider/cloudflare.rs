@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use super::{BoxFuture, DnsChallenger};
+use super::DnsChallenger;
 
 const API_BASE: &str = "https://api.cloudflare.com/client/v4";
 const TXT_TTL: u32 = 120;
@@ -96,23 +96,15 @@ impl CloudflareProvider {
     }
 }
 
+#[async_trait::async_trait]
 impl DnsChallenger for CloudflareProvider {
-    fn present(&self, record_name: &str, value: &str) -> BoxFuture<'_, Result<()>> {
-        let record_name = record_name.to_string();
-        let value = value.to_string();
-        Box::pin(async move {
-            let zone_id = self.find_zone_id(&record_name).await?;
-            self.create_txt_record(&zone_id, &record_name, &value).await
-        })
+    async fn present(&self, record_name: &str, value: &str) -> Result<()> {
+        let zone_id = self.find_zone_id(record_name).await?;
+        self.create_txt_record(&zone_id, record_name, value).await
     }
 
-    fn cleanup(&self, record_name: &str, value: &str) -> BoxFuture<'_, Result<()>> {
-        let record_name = record_name.to_string();
-        let value = value.to_string();
-        Box::pin(async move {
-            let zone_id = self.find_zone_id(&record_name).await?;
-            self.delete_txt_records(&zone_id, &record_name, &value)
-                .await
-        })
+    async fn cleanup(&self, record_name: &str, value: &str) -> Result<()> {
+        let zone_id = self.find_zone_id(record_name).await?;
+        self.delete_txt_records(&zone_id, record_name, value).await
     }
 }
