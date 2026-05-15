@@ -34,7 +34,6 @@ pub async fn handle_tunnel_request(
         .unwrap_or("")
         .to_string();
 
-    // use pre-resolved tunnel id from middleware when available
     let tunnel_id = request
         .extensions()
         .get::<TunnelId>()
@@ -132,7 +131,6 @@ async fn handle_upgrade(
     let status = resp_meta.http_status().unwrap_or(StatusCode::BAD_GATEWAY);
 
     if status != StatusCode::SWITCHING_PROTOCOLS {
-        // backend rejected the upgrade, return the response as is
         let mut builder = Response::builder().status(status);
         if let Some(h) = builder.headers_mut() {
             *h = proto::to_header_map(&resp_meta.headers);
@@ -142,13 +140,11 @@ async fn handle_upgrade(
         });
     }
 
-    // build the 101 response for the browser
     let mut builder = Response::builder().status(StatusCode::SWITCHING_PROTOCOLS);
     if let Some(h) = builder.headers_mut() {
         *h = proto::to_header_map(&resp_meta.headers);
     }
 
-    // spawn a task to pipe bytes between the browser upgrade and the quic streams
     tokio::spawn(async move {
         let upgraded = match on_upgrade.await {
             Ok(u) => u,

@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use super::{format_dt, map_err, parse_dt, parse_uuid};
 use crate::db::teams::{Team, TeamMembership, TeamRole};
-use crate::store::team_store::TeamStore;
 use crate::store::StoreError;
+use crate::store::team_store::TeamStore;
 
 pub struct TursoTeamStore {
     db: Arc<Database>,
@@ -150,11 +150,7 @@ impl TeamStore for TursoTeamStore {
         })
     }
 
-    async fn remove_member(
-        &self,
-        team_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<bool, StoreError> {
+    async fn remove_member(&self, team_id: Uuid, user_id: Uuid) -> Result<bool, StoreError> {
         let conn = self.db.connect().map_err(|e| map_err(&e))?;
         let rows_affected = conn
             .execute(
@@ -166,10 +162,7 @@ impl TeamStore for TursoTeamStore {
         Ok(rows_affected > 0)
     }
 
-    async fn list_members(
-        &self,
-        team_id: Uuid,
-    ) -> Result<Vec<TeamMembership>, StoreError> {
+    async fn list_members(&self, team_id: Uuid) -> Result<Vec<TeamMembership>, StoreError> {
         let conn = self.db.connect().map_err(|e| map_err(&e))?;
         let mut rows = conn
             .query(

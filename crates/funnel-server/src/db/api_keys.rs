@@ -32,7 +32,9 @@ impl ApiKey {
             .map(|arr| {
                 arr.iter()
                     .filter_map(|v| v.as_str())
-                    .filter_map(|s| serde_json::from_value(serde_json::Value::String(s.to_string())).ok())
+                    .filter_map(|s| {
+                        serde_json::from_value(serde_json::Value::String(s.to_string())).ok()
+                    })
                     .collect()
             })
             .unwrap_or_default()
@@ -60,7 +62,10 @@ pub fn default_scopes() -> Vec<ApiScope> {
 
 fn scopes_to_json(scopes: &[ApiScope]) -> serde_json::Value {
     serde_json::Value::Array(
-        scopes.iter().map(|s| serde_json::to_value(s).unwrap_or_default()).collect()
+        scopes
+            .iter()
+            .map(|s| serde_json::to_value(s).unwrap_or_default())
+            .collect(),
     )
 }
 

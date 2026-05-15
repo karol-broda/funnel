@@ -5,9 +5,9 @@ use serde::Deserialize;
 
 use crate::app::AppState;
 use crate::auth::{Management, Scoped};
-use funnel_core::api::TunnelSession;
 use crate::error::AppError;
 use crate::response::Many;
+use funnel_core::api::TunnelSession;
 use funnel_core::api::envelope::ErrorData;
 
 #[derive(Deserialize, utoipa::IntoParams)]

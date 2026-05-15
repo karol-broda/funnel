@@ -3,8 +3,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::tunnel_sessions::{self, TunnelSession};
-use crate::store::session_recorder::SessionRecorder;
 use crate::store::StoreError;
+use crate::store::session_recorder::SessionRecorder;
 
 pub struct PgSessionRecorder {
     pool: PgPool,

@@ -2,8 +2,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::users::{self, NewUser, Role, User};
-use crate::store::user_store::UserStore;
 use crate::store::StoreError;
+use crate::store::user_store::UserStore;
 
 pub struct PgUserStore {
     pool: PgPool,

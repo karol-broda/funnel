@@ -90,6 +90,7 @@ impl std::fmt::Display for AppCode {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -117,7 +118,10 @@ mod tests {
     #[test]
     fn connection_and_stream_codes_dont_overlap_except_no_error() {
         // both have NoError = 0, which is intentional
-        assert_eq!(ConnectionCode::NoError.as_u32(), StreamCode::NoError.as_u32());
+        assert_eq!(
+            ConnectionCode::NoError.as_u32(),
+            StreamCode::NoError.as_u32()
+        );
         // but their error codes occupy different semantic spaces
         // (this test just documents the intentional overlap)
     }

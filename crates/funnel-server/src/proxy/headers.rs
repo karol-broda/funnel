@@ -20,7 +20,6 @@ pub fn prepare_forwarding_headers(
 
     let client_ip = remote_addr.ip().to_string();
 
-    // append to existing X-Forwarded-For or create new
     match headers.get("x-forwarded-for") {
         Some(existing) if !existing.is_empty() => {
             let all = existing.join(", ");

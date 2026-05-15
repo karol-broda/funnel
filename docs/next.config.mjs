@@ -6,6 +6,8 @@ const config = {
   serverExternalPackages: [
     '@takumi-rs/core',
     '@takumi-rs/image-response',
+  ],
+  transpilePackages: [
     'shiki',
     '@shikijs/core',
     '@shikijs/engine-javascript',

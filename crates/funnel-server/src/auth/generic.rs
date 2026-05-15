@@ -97,11 +97,7 @@ impl OAuthProvider for GenericProvider {
         )
     }
 
-    async fn exchange_code(
-        &self,
-        code: &str,
-        redirect_uri: &str,
-    ) -> Result<String, OAuthError> {
+    async fn exchange_code(&self, code: &str, redirect_uri: &str) -> Result<String, OAuthError> {
         let resp: TokenResponse = self
             .client
             .post(&self.config.token_url)
@@ -127,10 +123,7 @@ impl OAuthProvider for GenericProvider {
             .ok_or_else(|| OAuthError::MissingField("access_token".into()))
     }
 
-    async fn fetch_user_info(
-        &self,
-        access_token: &str,
-    ) -> Result<OAuthUserInfo, OAuthError> {
+    async fn fetch_user_info(&self, access_token: &str) -> Result<OAuthUserInfo, OAuthError> {
         let user: serde_json::Value = self
             .client
             .get(&self.config.userinfo_url)

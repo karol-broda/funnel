@@ -10,8 +10,23 @@ use crate::app::AppState;
 use crate::auth::{Management, Scoped};
 use crate::db::api_keys::default_scopes;
 use crate::error::AppError;
+use crate::openapi::TagSeo;
 use crate::response::{Many, One};
 use funnel_core::api::envelope::ErrorData;
+
+pub const TAG_SEO: TagSeo = TagSeo {
+    tag: "API Keys",
+    title: "API keys: create, list, and revoke scoped access tokens",
+    description: "REST API for managing funnel API keys with scoped permissions. \
+                  Create keys for CI/CD pipelines, list existing keys, and revoke compromised tokens.",
+    keywords: &[
+        "API key management",
+        "scoped access tokens",
+        "create API key",
+        "revoke API key",
+        "CI/CD tunnel authentication",
+    ],
+};
 
 #[utoipa::path(
     get,

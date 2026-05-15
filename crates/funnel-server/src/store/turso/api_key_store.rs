@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use super::{format_dt, map_err, parse_dt, parse_optional_dt, parse_uuid};
 use crate::db::api_keys::{ApiKey, ApiKeyView};
-use crate::store::api_key_store::ApiKeyStore;
 use crate::store::StoreError;
+use crate::store::api_key_store::ApiKeyStore;
 use funnel_core::api::ApiScope;
 use funnel_core::auth::token as auth;
 

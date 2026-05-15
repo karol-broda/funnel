@@ -60,11 +60,7 @@ impl OAuthProvider for GitHubProvider {
         )
     }
 
-    async fn exchange_code(
-        &self,
-        code: &str,
-        redirect_uri: &str,
-    ) -> Result<String, OAuthError> {
+    async fn exchange_code(&self, code: &str, redirect_uri: &str) -> Result<String, OAuthError> {
         let resp: TokenResponse = self
             .client
             .post("https://github.com/login/oauth/access_token")
@@ -89,10 +85,7 @@ impl OAuthProvider for GitHubProvider {
             .ok_or_else(|| OAuthError::MissingField("access_token".into()))
     }
 
-    async fn fetch_user_info(
-        &self,
-        access_token: &str,
-    ) -> Result<OAuthUserInfo, OAuthError> {
+    async fn fetch_user_info(&self, access_token: &str) -> Result<OAuthUserInfo, OAuthError> {
         let user: GitHubUser = self
             .client
             .get("https://api.github.com/user")

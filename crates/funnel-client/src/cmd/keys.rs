@@ -45,8 +45,9 @@ fn parse_scopes(input: &str) -> anyhow::Result<Vec<ApiScope>> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| {
-            serde_json::from_value(serde_json::Value::String(s.to_string()))
-                .map_err(|_| anyhow::anyhow!("invalid scope '{s}', must be 'management' or 'tunnels'"))
+            serde_json::from_value(serde_json::Value::String(s.to_string())).map_err(|_| {
+                anyhow::anyhow!("invalid scope '{s}', must be 'management' or 'tunnels'")
+            })
         })
         .collect()
 }
@@ -97,8 +98,7 @@ pub async fn create(
         scopes,
         expires_at: None,
     };
-    let Some(result) = api::send(server, token, &endpoints::KEYS_CREATE, &body, json).await?
-    else {
+    let Some(result) = api::send(server, token, &endpoints::KEYS_CREATE, &body, json).await? else {
         return Ok(());
     };
     println!("created key '{}'", result.info.name);
@@ -110,8 +110,14 @@ pub async fn create(
 }
 
 pub async fn revoke(server: &str, token: &str, id: &str, json: bool) -> anyhow::Result<()> {
-    let Some(_) =
-        api::call_at(server, token, &endpoints::KEYS_REVOKE, &format!("/keys/{id}"), json).await?
+    let Some(_) = api::call_at(
+        server,
+        token,
+        &endpoints::KEYS_REVOKE,
+        &format!("/keys/{id}"),
+        json,
+    )
+    .await?
     else {
         return Ok(());
     };
@@ -121,6 +127,7 @@ pub async fn revoke(server: &str, token: &str, id: &str, json: bool) -> anyhow::
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -165,7 +172,10 @@ mod tests {
     fn parse_scopes_rejects_invalid() {
         let err = parse_scopes("management,invalid,tunnels").unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("invalid"), "error should name the bad scope: {msg}");
+        assert!(
+            msg.contains("invalid"),
+            "error should name the bad scope: {msg}"
+        );
     }
 
     #[test]
@@ -206,6 +216,9 @@ mod tests {
         let err = parse_scopes("bogus").unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("bogus"), "error should include input: {msg}");
-        assert!(msg.contains("management"), "error should hint valid values: {msg}");
+        assert!(
+            msg.contains("management"),
+            "error should hint valid values: {msg}"
+        );
     }
 }
