@@ -62,6 +62,10 @@ impl Forwarder {
         }
     }
 
+    pub fn local_addr(&self) -> &str {
+        &self.local_addr
+    }
+
     async fn acquire(&self) -> anyhow::Result<PooledConnection> {
         loop {
             let candidate = {
@@ -468,21 +472,17 @@ mod tests {
         let addr = start_test_server(app).await;
         let fwd = Forwarder::new(addr);
 
-        // first request
         let result = fwd.forward(test_meta("GET", "/ok"), Bytes::new()).await;
         let (meta, _, conn) = collect_success(result).await;
         assert_eq!(meta.status, 200);
         fwd.release(conn);
 
-        // pool should have one connection now
         assert_eq!(fwd.pool.lock().unwrap().len(), 1);
 
-        // second request should reuse the pooled connection
         let result = fwd.forward(test_meta("GET", "/ok"), Bytes::new()).await;
         let (meta, _, _conn) = collect_success(result).await;
         assert_eq!(meta.status, 200);
 
-        // pool should be empty since the connection is in use
         assert_eq!(fwd.pool.lock().unwrap().len(), 0);
         Ok(())
     }
@@ -516,7 +516,6 @@ mod tests {
         match result {
             ForwardUpgradeResult::Upgraded(u) => {
                 assert_eq!(u.meta.status, 101);
-                // verify upgrade headers are preserved
                 assert!(u.meta.headers.contains_key("upgrade"));
                 assert!(u.meta.headers.contains_key("connection"));
             }

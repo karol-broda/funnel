@@ -14,6 +14,8 @@ pub mod http;
 pub mod keys;
 pub mod sessions;
 pub mod status;
+pub mod tcp;
 pub mod teams;
+pub mod tls;
 pub mod users;
 pub mod whoami;

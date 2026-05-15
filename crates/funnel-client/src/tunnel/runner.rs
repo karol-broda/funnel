@@ -6,7 +6,7 @@ use url::Url;
 
 use funnel_core::tunnel::id::TunnelId;
 
-use super::client::TunnelClient;
+use super::client::{ConnectError, TunnelClient};
 use super::display::TunnelDisplay;
 
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
@@ -28,7 +28,11 @@ pub async fn run(client: &TunnelClient, shutdown: CancellationToken, display: &A
                 attempt = 0;
                 display.println("connection lost, reconnecting...");
             }
-            Err(e) => {
+            Err(ConnectError::Permanent(e)) => {
+                display.println(&format!("error: [{}] {}", e.code, e.message));
+                break;
+            }
+            Err(ConnectError::Transient(e)) => {
                 display.println(&format!("connection failed: {e}"));
             }
         }
