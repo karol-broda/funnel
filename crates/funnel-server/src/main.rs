@@ -161,6 +161,18 @@ struct Cli {
     /// JSON field for avatar URL in userinfo response
     #[arg(long, env = "OAUTH_AVATAR_FIELD", default_value = "picture")]
     oauth_avatar_field: String,
+
+    /// Enable TCP/TLS tunnel support (allocates ports on the server)
+    #[arg(long, env = "FUNNEL_ENABLE_TCP_TUNNELS")]
+    enable_tcp_tunnels: bool,
+
+    /// Minimum port for TCP tunnel listeners (requires --enable-tcp-tunnels)
+    #[arg(long, default_value_t = 10000, env = "FUNNEL_STREAM_PORT_MIN")]
+    stream_port_min: u16,
+
+    /// Maximum port for TCP tunnel listeners (requires --enable-tcp-tunnels)
+    #[arg(long, default_value_t = 60000, env = "FUNNEL_STREAM_PORT_MAX")]
+    stream_port_max: u16,
 }
 
 #[tokio::main]
@@ -187,7 +199,21 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    tracing::info!(host = %cli.host, port = cli.port, quic_port = cli.quic_port, "starting funnel server");
+    tracing::info!(
+        host = %cli.host,
+        port = cli.port,
+        quic_port = cli.quic_port,
+        tcp_tunnels = cli.enable_tcp_tunnels,
+        "starting funnel server"
+    );
+
+    if cli.enable_tcp_tunnels {
+        tracing::info!(
+            port_min = cli.stream_port_min,
+            port_max = cli.stream_port_max,
+            "tcp tunnels enabled"
+        );
+    }
 
     let pool = if let Some(ref database_url) = cli.database_url {
         let pool = PgPoolOptions::new()
@@ -295,8 +321,16 @@ async fn build_state(
     oauth_state: Option<Arc<OAuthState>>,
     initial_admin_email: Option<String>,
     quic_port: u16,
+    host: String,
+    tcp_tunnels_enabled: bool,
+    stream_port_min: u16,
+    stream_port_max: u16,
 ) -> anyhow::Result<Arc<app::AppState>> {
     let tunnels = Arc::new(TunnelManager::new());
+    let stream_listeners = Arc::new(proxy::stream_listener::StreamListenerManager::new(
+        stream_port_min,
+        stream_port_max,
+    ));
 
     if let Some(pool) = pool {
         Ok(Arc::new(app::AppState {
@@ -309,11 +343,14 @@ async fn build_state(
             )),
             teams: Arc::new(store::pg::team_store::PgTeamStore::new(pool)),
             health: Arc::new(UptimeHealthReporter::new()),
+            stream_listeners,
+            tcp_tunnels_enabled,
             is_tls,
             oauth_state,
             initial_admin_email,
             quic_port,
-            server_id: generate_server_id(),
+            host,
+            server_id: generate_server_id()?,
         }))
     } else {
         let db = store::turso::open(turso_db_path)
@@ -338,19 +375,23 @@ async fn build_state(
             )),
             teams: Arc::new(store::turso::team_store::TursoTeamStore::new(db)),
             health: Arc::new(UptimeHealthReporter::new()),
+            stream_listeners,
+            tcp_tunnels_enabled,
             is_tls,
             oauth_state,
             initial_admin_email,
             quic_port,
-            server_id: generate_server_id(),
+            host,
+            server_id: generate_server_id()?,
         }))
     }
 }
 
-fn generate_server_id() -> String {
+fn generate_server_id() -> anyhow::Result<String> {
     let mut bytes = [0u8; 8];
-    getrandom::fill(&mut bytes).expect("failed to generate random bytes");
-    hex::encode(bytes)
+    getrandom::fill(&mut bytes)
+        .map_err(|e| anyhow::anyhow!("failed to generate random bytes: {e}"))?;
+    Ok(hex::encode(bytes))
 }
 
 async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
@@ -364,6 +405,10 @@ async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
         oauth_state,
         initial_admin_email,
         cli.quic_port,
+        cli.host.clone(),
+        cli.enable_tcp_tunnels,
+        cli.stream_port_min,
+        cli.stream_port_max,
     )
     .await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);
@@ -397,7 +442,6 @@ async fn create_seed_key(state: &Arc<app::AppState>) -> anyhow::Result<()> {
 
     let seed_email = "system@funnel.local";
 
-    // find or create the seed user
     let user = match state.users.find_by_email(seed_email).await {
         Ok(Some(u)) => u,
         Ok(None) => {
@@ -411,7 +455,6 @@ async fn create_seed_key(state: &Arc<app::AppState>) -> anyhow::Result<()> {
                 .await
                 .map_err(|e| anyhow::anyhow!("failed to create seed user: {e}"))?;
 
-            // promote to admin
             state
                 .users
                 .update_role(u.id, funnel_core::api::Role::Admin)
@@ -464,6 +507,10 @@ async fn run_with_tls(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()
         oauth_state,
         initial_admin_email,
         cli.quic_port,
+        cli.host.clone(),
+        cli.enable_tcp_tunnels,
+        cli.stream_port_min,
+        cli.stream_port_max,
     )
     .await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);

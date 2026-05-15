@@ -7,7 +7,8 @@ use http_body_util::BodyExt;
 use tokio::io::{AsyncRead, ReadBuf};
 
 use funnel_core::protocol::frame::{self as frame, FrameError};
-use funnel_core::protocol::request::{HttpRequest, HttpResponse};
+use funnel_core::protocol::handshake::TunnelType;
+use funnel_core::protocol::request::{DataHeader, HttpRequest, HttpResponse, StreamHeader};
 use funnel_core::tunnel::id::TunnelId;
 
 use super::stats::TunnelStats;
@@ -17,6 +18,8 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 pub struct ActiveTunnel {
     id: TunnelId,
     conn: quinn::Connection,
+    tunnel_type: TunnelType,
+    remote_port: Option<u16>,
     stats: Arc<TunnelStats>,
     connected_at: tokio::time::Instant,
     owner_id: uuid::Uuid,
@@ -27,12 +30,16 @@ impl ActiveTunnel {
     pub fn new(
         id: TunnelId,
         conn: quinn::Connection,
+        tunnel_type: TunnelType,
+        remote_port: Option<u16>,
         owner_id: uuid::Uuid,
         team_id: Option<uuid::Uuid>,
     ) -> Self {
         Self {
             id,
             conn,
+            tunnel_type,
+            remote_port,
             stats: Arc::new(TunnelStats::new()),
             connected_at: tokio::time::Instant::now(),
             owner_id,
@@ -60,6 +67,42 @@ impl ActiveTunnel {
         self.team_id
     }
 
+    /// record byte counts for a completed stream relay (TCP tunnel).
+    pub fn record_stream_bytes(&self, bytes_in: u64, bytes_out: u64) {
+        self.stats.add_bytes_in(bytes_in);
+        self.stats.add_bytes_out(bytes_out);
+        metrics::counter!("funnel_bytes_in_total").increment(bytes_in);
+        metrics::counter!("funnel_bytes_out_total").increment(bytes_out);
+    }
+
+    pub const fn tunnel_type(&self) -> &TunnelType {
+        &self.tunnel_type
+    }
+
+    pub const fn remote_port(&self) -> Option<u16> {
+        self.remote_port
+    }
+
+    /// open a quic bidirectional stream, send a StreamHeader, and return
+    /// raw send/recv streams for bidirectional byte relay.
+    pub async fn send_stream_request(
+        &self,
+        header: StreamHeader,
+    ) -> Result<(quinn::SendStream, quinn::RecvStream), SendError> {
+        self.stats.inc_requests();
+
+        let (mut send, recv) = self.conn.open_bi().await.map_err(SendError::OpenStream)?;
+
+        let data_header = DataHeader::Stream(header);
+        frame::write_meta(&mut send, &data_header)
+            .await
+            .map_err(SendError::SendMeta)?;
+
+        metrics::counter!("funnel_requests_total", "outcome" => "success").increment(1);
+
+        Ok((send, recv))
+    }
+
     /// open a quic bidirectional stream, send the request, and return the
     /// response metadata along with a counted recv stream for body streaming.
     pub async fn send_request(
@@ -74,7 +117,8 @@ impl ActiveTunnel {
         let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
             let (mut send, mut recv) = self.conn.open_bi().await.map_err(SendError::OpenStream)?;
 
-            frame::write_meta(&mut send, &meta)
+            let data_header = DataHeader::Http(meta);
+            frame::write_meta(&mut send, &data_header)
                 .await
                 .map_err(SendError::SendMeta)?;
 
@@ -135,7 +179,8 @@ impl ActiveTunnel {
         let result = tokio::time::timeout(REQUEST_TIMEOUT, async {
             let (mut send, mut recv) = self.conn.open_bi().await.map_err(SendError::OpenStream)?;
 
-            frame::write_meta(&mut send, &meta)
+            let data_header = DataHeader::Http(meta);
+            frame::write_meta(&mut send, &data_header)
                 .await
                 .map_err(SendError::SendMeta)?;
 

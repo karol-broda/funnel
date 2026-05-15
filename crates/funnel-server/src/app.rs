@@ -18,7 +18,7 @@ use funnel_core::tunnel::id::TunnelId;
 use crate::api;
 use crate::auth::oauth::OAuthState;
 use crate::metrics;
-use crate::proxy;
+use crate::proxy::{self, stream_listener::StreamListenerManager};
 use crate::store::account_store::AccountStore;
 use crate::store::api_key_store::ApiKeyStore;
 use crate::store::health::HealthReporter;
@@ -35,10 +35,13 @@ pub struct AppState {
     pub sessions: Arc<dyn SessionRecorder>,
     pub teams: Arc<dyn TeamStore>,
     pub health: Arc<dyn HealthReporter>,
+    pub stream_listeners: Arc<StreamListenerManager>,
+    pub tcp_tunnels_enabled: bool,
     pub is_tls: bool,
     pub oauth_state: Option<Arc<OAuthState>>,
     pub initial_admin_email: Option<String>,
     pub quic_port: u16,
+    pub host: String,
     pub server_id: String,
 }
 

@@ -127,7 +127,6 @@ pub async fn callback(
     };
 
     let user = if let Some(account) = existing_account {
-        // account exists, update linked user profile
         match state
             .users
             .update_profile(
@@ -144,7 +143,6 @@ pub async fn callback(
             }
         }
     } else {
-        // no account for this provider, check if user exists by email
         let existing_user = match state.users.find_by_email(&info.email).await {
             Ok(u) => u,
             Err(e) => {
@@ -154,7 +152,6 @@ pub async fn callback(
         };
 
         let user = if let Some(user) = existing_user {
-            // user exists from a different provider, link this account
             match state
                 .users
                 .update_profile(user.id, info.name.as_deref(), info.avatar_url.as_deref())
@@ -167,7 +164,6 @@ pub async fn callback(
                 }
             }
         } else {
-            // completely new user
             match state
                 .users
                 .create(NewUser {
@@ -232,7 +228,6 @@ pub async fn callback(
         }
     };
 
-    // revoke any existing cli key before issuing a new one
     let _ = state.api_keys.revoke_by_name(user.id, "cli").await;
 
     let (plaintext, _) = match state
@@ -301,10 +296,7 @@ mod tests {
             }
         }
 
-        async fn fetch_user_info(
-            &self,
-            _access_token: &str,
-        ) -> Result<OAuthUserInfo, OAuthError> {
+        async fn fetch_user_info(&self, _access_token: &str) -> Result<OAuthUserInfo, OAuthError> {
             Ok(OAuthUserInfo {
                 email: "test@example.com".into(),
                 name: Some("Test User".into()),
@@ -343,10 +335,15 @@ mod tests {
             )),
             teams: Arc::new(turso::team_store::TursoTeamStore::new(db)),
             health: Arc::new(UptimeHealthReporter::new()),
+            stream_listeners: Arc::new(crate::proxy::stream_listener::StreamListenerManager::new(
+                10000, 60000,
+            )),
+            tcp_tunnels_enabled: false,
             is_tls: false,
             oauth_state,
             initial_admin_email: None,
             quic_port: 4433,
+            host: "0.0.0.0".into(),
             server_id: "test".into(),
         })
     }
@@ -459,7 +456,6 @@ mod tests {
         assert!(body.contains("login successful"));
         assert!(body.contains("127.0.0.1:7777/callback?token=sk_"));
 
-        // verify account was created
         let accounts = state
             .accounts
             .list_for_user(
@@ -506,7 +502,6 @@ mod tests {
         let state = test_state(true).await;
         let oauth = state.oauth_state.as_ref().unwrap();
 
-        // first login
         oauth.insert_pending("first".into(), 7777);
         let server = axum_test::TestServer::new(test_router(Arc::clone(&state)));
         let resp = server
@@ -523,7 +518,6 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        // second login with same provider reuses user
         oauth.insert_pending("second".into(), 7777);
         let resp = server
             .get("/auth/mock/callback")
@@ -532,11 +526,9 @@ mod tests {
             .await;
         assert_eq!(resp.status_code(), 200);
 
-        // still only one account
         let accounts = state.accounts.list_for_user(user.id).await.unwrap();
         assert_eq!(accounts.len(), 1);
 
-        // only one active cli key (old one was revoked)
         let keys = state.api_keys.list_for_user(user.id).await.unwrap();
         assert_eq!(keys.iter().filter(|k| k.name == "cli").count(), 1);
     }
