@@ -58,5 +58,15 @@ async fn handle_response<Resp: DeserializeOwned>(resp: reqwest::Response) -> any
         let body = resp.text().await.unwrap_or_default();
         anyhow::bail!("server returned {status}: {body}");
     }
-    Ok(resp.json().await?)
+    let value: serde_json::Value = resp.json().await?;
+    let inner = unwrap_envelope(value);
+    Ok(serde_json::from_value(inner)?)
+}
+
+fn unwrap_envelope(value: serde_json::Value) -> serde_json::Value {
+    if value.get("kind").is_some() && value.get("data").is_some() {
+        value["data"].clone()
+    } else {
+        value
+    }
 }

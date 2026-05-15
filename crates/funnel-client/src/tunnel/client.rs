@@ -11,8 +11,10 @@ use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use funnel_core::protocol::frame;
-use funnel_core::protocol::handshake::{Handshake, HandshakeResponse};
-use funnel_core::protocol::request::RequestMeta;
+use funnel_core::protocol::handshake::{
+    Handshake, HandshakeResult, TunnelSpec, TunnelStatus, TunnelType,
+};
+use funnel_core::protocol::request::HttpRequest;
 use funnel_core::protocol::{PROTOCOL_VERSION, QUIC_ALPN};
 use funnel_core::tunnel::id::TunnelId;
 
@@ -137,16 +139,33 @@ impl TunnelClient {
         let (mut send, mut recv) = conn.open_bi().await?;
 
         let handshake = Handshake {
-            tunnel_id: self.tunnel_id.clone(),
+            version: PROTOCOL_VERSION,
             token: self.token.clone(),
-            team: self.team.clone(),
-            version: Some(PROTOCOL_VERSION),
+            tunnels: vec![TunnelSpec {
+                id: self.tunnel_id.clone(),
+                tunnel_type: TunnelType::Http,
+                team: self.team.clone(),
+                local_port: None,
+                routing: None,
+                remote_port: None,
+            }],
         };
 
         frame::write_meta(&mut send, &handshake).await?;
 
-        let resp: HandshakeResponse = frame::read_meta(&mut recv).await?;
-        resp.into_result()?;
+        let result: HandshakeResult = frame::read_meta(&mut recv).await?;
+
+        let tunnel_result = result
+            .tunnels
+            .iter()
+            .find(|t| t.id == self.tunnel_id)
+            .ok_or_else(|| anyhow::anyhow!("server did not return result for tunnel {}", self.tunnel_id))?;
+
+        if tunnel_result.status == TunnelStatus::Error {
+            let code = tunnel_result.error_code.map_or("unknown", funnel_core::protocol::error_codes::AppCode::as_str);
+            let msg = tunnel_result.error_message.as_deref().unwrap_or("unknown error");
+            anyhow::bail!("handshake rejected: [{code}] {msg}");
+        }
 
         tracing::info!(tunnel_id = %self.tunnel_id, "quic tunnel connected");
 
@@ -168,7 +187,7 @@ async fn handle_stream(
     forwarder: &Forwarder,
 ) -> anyhow::Result<RequestResult> {
     let start = Instant::now();
-    let meta: RequestMeta = frame::read_meta(&mut recv).await?;
+    let meta: HttpRequest = frame::read_meta(&mut recv).await?;
 
     let method = meta.method.clone();
     let path = meta.path.clone();
@@ -232,7 +251,7 @@ async fn handle_upgrade_stream(
     mut send: quinn::SendStream,
     mut recv: quinn::RecvStream,
     forwarder: &Forwarder,
-    meta: &RequestMeta,
+    meta: &HttpRequest,
     method: &str,
     path: &str,
     start: Instant,

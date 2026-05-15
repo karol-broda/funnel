@@ -7,7 +7,7 @@ use hyper::body::Incoming;
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpStream;
 
-use funnel_core::protocol::request::{RequestMeta, ResponseMeta};
+use funnel_core::protocol::request::{HttpRequest, HttpResponse};
 
 const HOP_BY_HOP_HEADERS: &[&str] = &[
     "connection",
@@ -33,23 +33,23 @@ pub struct Forwarder {
 }
 
 pub struct UpgradeResult {
-    pub meta: ResponseMeta,
+    pub meta: HttpResponse,
     pub upgraded: hyper::upgrade::Upgraded,
 }
 
 pub enum ForwardUpgradeResult {
     Upgraded(UpgradeResult),
-    Rejected(ResponseMeta, Vec<u8>),
+    Rejected(HttpResponse, Vec<u8>),
 }
 
 pub enum ForwardResult {
     Success {
-        meta: ResponseMeta,
+        meta: HttpResponse,
         body: Incoming,
         conn: PooledConnection,
     },
     LocalError {
-        meta: ResponseMeta,
+        meta: HttpResponse,
         body: Vec<u8>,
     },
 }
@@ -97,7 +97,7 @@ impl Forwarder {
         }
     }
 
-    pub async fn forward(&self, meta: RequestMeta, body: Bytes) -> ForwardResult {
+    pub async fn forward(&self, meta: HttpRequest, body: Bytes) -> ForwardResult {
         match self.try_forward(&meta, body).await {
             Ok((resp_meta, incoming, conn)) => ForwardResult::Success {
                 meta: resp_meta,
@@ -117,9 +117,9 @@ impl Forwarder {
 
     async fn try_forward(
         &self,
-        meta: &RequestMeta,
+        meta: &HttpRequest,
         body: Bytes,
-    ) -> anyhow::Result<(ResponseMeta, Incoming, PooledConnection)> {
+    ) -> anyhow::Result<(HttpResponse, Incoming, PooledConnection)> {
         let mut conn = self.acquire().await?;
 
         let req = build_request(meta, &self.local_addr, body, false)?;
@@ -127,14 +127,14 @@ impl Forwarder {
 
         let status = resp.status().as_u16();
         let headers = collect_response_headers(resp.headers(), false);
-        let resp_meta = ResponseMeta { status, headers };
+        let resp_meta = HttpResponse { status, headers };
 
         Ok((resp_meta, resp.into_body(), conn))
     }
 
     pub async fn forward_upgrade(
         &self,
-        meta: &RequestMeta,
+        meta: &HttpRequest,
     ) -> anyhow::Result<ForwardUpgradeResult> {
         // upgrades are one shot, no pool reuse
         let stream = TcpStream::connect(&self.local_addr).await?;
@@ -153,7 +153,7 @@ impl Forwarder {
         let status = resp.status().as_u16();
         let is_101 = resp.status() == hyper::StatusCode::SWITCHING_PROTOCOLS;
         let headers = collect_response_headers(resp.headers(), is_101);
-        let resp_meta = ResponseMeta { status, headers };
+        let resp_meta = HttpResponse { status, headers };
 
         if is_101 {
             let upgraded = hyper::upgrade::on(resp).await?;
@@ -169,7 +169,7 @@ impl Forwarder {
 }
 
 fn build_request(
-    meta: &RequestMeta,
+    meta: &HttpRequest,
     local_addr: &str,
     body: Bytes,
     is_upgrade: bool,
@@ -221,10 +221,10 @@ fn collect_response_headers(
     map
 }
 
-fn error_response(status: u16, msg: &str) -> (ResponseMeta, Vec<u8>) {
+fn error_response(status: u16, msg: &str) -> (HttpResponse, Vec<u8>) {
     let mut headers = HashMap::new();
     headers.insert("content-type".to_string(), vec!["text/plain".to_string()]);
-    (ResponseMeta { status, headers }, msg.as_bytes().to_vec())
+    (HttpResponse { status, headers }, msg.as_bytes().to_vec())
 }
 
 #[cfg(test)]
@@ -263,8 +263,10 @@ mod tests {
         addr
     }
 
-    fn test_meta(method: &str, path: &str) -> RequestMeta {
-        RequestMeta {
+    fn test_meta(method: &str, path: &str) -> HttpRequest {
+        HttpRequest {
+            tunnel_id: funnel_core::tunnel::id::TunnelId::new("test").unwrap(),
+            remote_addr: "127.0.0.1:0".into(),
             method: method.into(),
             path: path.into(),
             headers: HashMap::new(),
@@ -272,7 +274,7 @@ mod tests {
         }
     }
 
-    fn upgrade_meta(path: &str) -> RequestMeta {
+    fn upgrade_meta(path: &str) -> HttpRequest {
         let mut headers = HashMap::new();
         headers.insert("connection".into(), vec!["Upgrade".into()]);
         headers.insert("upgrade".into(), vec!["websocket".into()]);
@@ -281,7 +283,9 @@ mod tests {
             vec!["dGhlIHNhbXBsZSBub25jZQ==".into()],
         );
         headers.insert("sec-websocket-version".into(), vec!["13".into()]);
-        RequestMeta {
+        HttpRequest {
+            tunnel_id: funnel_core::tunnel::id::TunnelId::new("test").unwrap(),
+            remote_addr: "127.0.0.1:0".into(),
             method: "GET".into(),
             path: path.into(),
             headers,
@@ -290,7 +294,7 @@ mod tests {
     }
 
     /// helper to drain an Incoming body from a ForwardResult::Success
-    async fn collect_success(result: ForwardResult) -> (ResponseMeta, Vec<u8>, PooledConnection) {
+    async fn collect_success(result: ForwardResult) -> (HttpResponse, Vec<u8>, PooledConnection) {
         match result {
             ForwardResult::Success { meta, body, conn } => {
                 let bytes = body.collect().await.unwrap().to_bytes().to_vec();

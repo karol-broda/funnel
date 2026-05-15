@@ -12,6 +12,7 @@ workspace = true
 funnel-core.workspace = true
 
 anyhow.workspace = true
+chrono.workspace = true
 axum.workspace = true
 clap = { workspace = true, features = ["derive"] }
 config_rs = { package = "config", version = "0.15", default-features = false, features = ["toml"] }
@@ -28,6 +29,7 @@ reqwest = { workspace = true, features = ["rustls", "stream", "json"] }
 rustls = { workspace = true, default-features = false, features = ["ring", "std"] }
 serde.workspace = true
 serde_json.workspace = true
+uuid.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 toml = "0.8"

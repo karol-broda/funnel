@@ -3,7 +3,7 @@ mod cmd;
 mod config;
 mod tunnel;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
 fn build_version() -> &'static str {
@@ -29,6 +29,10 @@ struct Cli {
     #[arg(long, short, global = true)]
     context: Option<String>,
 
+    /// output raw json envelope from the api
+    #[arg(long, global = true)]
+    json: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -38,6 +42,10 @@ enum Command {
     /// create an http tunnel to a local service
     Http(cmd::http::Args),
     /// log in via oauth
+    #[command(after_long_help = cmd::examples![
+        "funnel login  # uses github by default",
+        "funnel login --provider gitlab  # use a different provider",
+    ])]
     Login {
         /// oauth provider name
         #[arg(long, default_value = "github")]
@@ -50,11 +58,22 @@ enum Command {
     /// show active tunnels on the server
     Status,
     /// manage api keys
+    #[command(after_long_help = cmd::examples![
+        "funnel keys list",
+        "funnel keys create deploy-key  # full access",
+        "funnel keys create ci-runner --scopes tunnels  # tunnels only",
+        "funnel keys revoke <id>",
+    ])]
     Keys {
         #[command(subcommand)]
         command: cmd::keys::Command,
     },
     /// view tunnel sessions
+    #[command(after_long_help = cmd::examples![
+        "funnel sessions",
+        "funnel sessions --all  # admin: show all users' sessions",
+        "funnel sessions --limit 100",
+    ])]
     Sessions {
         /// show all sessions (admin only)
         #[arg(long)]
@@ -65,16 +84,34 @@ enum Command {
         limit: u32,
     },
     /// manage users (admin only)
+    #[command(after_long_help = cmd::examples![
+        "funnel users list",
+        "funnel users set-role <id> admin  # promote to admin",
+        "funnel users deactivate <id>  # revoke access",
+        "funnel users reactivate <id>",
+    ])]
     Users {
         #[command(subcommand)]
         command: cmd::users::Command,
     },
     /// manage teams
+    #[command(after_long_help = cmd::examples![
+        "funnel teams create backend",
+        "funnel teams members <id>",
+        "funnel teams add-member <team_id> <user_id>",
+        "funnel teams set-role <team_id> <user_id> owner  # promote to owner",
+        "funnel teams remove-member <team_id> <user_id>",
+    ])]
     Teams {
         #[command(subcommand)]
         command: cmd::teams::Command,
     },
     /// manage server contexts
+    #[command(after_long_help = cmd::examples![
+        "funnel context create staging --server https://tunnel.example.com",
+        "funnel context use staging  # switch active context",
+        "funnel context list",
+    ])]
     Context {
         #[command(subcommand)]
         command: cmd::context::Command,
@@ -83,6 +120,13 @@ enum Command {
     Config {
         #[command(subcommand)]
         command: cmd::config::Command,
+    },
+    /// generate cli reference as markdown
+    #[command(hide = true)]
+    GenerateCliReference {
+        /// output as mdx with frontmatter
+        #[arg(long)]
+        mdx: bool,
     },
 }
 
@@ -119,34 +163,38 @@ async fn main() -> anyhow::Result<()> {
         Command::Whoami => {
             let cfg = config::load()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
-            cmd::whoami::run(&resolved.server, &token, &resolved.name).await
+            cmd::whoami::run(&resolved.server, &token, &resolved.name, cli.json).await
         }
         Command::Status => {
             let cfg = config::load()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
-            cmd::status::run(&resolved.server, &token).await
+            cmd::status::run(&resolved.server, &token, cli.json).await
         }
         Command::Keys { command } => {
             let cfg = config::load()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
-            cmd::keys::run(&resolved.server, &token, command).await
+            cmd::keys::run(&resolved.server, &token, command, cli.json).await
         }
         Command::Sessions { all, limit } => {
             let cfg = config::load()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
-            cmd::sessions::list(&resolved.server, &token, all, limit).await
+            cmd::sessions::list(&resolved.server, &token, all, limit, cli.json).await
         }
         Command::Users { command } => {
             let cfg = config::load()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
-            cmd::users::run(&resolved.server, &token, command).await
+            cmd::users::run(&resolved.server, &token, command, cli.json).await
         }
         Command::Teams { command } => {
             let cfg = config::load()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
-            cmd::teams::run(&resolved.server, &token, command).await
+            cmd::teams::run(&resolved.server, &token, command, cli.json).await
         }
         Command::Context { command } => cmd::context::run(command),
         Command::Config { command } => cmd::config::run(&command),
+        Command::GenerateCliReference { mdx } => {
+            print!("{}", cmd::cli_reference::generate(&Cli::command(), mdx));
+            Ok(())
+        }
     }
 }

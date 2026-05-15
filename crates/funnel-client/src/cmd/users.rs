@@ -1,5 +1,11 @@
-use funnel_core::protocol::PROTOCOL_VERSION;
-use serde::{Deserialize, Serialize};
+use funnel_core::api::{self as endpoints, Role, SetUserRoleRequest};
+
+use super::api;
+
+fn parse_role(input: &str) -> anyhow::Result<Role> {
+    serde_json::from_value(serde_json::Value::String(input.to_string()))
+        .map_err(|_| anyhow::anyhow!("invalid role '{input}', must be 'admin' or 'member'"))
+}
 
 #[derive(clap::Subcommand)]
 pub enum Command {
@@ -28,52 +34,27 @@ pub enum Command {
     },
 }
 
-pub async fn run(server: &str, token: &str, command: Command) -> anyhow::Result<()> {
+pub async fn run(server: &str, token: &str, command: Command, json: bool) -> anyhow::Result<()> {
     match command {
-        Command::List { limit } => list(server, token, limit).await,
-        Command::SetRole { id, role } => set_role(server, token, &id, &role).await,
-        Command::Deactivate { id } => deactivate(server, token, &id).await,
-        Command::Reactivate { id } => reactivate(server, token, &id).await,
+        Command::List { limit } => list(server, token, limit, json).await,
+        Command::SetRole { id, role } => set_role(server, token, &id, &role, json).await,
+        Command::Deactivate { id } => deactivate(server, token, &id, json).await,
+        Command::Reactivate { id } => reactivate(server, token, &id, json).await,
     }
 }
 
-#[derive(Deserialize)]
-struct User {
-    id: String,
-    email: String,
-    name: Option<String>,
-    role: String,
-    deactivated_at: Option<String>,
-}
-
-fn client(token: &str) -> reqwest::Client {
-    reqwest::Client::builder()
-        .default_headers({
-            let mut h = reqwest::header::HeaderMap::new();
-            if let Ok(v) = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}")) {
-                h.insert(reqwest::header::AUTHORIZATION, v);
-            }
-            h
-        })
-        .build()
-        .unwrap_or_default()
-}
-
-pub async fn list(server: &str, token: &str, limit: u32) -> anyhow::Result<()> {
-    let resp = client(token)
-        .get(format!(
-            "{server}/api/v{PROTOCOL_VERSION}/users?limit={limit}"
-        ))
-        .send()
-        .await?;
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("server returned {status}: {body}");
-    }
-
-    let users: Vec<User> = resp.json().await?;
+pub async fn list(server: &str, token: &str, limit: u32, json: bool) -> anyhow::Result<()> {
+    let Some(users) = api::call_at(
+        server,
+        token,
+        &endpoints::USERS_LIST,
+        &format!("/users?limit={limit}"),
+        json,
+    )
+    .await?
+    else {
+        return Ok(());
+    };
 
     if users.is_empty() {
         println!("no users");
@@ -102,65 +83,101 @@ pub async fn list(server: &str, token: &str, limit: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive(Serialize)]
-struct SetRoleRequest {
-    role: String,
-}
-
-pub async fn set_role(server: &str, token: &str, id: &str, role: &str) -> anyhow::Result<()> {
-    let resp = client(token)
-        .put(format!("{server}/api/v{PROTOCOL_VERSION}/users/{id}/role"))
-        .json(&SetRoleRequest {
-            role: role.to_string(),
-        })
-        .send()
-        .await?;
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("server returned {status}: {body}");
-    }
-
-    let user: User = resp.json().await?;
+pub async fn set_role(
+    server: &str,
+    token: &str,
+    id: &str,
+    role: &str,
+    json: bool,
+) -> anyhow::Result<()> {
+    let role: Role = parse_role(role)?;
+    let body = SetUserRoleRequest { role };
+    let Some(user) = api::send_at(
+        server,
+        token,
+        &endpoints::USERS_SET_ROLE,
+        &format!("/users/{id}/role"),
+        &body,
+        json,
+    )
+    .await?
+    else {
+        return Ok(());
+    };
     println!("updated {} to role '{}'", user.email, user.role);
     Ok(())
 }
 
-pub async fn deactivate(server: &str, token: &str, id: &str) -> anyhow::Result<()> {
-    let resp = client(token)
-        .post(format!(
-            "{server}/api/v{PROTOCOL_VERSION}/users/{id}/deactivate"
-        ))
-        .send()
-        .await?;
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("server returned {status}: {body}");
-    }
-
-    let user: User = resp.json().await?;
+pub async fn deactivate(server: &str, token: &str, id: &str, json: bool) -> anyhow::Result<()> {
+    let Some(user) = api::call_at(
+        server,
+        token,
+        &endpoints::USERS_DEACTIVATE,
+        &format!("/users/{id}/deactivate"),
+        json,
+    )
+    .await?
+    else {
+        return Ok(());
+    };
     println!("deactivated {}", user.email);
     Ok(())
 }
 
-pub async fn reactivate(server: &str, token: &str, id: &str) -> anyhow::Result<()> {
-    let resp = client(token)
-        .post(format!(
-            "{server}/api/v{PROTOCOL_VERSION}/users/{id}/reactivate"
-        ))
-        .send()
-        .await?;
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("server returned {status}: {body}");
-    }
-
-    let user: User = resp.json().await?;
+pub async fn reactivate(server: &str, token: &str, id: &str, json: bool) -> anyhow::Result<()> {
+    let Some(user) = api::call_at(
+        server,
+        token,
+        &endpoints::USERS_REACTIVATE,
+        &format!("/users/{id}/reactivate"),
+        json,
+    )
+    .await?
+    else {
+        return Ok(());
+    };
     println!("reactivated {}", user.email);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_role_accepts_admin() {
+        assert_eq!(parse_role("admin").unwrap(), Role::Admin);
+    }
+
+    #[test]
+    fn parse_role_accepts_member() {
+        assert_eq!(parse_role("member").unwrap(), Role::Member);
+    }
+
+    #[test]
+    fn parse_role_rejects_invalid() {
+        assert!(parse_role("moderator").is_err());
+        assert!(parse_role("superadmin").is_err());
+        assert!(parse_role("user").is_err());
+    }
+
+    #[test]
+    fn parse_role_rejects_empty() {
+        assert!(parse_role("").is_err());
+    }
+
+    #[test]
+    fn parse_role_rejects_wrong_case() {
+        assert!(parse_role("Admin").is_err());
+        assert!(parse_role("ADMIN").is_err());
+        assert!(parse_role("Member").is_err());
+    }
+
+    #[test]
+    fn parse_role_error_message_includes_input() {
+        let err = parse_role("bogus").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("bogus"), "error should include input: {msg}");
+        assert!(msg.contains("admin"), "error should hint valid values: {msg}");
+    }
 }

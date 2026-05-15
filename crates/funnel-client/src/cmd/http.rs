@@ -9,6 +9,12 @@ use crate::config;
 use crate::tunnel::{client::TunnelClient, display::TunnelDisplay, runner};
 
 #[derive(clap::Args)]
+#[command(after_long_help = super::examples![
+    "funnel http 3000  # localhost:3000",
+    "funnel http 3000 --id my-app  # custom subdomain",
+    "funnel http 127.0.0.1:8080 --server https://tunnel.example.com  # explicit server",
+    "funnel http 3000 --team backend  # associate with team",
+])]
 pub struct Args {
     /// local address or port to forward to (e.g. "3000" or "localhost:3000")
     pub address: String,

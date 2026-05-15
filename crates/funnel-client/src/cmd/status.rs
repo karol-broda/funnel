@@ -1,38 +1,11 @@
-use funnel_core::protocol::PROTOCOL_VERSION;
-use serde::Deserialize;
+use funnel_core::api as endpoints;
 
-#[derive(Deserialize)]
-struct TunnelInfo {
-    id: String,
-    uptime_secs: f64,
-    stats: TunnelStats,
-    #[serde(default)]
-    owner_id: Option<String>,
-    #[serde(default)]
-    team_id: Option<String>,
-}
+use super::api;
 
-#[derive(Deserialize)]
-struct TunnelStats {
-    bytes_in: u64,
-    bytes_out: u64,
-    requests: u64,
-}
-
-pub async fn run(server: &str, token: &str) -> anyhow::Result<()> {
-    let resp = reqwest::Client::new()
-        .get(format!("{server}/api/v{PROTOCOL_VERSION}/tunnels"))
-        .header("authorization", format!("Bearer {token}"))
-        .send()
-        .await?;
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("server returned {status}: {body}");
-    }
-
-    let tunnels: Vec<TunnelInfo> = resp.json().await?;
+pub async fn run(server: &str, token: &str, json: bool) -> anyhow::Result<()> {
+    let Some(tunnels) = api::call(server, token, &endpoints::TUNNELS_LIST, json).await? else {
+        return Ok(());
+    };
 
     if tunnels.is_empty() {
         println!("no active tunnels");
@@ -48,9 +21,7 @@ pub async fn run(server: &str, token: &str) -> anyhow::Result<()> {
             format_bytes(t.stats.bytes_in),
             format_bytes(t.stats.bytes_out)
         );
-        if let Some(ref owner) = t.owner_id {
-            println!("  owner:    {owner}");
-        }
+        println!("  owner:    {}", t.owner_id);
         if let Some(ref team) = t.team_id {
             println!("  team:     {team}");
         }

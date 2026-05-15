@@ -145,8 +145,8 @@ async fn create_and_list_keys() -> TestResult {
         .await?;
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await?;
-    assert!(body["key"].as_str().is_some());
-    assert_eq!(body["info"]["name"], "my-key");
+    assert!(body["data"]["key"].as_str().is_some());
+    assert_eq!(body["data"]["info"]["name"], "my-key");
 
     // seed key + new key
     let resp = env
@@ -156,7 +156,8 @@ async fn create_and_list_keys() -> TestResult {
         .send()
         .await?;
     assert_eq!(resp.status(), 200);
-    let keys: Vec<serde_json::Value> = resp.json().await?;
+    let envelope: serde_json::Value = resp.json().await?;
+    let keys = envelope["data"].as_array().unwrap();
     assert_eq!(keys.len(), 2);
 
     Ok(())
@@ -175,7 +176,7 @@ async fn revoke_key() -> TestResult {
         .await?;
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await?;
-    let key_id = body["info"]["id"].as_str().ok_or("missing key id")?;
+    let key_id = body["data"]["info"]["id"].as_str().ok_or("missing key id")?;
 
     let resp = env
         .client
@@ -185,7 +186,7 @@ async fn revoke_key() -> TestResult {
         .await?;
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await?;
-    assert_eq!(body["revoked"], true);
+    assert_eq!(body["data"]["revoked"], true);
 
     // only seed key remains
     let resp = env
@@ -194,7 +195,8 @@ async fn revoke_key() -> TestResult {
         .header("authorization", env.auth_header())
         .send()
         .await?;
-    let keys: Vec<serde_json::Value> = resp.json().await?;
+    let envelope: serde_json::Value = resp.json().await?;
+    let keys = envelope["data"].as_array().unwrap();
     assert_eq!(keys.len(), 1);
 
     Ok(())
@@ -213,8 +215,8 @@ async fn revoked_key_cannot_authenticate() -> TestResult {
         .send()
         .await?;
     let body: serde_json::Value = resp.json().await?;
-    let new_key = body["key"].as_str().ok_or("missing key")?.to_string();
-    let new_key_id = body["info"]["id"].as_str().ok_or("missing key id")?;
+    let new_key = body["data"]["key"].as_str().ok_or("missing key")?.to_string();
+    let new_key_id = body["data"]["info"]["id"].as_str().ok_or("missing key id")?;
 
     // verify it works
     let resp = env
@@ -267,8 +269,8 @@ async fn me_returns_seed_user() -> TestResult {
         .await?;
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await?;
-    assert_eq!(body["email"], "system@funnel.local");
-    assert_eq!(body["role"], "admin");
+    assert_eq!(body["data"]["email"], "system@funnel.local");
+    assert_eq!(body["data"]["role"], "admin");
 
     Ok(())
 }

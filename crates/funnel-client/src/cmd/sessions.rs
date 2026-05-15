@@ -1,36 +1,28 @@
-use funnel_core::protocol::PROTOCOL_VERSION;
-use serde::Deserialize;
+use funnel_core::api as endpoints;
 
-#[derive(Deserialize)]
-struct TunnelSession {
-    id: String,
-    tunnel_id: String,
-    connected_at: String,
-    disconnected_at: Option<String>,
-    bytes_in: i64,
-    bytes_out: i64,
-    requests: i64,
+use super::api;
+
+fn format_timestamp(ts: &chrono::DateTime<chrono::Utc>) -> String {
+    ts.format("%Y-%m-%dT%H:%M:%S").to_string()
 }
 
-pub async fn list(server: &str, token: &str, all: bool, limit: u32) -> anyhow::Result<()> {
-    let mut url = format!("{server}/api/v{PROTOCOL_VERSION}/sessions?limit={limit}");
+pub async fn list(
+    server: &str,
+    token: &str,
+    all: bool,
+    limit: u32,
+    json: bool,
+) -> anyhow::Result<()> {
+    let mut path = format!("/sessions?limit={limit}");
     if all {
-        url.push_str("&all=true");
+        path.push_str("&all=true");
     }
 
-    let resp = reqwest::Client::new()
-        .get(&url)
-        .header("authorization", format!("Bearer {token}"))
-        .send()
-        .await?;
-
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("server returned {status}: {body}");
-    }
-
-    let sessions: Vec<TunnelSession> = resp.json().await?;
+    let Some(sessions) =
+        api::call_at(server, token, &endpoints::SESSIONS_LIST, &path, json).await?
+    else {
+        return Ok(());
+    };
 
     if sessions.is_empty() {
         println!("no sessions");
@@ -65,11 +57,6 @@ pub async fn list(server: &str, token: &str, all: bool, limit: u32) -> anyhow::R
     }
 
     Ok(())
-}
-
-fn format_timestamp(ts: &str) -> &str {
-    let without_frac = ts.split('.').next().unwrap_or(ts);
-    without_frac.strip_suffix('Z').unwrap_or(without_frac)
 }
 
 const KIB: i64 = 1024;
