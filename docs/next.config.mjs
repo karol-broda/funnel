@@ -6,6 +6,10 @@ const config = {
   serverExternalPackages: [
     '@takumi-rs/core',
     '@takumi-rs/image-response',
+    'shiki',
+    '@shikijs/core',
+    '@shikijs/engine-javascript',
+    '@shikijs/engine-oniguruma',
   ],
   typescript: {
     ignoreBuildErrors: true,

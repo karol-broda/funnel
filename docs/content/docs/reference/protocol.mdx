@@ -1,0 +1,225 @@
+---
+title: Protocol
+description: Wire protocol specification for funnel QUIC tunnels
+---
+
+Funnel uses a custom binary protocol over QUIC for tunnel communication. All structured data is serialized with [MessagePack](https://msgpack.org/) using named fields (`rmp_serde::to_vec_named`). The current protocol version is **1**.
+
+## Transport
+
+The QUIC connection uses ALPN identifier `funnel`. After the TLS handshake, the client opens a single bidirectional stream for the handshake exchange. Subsequent streams are opened by the server, one per incoming HTTP request.
+
+## Handshake
+
+The client initiates the connection by sending a `Handshake` message on the first bidirectional stream.
+
+### Client to server
+
+```plaintext fullHeight
+Handshake Message {
+  +----------+-------------------+
+  | version  | uint32            |
+  +----------+-------------------+
+  | token    | string (optional) |
+  +----------+-------------------+
+  | tunnels  | array<TunnelSpec> |
+  +----------+-------------------+
+}
+
+TunnelSpec {
+  +------------+-------------------------+
+  | id         | string (3-63 chars)     |
+  +------------+-------------------------+
+  | type       | "http"|"stream"|"dgram" |
+  +------------+-------------------------+
+  | team       | string (optional)       |
+  +------------+-------------------------+
+  | local_port | uint16 (optional)       |
+  +------------+-------------------------+
+  | routing    | "port"|"sni" (optional) |
+  +------------+-------------------------+
+  | remote_port| uint16 (optional)       |
+  +------------+-------------------------+
+}
+```
+
+**id** is a validated DNS subdomain label: lowercase alphanumeric and hyphens, cannot start or end with a hyphen. If omitted from the CLI, an 8-character random ID is generated.
+
+**type** values:
+- `http`: HTTP tunneling with subdomain routing (currently the only supported type)
+- `stream`: raw TCP forwarding (reserved)
+- `dgram`: UDP forwarding (reserved)
+
+### Server to client
+
+```plaintext fullHeight
+HandshakeResult Message {
+  +----------+---------------------------+
+  | version  | uint32                    |
+  +----------+---------------------------+
+  | server_id| string                    |
+  +----------+---------------------------+
+  | tunnels  | array<TunnelResult>       |
+  +----------+---------------------------+
+  | limits   | ServerLimits              |
+  +----------+---------------------------+
+}
+
+TunnelResult {
+  +---------------+-----------------------+
+  | id            | string                |
+  +---------------+-----------------------+
+  | status        | "ok"|"error"          |
+  +---------------+-----------------------+
+  | remote_port   | uint16 (optional)     |
+  +---------------+-----------------------+
+  | public_url    | string (optional)     |
+  +---------------+-----------------------+
+  | error_code    | AppCode (optional)    |
+  +---------------+-----------------------+
+  | error_message | string (optional)     |
+  +---------------+-----------------------+
+}
+
+ServerLimits {
+  +------------------+--------------------------+
+  | max_streams      | uint32 (default: 128)    |
+  +------------------+--------------------------+
+  | max_request_body | uint64 (default: 64 MiB) |
+  +------------------+--------------------------+
+  | dgram_mtu        | uint16 (optional)        |
+  +------------------+--------------------------+
+}
+```
+
+After receiving the handshake result, the client validates that all requested tunnels have status `ok`. If any tunnel has an error, the client reports it and exits.
+
+## Framing
+
+All messages are length-prefixed frames:
+
+```
+Frame {
+  +--------+----------------------------+
+  | length | uint32 (big-endian)        |
+  +--------+----------------------------+
+  | payload| length bytes               |
+  +--------+----------------------------+
+}
+```
+
+For metadata frames (handshake, request/response headers), the payload is MessagePack-encoded. The maximum metadata frame size is **1 MiB**.
+
+Request and response bodies are streamed directly after the metadata frame without framing, using the QUIC stream's own flow control.
+
+## Request flow
+
+Once the handshake is complete, the server handles incoming HTTP requests by opening new QUIC streams to the client:
+
+### Server to client (request)
+
+```
+HttpRequest {
+  +-------------+------------------------------+
+  | tunnel_id   | string                       |
+  +-------------+------------------------------+
+  | remote_addr | string (IP:port)             |
+  +-------------+------------------------------+
+  | method      | string (GET, POST, etc.)     |
+  +-------------+------------------------------+
+  | path        | string (path with query)     |
+  +-------------+------------------------------+
+  | headers     | map<string, array<string>>   |
+  +-------------+------------------------------+
+  | upgrade     | bool (default: false)        |
+  +-------------+------------------------------+
+}
+```
+
+The server sends the metadata frame, then streams the request body on the same QUIC stream.
+
+### Client to server (response)
+
+```
+HttpResponse {
+  +----------+----------------------------+
+  | status   | uint16 (HTTP status code)  |
+  +----------+----------------------------+
+  | headers  | map<string, array<string>> |
+  +----------+----------------------------+
+}
+```
+
+The client forwards the request to the local service, then sends the response metadata frame followed by the response body.
+
+### WebSocket upgrades
+
+When `upgrade` is `true`, the tunnel switches to bidirectional byte streaming after the initial response metadata. Both sides pipe raw bytes between the QUIC stream and their respective TCP connections.
+
+## Error codes
+
+Errors are categorized into three levels based on their scope and severity.
+
+### Connection codes
+
+Used in `Connection::close()`. Fatal, all tunnels on the connection are torn down.
+
+| Code | Value | Description |
+| --- | --- | --- |
+| `NoError` | `0x00` | clean shutdown |
+| `ProtocolError` | `0x01` | invalid message format or unexpected frame |
+| `AuthFailed` | `0x02` | token missing, invalid, or insufficient scope |
+| `VersionMismatch` | `0x03` | incompatible protocol version |
+| `InternalError` | `0x04` | server-side failure |
+| `ShuttingDown` | `0x05` | server is shutting down gracefully |
+
+### Stream codes
+
+Used in `SendStream::reset()`. Affects a single request stream without tearing down the connection.
+
+| Code | Value | Description |
+| --- | --- | --- |
+| `NoError` | `0x00` | clean stream close |
+| `TunnelGone` | `0x01` | tunnel was deregistered during request |
+| `RateLimited` | `0x02` | request rejected due to rate limiting |
+| `AccessDenied` | `0x03` | insufficient permissions for this tunnel |
+| `Timeout` | `0x04` | request exceeded the per-request timeout |
+| `LocalUnreachable` | `0x05` | client could not reach the local service |
+| `BodyTooLarge` | `0x06` | request body exceeds `max_request_body` |
+
+### Application codes
+
+Shared across the wire protocol, REST API error responses, and CLI `--json` output. Serialized as snake_case strings.
+
+| Code | Description |
+| --- | --- |
+| `tunnel_id_conflict` | tunnel ID is already in use |
+| `tunnel_id_invalid` | tunnel ID fails validation |
+| `unsupported_tunnel_type` | requested tunnel type is not supported |
+| `port_unavailable` | requested remote port is not available |
+| `auth_required` | no authentication token provided |
+| `auth_invalid` | token is invalid, revoked, or expired |
+| `scope_insufficient` | token lacks the required scope |
+| `user_deactivated` | user account has been deactivated |
+| `team_not_found` | referenced team does not exist |
+| `team_membership_required` | user is not a member of the referenced team |
+| `tunnel_limit_exceeded` | maximum tunnel count reached |
+| `rate_limit_exceeded` | too many requests |
+| `bad_request` | malformed request |
+| `not_found` | resource not found |
+| `internal_error` | server-side failure |
+
+## Connection lifecycle
+
+1. Client connects to the server QUIC port (default `4433`) with ALPN `funnel`
+2. Client opens a bidirectional stream and sends a `Handshake` frame
+3. Server validates the token (must have `tunnels` scope), checks the user is active, and registers each tunnel
+4. Server responds with `HandshakeResult` on the same stream
+5. The connection stays open. The server opens new streams as HTTP requests arrive.
+6. On disconnect, the server deregisters all tunnels and records session statistics (bytes in/out, request count, duration)
+
+## Serialization details
+
+All structured messages use MessagePack with named fields for forward compatibility. Unknown fields are ignored during deserialization, so clients and servers at different minor versions can interoperate as long as the protocol version matches.
+
+Enum variants are serialized as lowercase strings (`"http"`, `"ok"`, `"error"`). Application error codes use snake_case (`"tunnel_id_conflict"`).

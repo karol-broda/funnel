@@ -94,7 +94,7 @@ tokens are stored in `~/.config/funnel/config.toml` with `0600` permissions. `FU
 ```bash
 funnel status # active tunnels
 funnel whoami  # current user
-funnel keys create --scopes tunnels # create api key
+funnel keys create my-key --scopes tunnels # create api key
 funnel keys list # list api keys
 funnel sessions # tunnel session history
 funnel users list # all users (admin)

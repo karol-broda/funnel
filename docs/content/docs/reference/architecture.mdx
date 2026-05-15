@@ -67,6 +67,7 @@ The server uses a middleware layer that inspects the `Host` header of incoming r
 
 The server adds standard proxy headers to forwarded requests:
 
-- `X-Forwarded-For`: client IP address
+- `X-Forwarded-For`: client IP address (appended if already present)
 - `X-Forwarded-Host`: original host header
 - `X-Forwarded-Proto`: `http` or `https`
+- `X-Real-IP`: client IP address

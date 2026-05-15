@@ -22,12 +22,13 @@ On first startup, use `--seed-api-key` to create an initial admin key:
 funnel-server --seed-api-key
 ```
 
-The key is printed to the server logs. Use it to bootstrap your setup, then create dedicated keys for users.
+The key is printed to stdout. Use it to bootstrap your setup, then create dedicated keys for users.
 
 ### Create keys via CLI
 
 ```bash
-funnel keys create --name "ci-deploy"
+funnel keys create ci-deploy
+funnel keys create ci-deploy --scopes tunnels
 ```
 
 ### Create keys via API
@@ -47,9 +48,7 @@ Keys can be created with an expiry time. After expiry, the key is rejected.
 
 ```bash
 funnel keys list
-# find the key ID, then:
-curl -X DELETE https://tunnel.example.com/api/v1/keys/<id> \
-  -H "Authorization: Bearer $ADMIN_KEY"
+funnel keys revoke <id>
 ```
 
 ## OAuth

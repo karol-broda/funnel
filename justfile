@@ -52,6 +52,10 @@ machete:
 gen-openapi:
     cargo run -p funnel-server -- --dump-openapi > docs/openapi.json
 
+# generate cli reference mdx for the docs site
+gen-cli-reference:
+    cargo run -p funnel-client -- generate-cli-reference --mdx > docs/content/docs/client/cli.mdx
+
 # build nix packages
 nix-build:
     nix build .#funnel-server .#funnel-client

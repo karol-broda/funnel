@@ -20,21 +20,21 @@ Teams group users together and scope tunnel visibility.
 Admins can create teams:
 
 ```bash
-funnel teams create --name backend
+funnel teams create backend
 ```
 
 ## Manage members
 
 ```bash
-funnel teams add-member --team <team_id> --user <user_id>
-funnel teams remove-member --team <team_id> --user <user_id>
-funnel teams set-member-role --team <team_id> --user <user_id> --role owner
+funnel teams add-member <team_id> <user_id>
+funnel teams remove-member <team_id> <user_id>
+funnel teams set-role <team_id> <user_id> owner
 ```
 
 List members:
 
 ```bash
-funnel teams list-members --team <team_id>
+funnel teams members <team_id>
 ```
 
 ## Team-scoped tunnels
@@ -53,7 +53,9 @@ Admins can list users, change roles, and deactivate accounts:
 
 ```bash
 funnel users list
-funnel users set-role --user <user_id> --role admin
+funnel users set-role <user_id> admin
+funnel users deactivate <user_id>
+funnel users reactivate <user_id>
 ```
 
 Deactivated users cannot authenticate and their active tunnels are rejected.

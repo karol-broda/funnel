@@ -14,11 +14,11 @@ current_context = "production"
 
 [contexts.production]
 server = "https://tunnel.example.com"
-token = "fnl_abc123..."
+token = "sk_abc123..."
 
 [contexts.staging]
 server = "https://staging.tunnel.example.com"
-token = "fnl_def456..."
+token = "sk_def456..."
 ```
 
 The file is created with `0600` permissions to protect tokens.
@@ -66,7 +66,7 @@ Environment variables take precedence over the config file:
 This is useful in CI or scripts where you don't want to modify the config file:
 
 ```bash
-FUNNEL_SERVER=https://ci.tunnel.example.com FUNNEL_TOKEN=fnl_ci_key funnel http 3000
+FUNNEL_SERVER=https://ci.tunnel.example.com FUNNEL_TOKEN=sk_ci_key funnel http 3000
 ```
 
 ## Per-command override

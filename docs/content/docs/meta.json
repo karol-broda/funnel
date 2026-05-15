@@ -20,6 +20,7 @@
     "nix/home-manager",
     "---Reference---",
     "reference/architecture",
+    "reference/protocol",
     "reference/server-api",
     "roadmap"
   ]

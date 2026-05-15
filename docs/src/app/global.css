@@ -75,6 +75,10 @@ html[data-scroll-behavior='smooth'] {
   border-style: none;
 }
 
+figure.shiki[data-full-height] > [role="region"] {
+  max-height: none !important;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--scroll) transparent;
