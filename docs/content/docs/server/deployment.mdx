@@ -1,6 +1,18 @@
 ---
 title: Deployment
 description: Run the funnel server
+seo:
+  title: "Deploy funnel server: PostgreSQL, SQLite, Docker, or NixOS"
+  description: "Run a self-hosted tunnel server with PostgreSQL or embedded Turso (SQLite). Deploy with Docker, NixOS, or a single binary. Full configuration reference."
+  keywords:
+    - deploy self-hosted tunnel server
+    - tunnel server Docker
+    - tunnel server PostgreSQL
+    - tunnel server NixOS
+    - self-hosted ngrok server
+    - single binary tunnel server
+    - tunnel server configuration
+  priority: 0.9
 ---
 
 The server is a single binary that handles HTTP API, QUIC tunnel connections, and optionally TLS termination.
@@ -39,8 +51,28 @@ All options can be set via CLI flags or environment variables.
 | `--turso-db-path` | `FUNNEL_TURSO_DB_PATH` | `./funnel.db` | Embedded database path |
 | `--seed-api-key` | `FUNNEL_SEED_API_KEY` | `false` | Create a seed API key on startup |
 | `--initial-admin-email` | `FUNNEL_INITIAL_ADMIN_EMAIL` | - | Auto-promote this email to admin on first login |
+| `--enable-tcp-tunnels` | `FUNNEL_ENABLE_TCP_TUNNELS` | `false` | Enable TCP/TLS tunnel support |
+| `--stream-port-min` | `FUNNEL_STREAM_PORT_MIN` | `10000` | Lowest port for TCP tunnel allocation |
+| `--stream-port-max` | `FUNNEL_STREAM_PORT_MAX` | `60000` | Highest port for TCP tunnel allocation |
 
 For TLS and OAuth options, see [TLS](/docs/server/tls) and [authentication](/docs/server/authentication).
+
+### TCP tunnels
+
+TCP tunnels are disabled by default because they allocate ports directly on the server. To enable them:
+
+```bash
+funnel-server --enable-tcp-tunnels
+```
+
+When enabled, tunnels allocate ports from the `stream-port-min` to `stream-port-max` range. Make sure these ports are open in your firewall:
+
+```bash
+funnel-server --enable-tcp-tunnels --stream-port-min 20000 --stream-port-max 20100
+sudo ufw allow 20000:20100/tcp
+```
+
+Without `--enable-tcp-tunnels`, clients requesting TCP or TLS tunnels receive an `unsupported_tunnel_type` error.
 
 ## Database choice
 
@@ -55,7 +87,23 @@ If `--database-url` is set, PostgreSQL is used. Otherwise the server falls back 
 OCI images are published for `linux/amd64` and `linux/arm64`:
 
 ```bash
-docker run -p 8080:8080 -p 4433:4433/udp ghcr.io/karol-broda/funnel-server
+docker run \
+  -p 8080:8080 \
+  -p 4433:4433/udp \
+  -p 10000-60000:10000-60000 \
+  ghcr.io/karol-broda/funnel-server
+```
+
+The port range `10000-60000` is for TCP tunnels. If you don't need TCP tunnels, omit it. To use a smaller range:
+
+```bash
+docker run \
+  -p 8080:8080 \
+  -p 4433:4433/udp \
+  -p 20000-20100:20000-20100 \
+  -e FUNNEL_STREAM_PORT_MIN=20000 \
+  -e FUNNEL_STREAM_PORT_MAX=20100 \
+  ghcr.io/karol-broda/funnel-server
 ```
 
 ## NixOS

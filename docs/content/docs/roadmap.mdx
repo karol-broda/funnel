@@ -1,6 +1,15 @@
 ---
 title: Roadmap
 description: Planned features and future direction
+seo:
+  title: "Roadmap: request inspection, UDP tunneling, and more"
+  description: "Planned funnel features: project config files, UDP tunneling, request inspection UI, shell completions, and a web dashboard."
+  keywords:
+    - tunnel roadmap
+    - UDP tunnel planned
+    - tunnel request inspection
+    - tunnel web dashboard
+  priority: 0.6
 ---
 
 ## Project config file
@@ -54,22 +63,6 @@ funnel http 3000 --auth user:pass
 funnel http 3000 --allow-ip 10.0.0.0/8
 funnel http 3000 --expires 2h
 ```
-
-## TCP tunneling
-
-```bash
-funnel tcp 5432 --id my-db
-```
-
-Raw TCP forwarding. The server allocates a port and forwards bytes bidirectionally.
-
-## TLS passthrough
-
-```bash
-funnel tls 8443 --id secure-app
-```
-
-Forward TLS connections without terminating them. Routes via SNI.
 
 ## UDP tunneling
 

@@ -1,13 +1,23 @@
 ---
 title: Protocol
 description: Wire protocol specification for funnel QUIC tunnels
+seo:
+  title: "Wire protocol specification: MessagePack framing over QUIC"
+  description: "Complete specification of the funnel binary wire protocol. MessagePack serialization, length-prefixed framing, QUIC handshake flow, request proxying, WebSocket upgrades, and error codes."
+  keywords:
+    - QUIC wire protocol specification
+    - MessagePack binary protocol
+    - tunnel protocol handshake
+    - QUIC framing protocol
+    - tunnel error codes
+    - binary tunnel protocol
 ---
 
 Funnel uses a custom binary protocol over QUIC for tunnel communication. All structured data is serialized with [MessagePack](https://msgpack.org/) using named fields (`rmp_serde::to_vec_named`). The current protocol version is **1**.
 
 ## Transport
 
-The QUIC connection uses ALPN identifier `funnel`. After the TLS handshake, the client opens a single bidirectional stream for the handshake exchange. Subsequent streams are opened by the server, one per incoming HTTP request.
+The QUIC connection uses ALPN identifier `funnel`. After the TLS handshake, the client opens a single bidirectional stream for the handshake exchange. Subsequent streams are opened by the server, one per incoming request (HTTP) or connection (TCP/stream).
 
 ## Handshake
 
@@ -46,9 +56,9 @@ TunnelSpec {
 **id** is a validated DNS subdomain label: lowercase alphanumeric and hyphens, cannot start or end with a hyphen. If omitted from the CLI, an 8-character random ID is generated.
 
 **type** values:
-- `http`: HTTP tunneling with subdomain routing (currently the only supported type)
-- `stream`: raw TCP forwarding (reserved)
-- `dgram`: UDP forwarding (reserved)
+- `http`: HTTP tunneling with subdomain routing
+- `stream`: raw TCP/TLS forwarding with port-based routing
+- `dgram`: UDP forwarding (reserved, not yet implemented)
 
 ### Server to client
 
@@ -82,13 +92,15 @@ TunnelResult {
 }
 
 ServerLimits {
-  +------------------+--------------------------+
-  | max_streams      | uint32 (default: 128)    |
-  +------------------+--------------------------+
-  | max_request_body | uint64 (default: 64 MiB) |
-  +------------------+--------------------------+
-  | dgram_mtu        | uint16 (optional)        |
-  +------------------+--------------------------+
+  +----------------------+-------------------------------+
+  | max_streams          | uint32 (default: 128)         |
+  +----------------------+-------------------------------+
+  | max_request_body     | uint64 (default: 64 MiB)      |
+  +----------------------+-------------------------------+
+  | dgram_mtu            | uint16 (optional)             |
+  +----------------------+-------------------------------+
+  | allowed_tunnel_types | array<string> (default: ["http"]) |
+  +----------------------+-------------------------------+
 }
 ```
 
@@ -112,14 +124,32 @@ For metadata frames (handshake, request/response headers), the payload is Messag
 
 Request and response bodies are streamed directly after the metadata frame without framing, using the QUIC stream's own flow control.
 
-## Request flow
+## Data streams
 
-Once the handshake is complete, the server handles incoming HTTP requests by opening new QUIC streams to the client:
+Once the handshake is complete, the server opens new QUIC bidirectional streams for incoming traffic. Every data stream starts with a `DataHeader` metadata frame that tells the client which type of traffic it carries.
 
-### Server to client (request)
+### DataHeader envelope
 
 ```
-HttpRequest {
+DataHeader (tagged union on "type") {
+  +------+-------------------------------+
+  | type | "http" | "stream"             |
+  +------+-------------------------------+
+  | ...  | type-specific fields          |
+  +------+-------------------------------+
+}
+```
+
+The `type` field determines how the client processes the stream. The client deserializes the metadata frame into the appropriate variant.
+
+### HTTP data streams
+
+One QUIC stream per HTTP request/response cycle.
+
+```
+HttpRequest (type = "http") {
+  +-------------+------------------------------+
+  | type        | "http"                       |
   +-------------+------------------------------+
   | tunnel_id   | string                       |
   +-------------+------------------------------+
@@ -138,8 +168,6 @@ HttpRequest {
 
 The server sends the metadata frame, then streams the request body on the same QUIC stream.
 
-### Client to server (response)
-
 ```
 HttpResponse {
   +----------+----------------------------+
@@ -152,9 +180,44 @@ HttpResponse {
 
 The client forwards the request to the local service, then sends the response metadata frame followed by the response body.
 
-### WebSocket upgrades
+#### WebSocket upgrades
 
 When `upgrade` is `true`, the tunnel switches to bidirectional byte streaming after the initial response metadata. Both sides pipe raw bytes between the QUIC stream and their respective TCP connections.
+
+### Stream data streams (TCP/TLS)
+
+One QUIC stream per TCP connection. Used for raw TCP forwarding and TLS passthrough.
+
+```
+StreamHeader (type = "stream") {
+  +-------------+------------------------------+
+  | type        | "stream"                     |
+  +-------------+------------------------------+
+  | tunnel_id   | string                       |
+  +-------------+------------------------------+
+  | remote_addr | string (IP:port)             |
+  +-------------+------------------------------+
+  | server_port | uint16                       |
+  +-------------+------------------------------+
+  | sni         | string (optional)            |
+  +-------------+------------------------------+
+}
+```
+
+After the `StreamHeader` frame, the stream becomes a raw bidirectional byte pipe. No further framing. The client connects to the local service port and copies bytes in both directions:
+
+```
+remote client -> server TCP port -> QUIC stream -> client -> local service
+local service -> client -> QUIC stream -> server TCP port -> remote client
+```
+
+**Half-close semantics:** TCP FIN from the remote is forwarded as QUIC `finish()` on the send side, and the client forwards it as TCP `shutdown(Write)` to the local service.
+
+**Port allocation:** When a stream tunnel is registered in the handshake, the server binds a TCP listener:
+- If `remote_port` is specified and non-zero: bind that exact port. If unavailable, the tunnel registration fails with `port_unavailable`.
+- If `remote_port` is 0 or omitted: allocate from the configured range (default 10000-60000). The assigned port is returned in `TunnelResult.remote_port`.
+
+**sni field:** Reserved for TLS passthrough routing. When present, the server matched the incoming connection's SNI hostname to determine which tunnel to forward to. Currently only port-based routing is implemented.
 
 ## Error codes
 
@@ -214,9 +277,10 @@ Shared across the wire protocol, REST API error responses, and CLI `--json` outp
 1. Client connects to the server QUIC port (default `4433`) with ALPN `funnel`
 2. Client opens a bidirectional stream and sends a `Handshake` frame
 3. Server validates the token (must have `tunnels` scope), checks the user is active, and registers each tunnel
-4. Server responds with `HandshakeResult` on the same stream
-5. The connection stays open. The server opens new streams as HTTP requests arrive.
-6. On disconnect, the server deregisters all tunnels and records session statistics (bytes in/out, request count, duration)
+4. For `stream` tunnels, the server binds a TCP listener on the allocated or requested port
+5. Server responds with `HandshakeResult` on the same stream (including allocated `remote_port` for stream tunnels)
+6. The connection stays open. The server opens new streams as HTTP requests or TCP connections arrive.
+7. On disconnect, the server deregisters all tunnels, stops any TCP listeners, and records session statistics (bytes in/out, request count, duration)
 
 ## Serialization details
 

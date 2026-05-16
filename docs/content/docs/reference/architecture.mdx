@@ -1,73 +1,230 @@
 ---
 title: Architecture
 description: How funnel tunnels work under the hood
+seo:
+  title: "Architecture: HTTP, TCP, and TLS tunnels over QUIC"
+  description: "How funnel uses QUIC for multiplexed tunnel connections. HTTP tunnels with subdomain routing, TCP tunnels with port allocation, TLS passthrough, WebSocket forwarding, and reconnection."
+  keywords:
+    - QUIC tunnel architecture
+    - multiplexed tunnel connection
+    - per-request QUIC streams
+    - subdomain tunnel routing
+    - TCP tunnel port allocation
+    - TLS passthrough tunnel
+    - WebSocket tunnel forwarding
+    - tunnel connection migration
 ---
 
 ## Overview
 
-Funnel is a client-server system where the client maintains a persistent QUIC connection to the server. When a public request arrives at the server, it opens a new QUIC stream to the client, which forwards the request to the local service and sends the response back.
+Funnel is a client-server system where the client maintains a persistent QUIC connection to the server. The server exposes local services to the public internet through three tunnel types:
+
+| Type | Routing | Use case |
+| --- | --- | --- |
+| **HTTP** | subdomain (`my-app.tunnel.example.com`) | web apps, APIs, webhooks |
+| **TCP** | allocated port (`tunnel.example.com:15432`) | databases, SSH, game servers |
+| **TLS** | allocated port (passthrough, no termination) | mTLS, end-to-end encryption |
+
+All tunnel types share a single QUIC connection between client and server.
 
 ```
-                        QUIC connection
-  ┌────────┐         (persistent, muxed)          ┌────────┐
-  │ Client │ ◄──────────────────────────────────► │ Server │
-  └───┬────┘                                      └───┬────┘
-      │                                               │
-      │ HTTP                                     HTTP │
-      ▼                                               ▼
-  ┌────────┐                                   ┌──────────┐
-  │ Local  │                                   │ Public   │
-  │ Service│                                   │ Internet │
-  └────────┘                                   └──────────┘
+                         QUIC connection
+  ┌────────┐          (persistent, muxed)          ┌────────┐
+  │ Client │ ◄───────────────────────────────────► │ Server │
+  └───┬────┘                                       └───┬────┘
+      │                                                │
+      │ HTTP / TCP / TLS                               │
+      ▼                                                ▼
+  ┌─────────┐                                   ┌───────────┐
+  │ Local   │                                   │ Public    │
+  │ Service │                                   │ Internet  │
+  └─────────┘                                   └───────────┘
 ```
 
 ## Why QUIC
 
 Funnel uses QUIC instead of WebSocket or plain TCP for tunnel transport:
 
-- **Per-request streams**: each HTTP request gets its own QUIC stream. No head-of-line blocking. A slow response on one request doesn't delay others.
+- **Per-request streams**: each HTTP request or TCP connection gets its own QUIC stream. No head-of-line blocking. A slow response on one request doesn't delay others.
 - **Built-in multiplexing**: multiple concurrent requests share a single connection without framing overhead.
 - **Connection migration**: QUIC connections survive network changes (e.g. switching from WiFi to cellular).
 - **0-RTT reconnection**: after the initial handshake, reconnections can send data immediately.
 
+## Server capabilities
+
+Before connecting via QUIC, the client queries the server's REST API at `GET /api/v1/info` to discover:
+
+- **`quic_port`**: which port to connect to for the QUIC tunnel
+- **`capabilities.tunnel_types`**: which tunnel types the server accepts (`["http"]` by default, `["http", "tcp"]` when tcp tunnels are enabled)
+- **`capabilities.tls`**: whether the server terminates TLS on public connections
+- **`capabilities.oauth_providers`**: which OAuth providers are configured for login (e.g. `["github"]`)
+
+This is informational. The server is the sole enforcement point -- the client does not gatekeep based on capabilities. If a client requests a tunnel type the server doesn't support, the server rejects it in the handshake with a clear error code (`unsupported_tunnel_type`). The client treats server rejections as permanent errors and exits instead of retrying.
+
+The handshake response also includes `limits.allowed_tunnel_types` as the authoritative in-band signal, following the same pattern as `limits.dgram_mtu` (absent means unsupported).
+
 ## Connection flow
 
-1. Client connects to the server's QUIC port (default `4433`)
-2. Client opens an initial stream and sends a registration message with the tunnel ID and auth token
-3. Server validates the token, checks for ID conflicts, and registers the tunnel
-4. Server assigns a subdomain: `<tunnel_id>.<base_domain>`
-5. The QUIC connection stays open. The server opens new streams as requests arrive.
+1. Client queries `GET /api/v1/info` to discover the QUIC port and server capabilities
+2. Client connects to the server's QUIC port (default `4433`)
+3. Client opens an initial stream and sends a registration message with the tunnel ID, tunnel type, and auth token
+4. Server validates the token, checks for ID conflicts, and registers the tunnel
+5. For HTTP tunnels: server assigns a subdomain (`<tunnel_id>.<base_domain>`)
+6. For TCP/TLS tunnels: server binds a TCP port and returns the allocated port number
+7. The QUIC connection stays open. The server opens new streams as traffic arrives.
 
-## Request proxying
+## HTTP tunnels
 
-When a request arrives at `<tunnel_id>.<base_domain>`:
+HTTP tunnels use subdomain routing. The server inspects the `Host` header of incoming requests and routes based on the first DNS label.
 
-1. Server matches the subdomain to a registered tunnel
-2. Server opens a new QUIC stream to the client
-3. Server serializes the HTTP request (method, path, headers, body) and sends it over the stream
-4. Client deserializes the request and forwards it to the local service via HTTP
-5. Client reads the local response, serializes it, and sends it back over the same stream
-6. Server reconstructs the HTTP response and sends it to the original caller
+```
+funnel http 3000 --id my-app
+```
 
-Each request uses its own stream, so the server can handle many concurrent requests to the same tunnel without coordination.
+```
+internet                          server                           client
+   │                                │                                │
+   │  GET my-app.tunnel.example.com │                                │
+   │ ──────────────────────────────►│                                │
+   │                                │  open QUIC stream              │
+   │                                │  send HttpRequest metadata     │
+   │                                │ ──────────────────────────────►│
+   │                                │                                │ forward to
+   │                                │                                │ localhost:3000
+   │                                │  HttpResponse + body           │
+   │                                │ ◄────────────────────────────  │
+   │  HTTP response                 │                                │
+   │ ◄──────────────────────────────│                                │
+```
 
-## WebSocket forwarding
+**Subdomain routing**: the server middleware inspects the `Host` header. If the subdomain matches a registered tunnel, the request goes to the tunnel proxy. Otherwise it falls through to the API routes.
 
-WebSocket upgrade requests are detected and handled specially. The tunnel transparently forwards WebSocket frames between the public client and the local service, maintaining the bidirectional connection.
+**DNS setup**: requires a wildcard DNS record pointing to the server. For example, `*.tunnel.example.com` pointing to the server's IP address.
 
-## Reconnection
+### WebSocket forwarding
 
-If the QUIC connection drops, the client reconnects with exponential backoff. During reconnection, the tunnel subdomain is unavailable. Once reconnected, the same tunnel ID is re-registered (if still available).
+WebSocket upgrade requests are detected and handled specially. After the HTTP 101 response, the QUIC stream becomes a raw bidirectional byte pipe between the public client and the local service.
 
-## Subdomain routing
+### Proxy headers
 
-The server uses a middleware layer that inspects the `Host` header of incoming requests. If the subdomain matches a registered tunnel, the request is routed to the tunnel proxy. Otherwise, it falls through to the API routes.
-
-## Proxy headers
-
-The server adds standard proxy headers to forwarded requests:
+The server adds standard proxy headers to forwarded HTTP requests:
 
 - `X-Forwarded-For`: client IP address (appended if already present)
 - `X-Forwarded-Host`: original host header
 - `X-Forwarded-Proto`: `http` or `https`
 - `X-Real-IP`: client IP address
+
+## TCP tunnels
+
+TCP tunnels forward raw bytes without HTTP framing. Instead of subdomain routing, the server allocates a TCP port and listens for connections on it.
+
+TCP tunnels must be explicitly enabled on the server with `--enable-tcp-tunnels`. They are disabled by default because they expose ports directly on the server.
+
+```
+funnel tcp 5432 --id my-db
+```
+
+```
+internet                          server                           client
+   │                                │                                │
+   │  TCP connect to                │                                │
+   │  tunnel.example.com:15432      │                                │
+   │ ──────────────────────────────►│                                │
+   │                                │  open QUIC stream              │
+   │                                │  send StreamHeader metadata    │
+   │                                │ ──────────────────────────────►│
+   │                                │                                │ TCP connect to
+   │                                │                                │ localhost:5432
+   │                                │                                │
+   │  ◄──────── bidirectional raw bytes ──────────────────────────►  │
+   │                                │                                │
+```
+
+### How port allocation works
+
+When a TCP tunnel is registered, the server binds a TCP listener:
+
+- **Specific port** (`--remote-port 15432`): binds that exact port. Fails with `port_unavailable` if already in use.
+- **Auto-assign** (default): allocates a port from the server's configured range (default 10000-60000). The allocated port is returned in the handshake response and printed by the client.
+
+The server reports the allocated port to the client, which displays it:
+
+```
+funnel tcp
+
+  forwarding  localhost:5432
+  tunnel id   my-db
+  remote port 15432 (allocated)
+```
+
+Remote clients connect to `<server_host>:<allocated_port>`. Each incoming TCP connection gets its own QUIC stream for independent bidirectional byte relay.
+
+### Port range configuration
+
+The server controls which ports are available for TCP tunnels:
+
+| Flag | Env | Default | Description |
+| --- | --- | --- | --- |
+| `--stream-port-min` | `FUNNEL_STREAM_PORT_MIN` | `10000` | lowest port for auto-allocation |
+| `--stream-port-max` | `FUNNEL_STREAM_PORT_MAX` | `60000` | highest port for auto-allocation |
+
+Make sure these ports are open in your firewall. For example, with `ufw`:
+
+```bash
+sudo ufw allow 10000:60000/tcp
+```
+
+Or restrict the range:
+
+```bash
+funnel-server --stream-port-min 20000 --stream-port-max 20100
+sudo ufw allow 20000:20100/tcp
+```
+
+### Half-close semantics
+
+TCP supports closing one direction while keeping the other open (FIN). Funnel preserves this end-to-end: a TCP FIN from the remote client becomes a QUIC stream finish, which the client forwards as a TCP shutdown to the local service. This matters for protocols like PostgreSQL's copy mode or custom wire protocols that use half-close for signaling.
+
+### What TCP tunnels are for
+
+- **Databases**: expose a local PostgreSQL, MySQL, or Redis instance
+- **SSH**: expose local SSH server for remote access
+- **Game servers**: expose a local game server on a specific port
+- **Custom protocols**: anything that speaks TCP
+
+### HTTP vs TCP: which to use
+
+| | HTTP tunnel | TCP tunnel |
+| --- | --- | --- |
+| **Routing** | subdomain (DNS label) | port number |
+| **DNS** | needs wildcard DNS | no DNS needed beyond server hostname |
+| **URL** | `https://my-app.tunnel.example.com` | `tunnel.example.com:15432` |
+| **Protocol awareness** | full HTTP: headers, status codes, proxy headers, WebSocket | none: raw bytes |
+| **Inspection** | method, path, status logged | connection/disconnect logged |
+| **Use when** | the local service speaks HTTP | the local service speaks anything else |
+
+If the local service speaks HTTP, use an HTTP tunnel. You get subdomain routing, proxy headers, WebSocket support, and request logging. For everything else, use a TCP tunnel.
+
+## TLS tunnels
+
+TLS tunnels are TCP tunnels where the traffic happens to be TLS-encrypted. The server does not terminate TLS; bytes are forwarded as-is. The local service handles the TLS handshake directly with the remote client.
+
+```
+funnel tls 8443 --id secure-app
+```
+
+This is identical to `funnel tcp` in terms of port allocation and data flow. The distinction is semantic: it signals that the traffic is TLS and the server should not attempt to inspect or modify it. The server is a blind relay.
+
+Use TLS tunnels when:
+
+- the local service requires mutual TLS (mTLS) with the remote client
+- you need end-to-end encryption that the tunnel server cannot see
+- the local service manages its own certificates
+
+## Reconnection
+
+If the QUIC connection drops, the client reconnects with exponential backoff (1s, 2s, 4s, 8s, ... up to 30s). During reconnection:
+
+- HTTP tunnel subdomains are unavailable (requests get 404)
+- TCP tunnel ports are released and reallocated on reconnection
+- Once reconnected, the same tunnel ID is re-registered (if still available)
