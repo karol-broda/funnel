@@ -4,6 +4,7 @@ mod config;
 mod tunnel;
 
 use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::Shell;
 use tracing_subscriber::EnvFilter;
 
 fn build_version() -> &'static str {
@@ -125,6 +126,16 @@ enum Command {
         #[command(subcommand)]
         command: cmd::config::Command,
     },
+    /// generate shell completion script
+    #[command(after_long_help = cmd::examples![
+        "funnel completion bash > /etc/bash_completion.d/funnel",
+        "funnel completion zsh > ~/.zfunc/_funnel",
+        "funnel completion fish > ~/.config/fish/completions/funnel.fish",
+    ])]
+    Completion {
+        /// shell to generate completions for
+        shell: Shell,
+    },
     /// generate cli reference as markdown
     #[command(hide = true)]
     GenerateCliReference {
@@ -201,6 +212,12 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Context { command } => cmd::context::run(command),
         Command::Config { command } => cmd::config::run(&command),
+        Command::Completion { shell } => {
+            let mut cmd = Cli::command();
+            let name = cmd.get_name().to_string();
+            clap_complete::generate(shell, &mut cmd, name, &mut std::io::stdout());
+            Ok(())
+        }
         Command::GenerateCliReference { mdx } => {
             print!("{}", cmd::cli_reference::generate(&Cli::command(), mdx));
             Ok(())

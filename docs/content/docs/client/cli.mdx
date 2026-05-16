@@ -401,6 +401,22 @@ print config file path.
 funnel config path
 ```
 
+## funnel completion
+
+generate shell completion script.
+
+```bash
+funnel completion <shell>
+```
+
+`<shell>` is shell to generate completions for.
+
+```bash
+funnel completion bash > /etc/bash_completion.d/funnel
+funnel completion zsh > ~/.zfunc/_funnel
+funnel completion fish > ~/.config/fish/completions/funnel.fish
+```
+
 ## Global Flags
 
 | Flag | Description |

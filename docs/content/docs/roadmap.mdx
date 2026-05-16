@@ -3,7 +3,7 @@ title: Roadmap
 description: Planned features and future direction
 seo:
   title: "Roadmap: request inspection, UDP tunneling, and more"
-  description: "Planned funnel features: project config files, UDP tunneling, request inspection UI, shell completions, and a web dashboard."
+  description: "Planned funnel features: project config files, UDP tunneling, request inspection UI, and a web dashboard."
   keywords:
     - tunnel roadmap
     - UDP tunnel planned
@@ -35,13 +35,6 @@ Run multiple tunnels from a single process, sharing a single QUIC connection:
 
 ```bash
 funnel http 3000 --id api -- http 5173 --id frontend
-```
-
-## Shell completions
-
-```bash
-funnel completion bash > /etc/bash_completion.d/funnel
-funnel completion zsh > ~/.zfunc/_funnel
 ```
 
 ## Request inspection
