@@ -1,4 +1,4 @@
-# funnel
+![funnel homepage flow-field graphic](docs/public/readme-hero.png)
 
 a self-hosted tunneling server and client. run the server on your own infrastructure, point the client at it, and expose local services through secure QUIC tunnels.
 
