@@ -1,5 +1,7 @@
+#[allow(clippy::unwrap_used)]
 mod auth;
 mod harness;
+mod tcp;
 
 use futures_util::{SinkExt, StreamExt};
 use harness::TestEnv;
