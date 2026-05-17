@@ -36,19 +36,10 @@
 in {
   default = mkRustShell {
     toolchain = toolchains.default;
-  };
-
-  nightly = mkRustShell {
-    toolchain = toolchains.nightly;
-  };
-
-  wasm = mkRustShell {
-    toolchain = toolchains.wasm;
     extraPackages = with pkgs; [
-      wasm-pack
-      wasm-bindgen-cli
-      wasmtime
+      tailwindcss
       binaryen
+      nodejs
     ];
   };
 
