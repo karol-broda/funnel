@@ -11,5 +11,5 @@ workspace = true
 [dependencies]
 funnel-core.workspace = true
 
-leptos = { version = "0.7", features = ["csr"] }
+leptos = { version = "0.8", features = ["csr"] }
 serde.workspace = true
