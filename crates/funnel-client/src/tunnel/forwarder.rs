@@ -101,8 +101,8 @@ impl Forwarder {
         }
     }
 
-    pub async fn forward(&self, meta: HttpRequest, body: Bytes) -> ForwardResult {
-        match self.try_forward(&meta, body).await {
+    pub async fn forward(&self, meta: &HttpRequest, body: Bytes) -> ForwardResult {
+        match self.try_forward(meta, body).await {
             Ok((resp_meta, incoming, conn)) => ForwardResult::Success {
                 meta: resp_meta,
                 body: incoming,
@@ -184,6 +184,9 @@ fn build_request(
     if let Some(headers) = builder.headers_mut() {
         for (name, values) in &meta.headers {
             if !is_upgrade && is_hop_by_hop(name) {
+                continue;
+            }
+            if !is_upgrade && name.eq_ignore_ascii_case("accept-encoding") {
                 continue;
             }
             if name.eq_ignore_ascii_case("host") {
@@ -336,7 +339,8 @@ mod tests {
         let addr = start_test_server(app).await;
         let fwd = Forwarder::new(addr);
 
-        let result = fwd.forward(test_meta("GET", "/hello"), Bytes::new()).await;
+        let meta = test_meta("GET", "/hello");
+        let result = fwd.forward(&meta, Bytes::new()).await;
         let (meta, body, _conn) = collect_success(result).await;
 
         assert_eq!(meta.status, 200);
@@ -353,9 +357,8 @@ mod tests {
         let addr = start_test_server(app).await;
         let fwd = Forwarder::new(addr);
 
-        let result = fwd
-            .forward(test_meta("POST", "/echo"), Bytes::from("payload"))
-            .await;
+        let meta = test_meta("POST", "/echo");
+        let result = fwd.forward(&meta, Bytes::from("payload")).await;
         let (meta, body, _conn) = collect_success(result).await;
 
         assert_eq!(meta.status, 200);
@@ -377,9 +380,8 @@ mod tests {
         let addr = start_test_server(app).await;
         let fwd = Forwarder::new(addr);
 
-        let result = fwd
-            .forward(test_meta("GET", "/headers"), Bytes::new())
-            .await;
+        let meta = test_meta("GET", "/headers");
+        let result = fwd.forward(&meta, Bytes::new()).await;
         let (meta, _, _conn) = collect_success(result).await;
 
         assert_eq!(meta.status, 200);
@@ -399,7 +401,8 @@ mod tests {
         let addr = start_test_server(app).await;
         let fwd = Forwarder::new(addr);
 
-        let result = fwd.forward(test_meta("GET", "/hop"), Bytes::new()).await;
+        let meta = test_meta("GET", "/hop");
+        let result = fwd.forward(&meta, Bytes::new()).await;
         let (meta, _, _conn) = collect_success(result).await;
 
         assert!(!meta.headers.contains_key("connection"));
@@ -413,9 +416,8 @@ mod tests {
         let addr = start_test_server(app).await;
         let fwd = Forwarder::new(addr);
 
-        let result = fwd
-            .forward(test_meta("GET", "/missing"), Bytes::new())
-            .await;
+        let meta = test_meta("GET", "/missing");
+        let result = fwd.forward(&meta, Bytes::new()).await;
         let (meta, _, _conn) = collect_success(result).await;
 
         assert_eq!(meta.status, 404);
@@ -426,7 +428,8 @@ mod tests {
     async fn forward_unreachable_returns_502() -> TestResult {
         let fwd = Forwarder::new("127.0.0.1:1".to_string());
 
-        let result = fwd.forward(test_meta("GET", "/"), Bytes::new()).await;
+        let meta = test_meta("GET", "/");
+        let result = fwd.forward(&meta, Bytes::new()).await;
 
         match result {
             ForwardResult::LocalError { meta, body } => {
@@ -458,11 +461,38 @@ mod tests {
         let mut meta = test_meta("GET", "/check");
         meta.headers.insert("x-test".into(), vec!["present".into()]);
 
-        let result = fwd.forward(meta, Bytes::new()).await;
+        let result = fwd.forward(&meta, Bytes::new()).await;
         let (resp, body, _conn) = collect_success(result).await;
 
         assert_eq!(resp.status, 200);
         assert_eq!(body, b"present");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn forward_strips_accept_encoding() -> TestResult {
+        let app = Router::new().route(
+            "/check",
+            get(|headers: axum::http::HeaderMap| async move {
+                headers
+                    .get("accept-encoding")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("missing")
+                    .to_string()
+            }),
+        );
+        let addr = start_test_server(app).await;
+        let fwd = Forwarder::new(addr);
+
+        let mut meta = test_meta("GET", "/check");
+        meta.headers
+            .insert("accept-encoding".into(), vec!["gzip, br, zstd".into()]);
+
+        let result = fwd.forward(&meta, Bytes::new()).await;
+        let (resp, body, _conn) = collect_success(result).await;
+
+        assert_eq!(resp.status, 200);
+        assert_eq!(body, b"missing");
         Ok(())
     }
 
@@ -472,14 +502,16 @@ mod tests {
         let addr = start_test_server(app).await;
         let fwd = Forwarder::new(addr);
 
-        let result = fwd.forward(test_meta("GET", "/ok"), Bytes::new()).await;
+        let meta = test_meta("GET", "/ok");
+        let result = fwd.forward(&meta, Bytes::new()).await;
         let (meta, _, conn) = collect_success(result).await;
         assert_eq!(meta.status, 200);
         fwd.release(conn);
 
         assert_eq!(fwd.pool.lock().unwrap().len(), 1);
 
-        let result = fwd.forward(test_meta("GET", "/ok"), Bytes::new()).await;
+        let meta = test_meta("GET", "/ok");
+        let result = fwd.forward(&meta, Bytes::new()).await;
         let (meta, _, _conn) = collect_success(result).await;
         assert_eq!(meta.status, 200);
 
