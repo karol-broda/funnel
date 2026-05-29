@@ -1,4 +1,6 @@
 /* oxlint-disable new-cap -- Next.js font loaders are factory functions, not constructors */
+import { DocsSearchDialog } from '@/components/docs-search'
+import { searchDialogOptions } from '@/lib/search'
 import { RootProvider } from 'fumadocs-ui/provider/next'
 import { DM_Sans, DM_Serif_Display } from 'next/font/google'
 import type { ReactNode } from 'react'
@@ -51,6 +53,8 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  const searchOptions = searchDialogOptions()
+
   return (
     <html
       lang="en"
@@ -90,7 +94,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="font-[family-name:var(--font-body)] antialiased">
-        <RootProvider>{children}</RootProvider>
+        <RootProvider
+          search={{
+            SearchDialog: DocsSearchDialog,
+            options: searchOptions,
+          }}
+        >
+          {children}
+        </RootProvider>
       </body>
     </html>
   )
