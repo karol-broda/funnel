@@ -52,6 +52,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # cli
 clap = { version = "4", features = ["derive", "env"] }
+clap_complete = "4"
 
 # database
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "migrate", "ipnetwork"] }
@@ -59,6 +60,7 @@ turso = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v7", "serde"] }
 ipnetwork = "0.20"
+base64 = "0.22"
 
 # openapi
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }

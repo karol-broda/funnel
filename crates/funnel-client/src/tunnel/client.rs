@@ -10,9 +10,10 @@ use tokio::io;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+use funnel_core::protocol::error_codes::ConnectionCode;
 use funnel_core::protocol::frame;
 use funnel_core::protocol::handshake::{
-    Handshake, HandshakeResult, TunnelSpec, TunnelStatus, TunnelType,
+    AccessControl, Handshake, HandshakeResult, TunnelSpec, TunnelStatus, TunnelType,
 };
 use funnel_core::protocol::request::{DataHeader, HttpRequest};
 use funnel_core::protocol::{PROTOCOL_VERSION, QUIC_ALPN};
@@ -72,6 +73,18 @@ pub struct ConnectResult {
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_CONCURRENT_REQUESTS: usize = 128;
 
+pub struct TunnelOptions {
+    pub tunnel_id: TunnelId,
+    pub local_addr: String,
+    pub tunnel_type: TunnelType,
+    pub token: Option<String>,
+    pub quic_port: u16,
+    pub insecure: bool,
+    pub team: Option<String>,
+    pub remote_port: Option<u16>,
+    pub access: Option<AccessControl>,
+}
+
 pub struct TunnelClient {
     pub tunnel_id: TunnelId,
     local_addr: String,
@@ -82,28 +95,19 @@ pub struct TunnelClient {
     endpoint: quinn::Endpoint,
     team: Option<String>,
     remote_port: Option<u16>,
+    access: Option<AccessControl>,
 }
 
 impl TunnelClient {
-    pub fn new(
-        tunnel_id: TunnelId,
-        server_url: &str,
-        local_addr: String,
-        tunnel_type: TunnelType,
-        token: Option<String>,
-        quic_port: u16,
-        insecure: bool,
-        team: Option<String>,
-        remote_port: Option<u16>,
-    ) -> anyhow::Result<Self> {
+    pub fn new(server_url: &str, opts: TunnelOptions) -> anyhow::Result<Self> {
         let url = Url::parse(server_url)?;
         let host = url
             .host_str()
             .ok_or_else(|| anyhow::anyhow!("no host in server url"))?
             .to_string();
 
-        let quic_addr = resolve_quic_addr(&host, quic_port)?;
-        let skip_verify = insecure || is_loopback(&host, &quic_addr);
+        let quic_addr = resolve_quic_addr(&host, opts.quic_port)?;
+        let skip_verify = opts.insecure || is_loopback(&host, &quic_addr);
         let client_config = build_client_config(skip_verify)?;
 
         // bind address must match the remote address family
@@ -117,15 +121,16 @@ impl TunnelClient {
         endpoint.set_default_client_config(client_config);
 
         Ok(Self {
-            tunnel_id,
-            local_addr,
-            tunnel_type,
-            token,
+            tunnel_id: opts.tunnel_id,
+            local_addr: opts.local_addr,
+            tunnel_type: opts.tunnel_type,
+            token: opts.token,
             quic_addr,
             host,
             endpoint,
-            team,
-            remote_port,
+            team: opts.team,
+            remote_port: opts.remote_port,
+            access: opts.access,
         })
     }
 
@@ -181,6 +186,15 @@ impl TunnelClient {
             }
         }
 
+        if let Some(quinn::ConnectionError::ApplicationClosed(close)) = conn.close_reason()
+            && close.error_code == quinn::VarInt::from_u32(ConnectionCode::TunnelExpired.as_u32())
+        {
+            return Err(ConnectError::Permanent(PermanentError {
+                code: "tunnel_expired".to_string(),
+                message: "tunnel expired".to_string(),
+            }));
+        }
+
         conn.close(quinn::VarInt::from_u32(0), b"client shutdown");
         Ok(())
     }
@@ -217,6 +231,7 @@ impl TunnelClient {
                 local_port: None,
                 routing: None,
                 remote_port: self.remote_port,
+                access: self.access.clone(),
             }],
         };
 

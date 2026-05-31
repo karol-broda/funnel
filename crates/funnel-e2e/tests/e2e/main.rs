@@ -1,6 +1,9 @@
 #[allow(clippy::unwrap_used)]
+mod access;
+#[allow(clippy::unwrap_used)]
 mod auth;
 mod harness;
+#[allow(clippy::unwrap_used)]
 mod tcp;
 
 use futures_util::{SinkExt, StreamExt};

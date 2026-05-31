@@ -11,6 +11,7 @@ use funnel_core::protocol::handshake::TunnelType;
 use funnel_core::protocol::request::{DataHeader, HttpRequest, HttpResponse, StreamHeader};
 use funnel_core::tunnel::id::TunnelId;
 
+use super::access::{AccessDenied, AccessPolicy};
 use super::stats::TunnelStats;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -24,6 +25,7 @@ pub struct ActiveTunnel {
     connected_at: tokio::time::Instant,
     owner_id: uuid::Uuid,
     team_id: Option<uuid::Uuid>,
+    access: AccessPolicy,
 }
 
 impl ActiveTunnel {
@@ -34,6 +36,7 @@ impl ActiveTunnel {
         remote_port: Option<u16>,
         owner_id: uuid::Uuid,
         team_id: Option<uuid::Uuid>,
+        access: AccessPolicy,
     ) -> Self {
         Self {
             id,
@@ -44,11 +47,29 @@ impl ActiveTunnel {
             connected_at: tokio::time::Instant::now(),
             owner_id,
             team_id,
+            access,
         }
     }
 
     pub const fn id(&self) -> &TunnelId {
         &self.id
+    }
+
+    pub const fn expires_at(&self) -> Option<tokio::time::Instant> {
+        self.access.expires_at()
+    }
+
+    pub const fn strips_authorization_header(&self) -> bool {
+        self.access.strips_authorization_header()
+    }
+
+    pub fn check_access(
+        &self,
+        headers: &axum::http::HeaderMap,
+        peer_ip: std::net::IpAddr,
+    ) -> Result<(), AccessDenied> {
+        self.access
+            .check(headers, peer_ip, tokio::time::Instant::now())
     }
 
     pub fn stats(&self) -> super::stats::TunnelStatsSnapshot {

@@ -1,0 +1,107 @@
+---
+title: Access Control
+description: Protect a tunnel with basic auth, ip allowlists, and expiry
+seo:
+  title: "Tunnel access control: basic auth, ip allowlist, and expiry"
+  description: "Restrict who can reach an http tunnel with http basic auth, cidr ip allowlists, and automatic expiry. Enforced at the server edge before requests reach your local service."
+  keywords:
+    - tunnel basic auth
+    - tunnel ip allowlist
+    - tunnel expiry
+    - protect localhost tunnel
+    - restrict tunnel access
+  priority: 0.7
+---
+
+Access control restricts who can reach an http tunnel. All checks run on the
+server, at the tunnel edge, before a request is forwarded to your local
+service. The options are independent and can be combined.
+
+These flags apply to `funnel http` tunnels.
+
+## Basic auth
+
+Require basic auth credentials on every incoming request:
+
+```bash
+funnel http 3000 --auth admin:secret
+```
+
+There are two schemes, chosen with `--auth-scheme`. Credentials travel to the
+server over the encrypted QUIC connection and are held in memory for the
+lifetime of the tunnel.
+
+### proxy scheme (default)
+
+Credentials are carried in the `Proxy-Authorization` header. funnel is acting as
+a proxy, so it authenticates with the proxy-level header and leaves your
+application's `Authorization` header untouched. The server strips
+`Proxy-Authorization` before forwarding, so your local service never sees
+funnel's credentials.
+
+Requests without matching credentials get a `407 Proxy Authentication Required`
+with a `Proxy-Authenticate` header. Browsers do not show a login prompt for
+this, so it suits CLI and programmatic clients:
+
+```bash
+curl -H "Proxy-Authorization: Basic $(printf 'admin:secret' | base64)" https://my-app.tunnel.example.com
+```
+
+### basic scheme
+
+```bash
+funnel http 3000 --auth admin:secret --auth-scheme basic
+```
+
+Credentials are carried in the standard `Authorization` header. Requests without
+matching credentials get a `401 Unauthorized` with a `WWW-Authenticate` header,
+which makes browsers show their native login prompt. The server consumes and
+strips `Authorization` before forwarding, so it never reaches your local
+service. The trade-off: an application behind a `basic` gate cannot use its own
+`Authorization` header, since the gate owns it.
+
+### choosing a default
+
+`--auth-scheme` overrides everything. Otherwise the default comes from
+`default_auth_scheme` in `~/.config/funnel/config.toml`, falling back to `proxy`:
+
+```toml
+default_auth_scheme = "basic"
+```
+
+## IP allowlist
+
+Restrict access to one or more client ip ranges in cidr notation. The flag can
+be repeated:
+
+```bash
+funnel http 3000 --allow-ip 10.0.0.0/8
+funnel http 3000 --allow-ip 192.168.0.0/16 --allow-ip 203.0.113.4/32
+```
+
+Requests from any other peer address get a `403`. The matched address is the
+peer connecting to the funnel server, so behind a load balancer this is the
+balancer's address rather than the original client.
+
+## Expiry
+
+Automatically close the tunnel after a duration:
+
+```bash
+funnel http 3000 --expires 2h
+```
+
+Accepted units are seconds (`s`), minutes (`m`), hours (`h`), and days (`d`). A
+bare number is treated as seconds. When the deadline passes, the server stops
+serving traffic and closes the connection, which ends the client process.
+
+## Combining options
+
+```bash
+funnel http 3000 \
+  --auth admin:secret \
+  --allow-ip 10.0.0.0/8 \
+  --expires 30m
+```
+
+Checks are evaluated in order: expiry, then ip allowlist, then basic auth.

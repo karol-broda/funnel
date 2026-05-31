@@ -7,7 +7,11 @@ use funnel_core::tunnel::id::TunnelId;
 
 use crate::api_client;
 use crate::config;
-use crate::tunnel::{client::TunnelClient, display::TunnelDisplay, runner};
+use crate::tunnel::{
+    client::{TunnelClient, TunnelOptions},
+    display::TunnelDisplay,
+    runner,
+};
 
 #[derive(clap::Args)]
 #[command(after_long_help = super::examples![
@@ -109,15 +113,18 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
     let display = Arc::new(TunnelDisplay::new());
 
     let client = TunnelClient::new(
-        tunnel_id,
         &server_url,
-        local_addr,
-        TunnelType::Stream,
-        token,
-        quic_port,
-        args.insecure,
-        args.team,
-        remote_port,
+        TunnelOptions {
+            tunnel_id,
+            local_addr,
+            tunnel_type: TunnelType::Stream,
+            token,
+            quic_port,
+            insecure: args.insecure,
+            team: args.team,
+            remote_port,
+            access: None,
+        },
     )?;
 
     let shutdown = CancellationToken::new();

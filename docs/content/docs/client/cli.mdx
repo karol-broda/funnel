@@ -22,12 +22,19 @@ funnel http <address>
 | `--quic-port` | quic port on the server (overrides discovery) |
 | `--insecure` | skip tls certificate verification (for development) |
 | `--team` | associate tunnel with a team |
+| `--auth` | require basic auth for incoming requests (format: user:pass) |
+| `--auth-scheme` | auth header scheme: proxy (Proxy-Authorization/407) or basic (Authorization/401, browser prompt). defaults to config or proxy |
+| `--allow-ip` | restrict access to client ip ranges in cidr notation (repeatable) |
+| `--expires` | automatically close the tunnel after a duration (e.g. 90s, 30m, 2h, 1d) |
 
 ```bash
 funnel http 3000  # localhost:3000
 funnel http 3000 --id my-app  # custom subdomain
 funnel http 127.0.0.1:8080 --server https://tunnel.example.com  # explicit server
 funnel http 3000 --team backend  # associate with team
+funnel http 3000 --auth admin:secret  # basic auth via Proxy-Authorization
+funnel http 3000 --allow-ip 10.0.0.0/8  # restrict by client ip
+funnel http 3000 --expires 2h  # auto close after a duration
 ```
 
 ## funnel tcp
@@ -399,6 +406,22 @@ print config file path.
 
 ```bash
 funnel config path
+```
+
+## funnel completion
+
+generate shell completion script.
+
+```bash
+funnel completion <shell>
+```
+
+`<shell>` is shell to generate completions for.
+
+```bash
+funnel completion bash > /etc/bash_completion.d/funnel
+funnel completion zsh > ~/.zfunc/_funnel
+funnel completion fish > ~/.config/fish/completions/funnel.fish
 ```
 
 ## Global Flags

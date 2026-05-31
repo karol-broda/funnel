@@ -13,6 +13,11 @@ pub fn prepare_forwarding_headers(
     let mut headers: HashMap<String, Vec<String>> = HashMap::new();
 
     for (name, value) in original {
+        // funnel's access gate consumes Proxy-Authorization; it must not reach
+        // the local service, which keeps the app's Authorization untouched.
+        if name == axum::http::header::PROXY_AUTHORIZATION {
+            continue;
+        }
         let key = name.as_str().to_string();
         let val = value.to_str().unwrap_or("").to_string();
         headers.entry(key).or_default().push(val);
@@ -106,5 +111,23 @@ mod tests {
 
         assert_eq!(result["content-type"], vec!["application/json"]);
         assert_eq!(result["authorization"], vec!["Bearer token123"]);
+    }
+
+    #[test]
+    fn strips_proxy_authorization_but_keeps_application_authorization() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            HeaderValue::from_static("Bearer app-token"),
+        );
+        headers.insert(
+            "proxy-authorization",
+            HeaderValue::from_static("Basic Zm9vOmJhcg=="),
+        );
+
+        let result = prepare_forwarding_headers(&headers, "t.example.com", test_addr(), false);
+
+        assert_eq!(result["authorization"], vec!["Bearer app-token"]);
+        assert!(!result.contains_key("proxy-authorization"));
     }
 }

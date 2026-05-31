@@ -50,6 +50,20 @@ TunnelSpec {
   +------------+-------------------------+
   | remote_port| uint16 (optional)       |
   +------------+-------------------------+
+  | access     | AccessControl (optional)|
+  +------------+-------------------------+
+}
+
+AccessControl {
+  +-------------+------------------------+
+  | basic_auth  | string (optional)      |
+  +-------------+------------------------+
+  | auth_scheme | "proxy"|"basic"        |
+  +-------------+------------------------+
+  | allow_ip    | array<string> (cidr)   |
+  +-------------+------------------------+
+  | expires_secs| uint64 (optional)      |
+  +-------------+------------------------+
 }
 ```
 
@@ -59,6 +73,8 @@ TunnelSpec {
 - `http`: HTTP tunneling with subdomain routing
 - `stream`: raw TCP/TLS forwarding with port-based routing
 - `dgram`: UDP forwarding (reserved, not yet implemented)
+
+**access** applies optional access control, enforced by the server at the tunnel edge for `http` tunnels. `basic_auth` holds `user:pass` credentials. `auth_scheme` (default `proxy`) selects which header carries them: `proxy` matches `Proxy-Authorization` and rejects with `407`, `basic` matches `Authorization` and rejects with `401`. Either way the gate strips the header it consumed before forwarding, so under `proxy` the application's `Authorization` is left untouched. `allow_ip` is a list of cidr ranges permitted to connect, and `expires_secs` closes the tunnel after the given number of seconds. Invalid cidr entries fail registration with `bad_request`.
 
 ### Server to client
 
@@ -235,6 +251,7 @@ Used in `Connection::close()`. Fatal, all tunnels on the connection are torn dow
 | `VersionMismatch` | `0x03` | incompatible protocol version |
 | `InternalError` | `0x04` | server-side failure |
 | `ShuttingDown` | `0x05` | server is shutting down gracefully |
+| `TunnelExpired` | `0x06` | tunnel reached its configured expiry; the client does not reconnect |
 
 ### Stream codes
 

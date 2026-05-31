@@ -315,21 +315,20 @@ fn build_oauth_state(cli: &Cli) -> anyhow::Result<Option<Arc<OAuthState>>> {
 }
 
 async fn build_state(
+    cli: &Cli,
     pool: Option<sqlx::PgPool>,
-    turso_db_path: &str,
     is_tls: bool,
-    oauth_state: Option<Arc<OAuthState>>,
-    initial_admin_email: Option<String>,
-    quic_port: u16,
-    host: String,
-    tcp_tunnels_enabled: bool,
-    stream_port_min: u16,
-    stream_port_max: u16,
 ) -> anyhow::Result<Arc<app::AppState>> {
+    let oauth_state = build_oauth_state(cli)?;
+    let initial_admin_email = cli.initial_admin_email.clone();
+    let quic_port = cli.quic_port;
+    let host = cli.host.clone();
+    let tcp_tunnels_enabled = cli.enable_tcp_tunnels;
+
     let tunnels = Arc::new(TunnelManager::new());
     let stream_listeners = Arc::new(proxy::stream_listener::StreamListenerManager::new(
-        stream_port_min,
-        stream_port_max,
+        cli.stream_port_min,
+        cli.stream_port_max,
     ));
 
     if let Some(pool) = pool {
@@ -353,7 +352,7 @@ async fn build_state(
             server_id: generate_server_id()?,
         }))
     } else {
-        let db = store::turso::open(turso_db_path)
+        let db = store::turso::open(&cli.turso_db_path)
             .await
             .map_err(|e| anyhow::anyhow!("failed to open turso database: {e}"))?;
 
@@ -396,21 +395,7 @@ fn generate_server_id() -> anyhow::Result<String> {
 
 async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
     let metrics_handle = metrics::setup()?;
-    let oauth_state = build_oauth_state(&cli)?;
-    let initial_admin_email = cli.initial_admin_email.clone();
-    let state = build_state(
-        pool,
-        &cli.turso_db_path,
-        false,
-        oauth_state,
-        initial_admin_email,
-        cli.quic_port,
-        cli.host.clone(),
-        cli.enable_tcp_tunnels,
-        cli.stream_port_min,
-        cli.stream_port_max,
-    )
-    .await?;
+    let state = build_state(&cli, pool, false).await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);
 
     if cli.seed_api_key {
@@ -498,21 +483,7 @@ async fn run_with_tls(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()
     .await?;
 
     let metrics_handle = metrics::setup()?;
-    let oauth_state = build_oauth_state(&cli)?;
-    let initial_admin_email = cli.initial_admin_email.clone();
-    let state = build_state(
-        pool,
-        &cli.turso_db_path,
-        true,
-        oauth_state,
-        initial_admin_email,
-        cli.quic_port,
-        cli.host.clone(),
-        cli.enable_tcp_tunnels,
-        cli.stream_port_min,
-        cli.stream_port_max,
-    )
-    .await?;
+    let state = build_state(&cli, pool, true).await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);
 
     if cli.seed_api_key {
