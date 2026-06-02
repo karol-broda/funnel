@@ -1,0 +1,116 @@
+---
+title: Troubleshooting
+description: Fix common client, server, tunnel, and configuration issues
+seo:
+  title: "Troubleshooting funnel tunnels, auth, config, and Nix"
+  description: "Diagnose common funnel issues including failed tunnel connections, missing auth tokens, wrong contexts, local service errors, TCP ports, TLS passthrough, and Nix development shell setup."
+  keywords:
+    - funnel tunnel troubleshooting
+    - tunnel connection failed
+    - funnel config show
+    - localhost tunnel 502
+    - QUIC tunnel debug
+    - Nix develop funnel
+search:
+  tags:
+    - getting-started
+    - troubleshooting
+    - configuration
+    - tunnels
+    - nix
+  shortcut: true
+  shortcutOrder: 20
+  shortcutDescription: Diagnose auth, config, and tunnel issues
+  shortcutIcon: LifebuoyIcon
+---
+
+Use this page when a command fails, a tunnel connects but traffic does not reach your app, or the client appears to use the wrong server.
+
+## Check Effective Config
+
+Start by printing the merged config:
+
+```bash
+funnel config show
+```
+
+The output shows the user config path and the nearest project `funnel.toml`, if one was found. Regular commands use the merged config, while commands such as `funnel login`, `funnel logout`, and `funnel context create` write to the user config.
+
+If a command uses the wrong server, check this order:
+
+```txt
+CLI flags > environment variables > nearest funnel.toml > user config > built-in defaults
+```
+
+Common overrides are `--context`, `--server`, `--token`, `FUNNEL_CONTEXT`, `FUNNEL_SERVER`, and `FUNNEL_TOKEN`.
+
+## Authentication Errors
+
+If a command requires auth and no token is available:
+
+```bash
+funnel login
+```
+
+For automation, use an API key:
+
+```bash
+FUNNEL_TOKEN=sk_... funnel http 3000
+```
+
+Avoid committing tokens to `funnel.toml`. Store tokens in `$XDG_CONFIG_HOME/funnel/config.toml`, a secret manager, or an environment variable.
+
+## Tunnel Connects, Requests Fail
+
+If the public URL returns a 502 or your app never receives traffic, verify the local service first:
+
+```bash
+curl -i http://localhost:3000
+```
+
+Then start the tunnel with the exact local address:
+
+```bash
+funnel http localhost:3000
+funnel http 127.0.0.1:3000
+```
+
+Use the [HTTP Inspector](/docs/client/inspector) to see whether requests reach the client, what status your local service returns, and which headers and body previews were captured.
+
+## QUIC Or TLS Connection Issues
+
+If the client cannot connect to the server, check that the server is reachable and that the QUIC port is open. The client can override discovery with:
+
+```bash
+funnel http 3000 --quic-port 443
+```
+
+For local development with self-signed certificates or loopback servers:
+
+```bash
+funnel http 3000 --insecure
+```
+
+Do not use `--insecure` for production servers.
+
+## TCP And TLS Passthrough
+
+TCP tunnels require the server to be started with TCP tunnels enabled. See [Server Deployment](/docs/server/deployment) for server flags.
+
+If a requested remote port is not available, let the server allocate one:
+
+```bash
+funnel tcp 5432 --remote-port 0
+```
+
+TLS passthrough forwards encrypted bytes without termination. Use `funnel tls` only when the local service already speaks TLS.
+
+## Nix Development Shell
+
+Use the default dev shell for local development:
+
+```bash
+nix develop
+```
+
+It includes the Rust toolchain, `wasm32-unknown-unknown`, Node, Tailwind tooling, and binaryen. The separate `nightly` and `wasm` dev shells are no longer exported.

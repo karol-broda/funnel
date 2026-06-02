@@ -10,13 +10,18 @@ seo:
     - tunnel CLI configuration
     - CI/CD tunnel environment variables
     - switch tunnel server
+search:
+  tags:
+    - getting-started
+    - configuration
+    - auth
 ---
 
 Contexts let you configure and switch between multiple funnel servers. Each context stores a server URL and authentication token.
 
 ## Config file
 
-Contexts are stored in `~/.config/funnel/config.toml`:
+Contexts are stored in `$XDG_CONFIG_HOME/funnel/config.toml`:
 
 ```toml
 current_context = "production"
@@ -31,6 +36,8 @@ token = "sk_def456..."
 ```
 
 The file is created with `0600` permissions to protect tokens.
+
+See [Client Configuration](/docs/client/configuration) for project `funnel.toml` defaults, inspector defaults, and config precedence.
 
 ## Create a context
 

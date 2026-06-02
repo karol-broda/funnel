@@ -14,6 +14,14 @@ seo:
     - self-hosted ngrok
     - tunnel server Rust
   priority: 1
+search:
+  tags:
+    - overview
+  shortcut: true
+  shortcutOrder: 0
+  shortcutTitle: Docs Home
+  shortcutDescription: Start from the full documentation index
+  shortcutIcon: BookOpenIcon
 ---
 
 Funnel exposes local services through secure tunnels. It runs over QUIC with per-request streams, handles TLS automatically via Let's Encrypt, and ships as a single binary for both server and client.
@@ -26,6 +34,12 @@ Funnel exposes local services through secure tunnels. It runs over QUIC with per
   </Card>
   <Card title="Quickstart" href="/docs/getting-started/quickstart">
     Get a tunnel running in under two minutes.
+  </Card>
+  <Card title="Troubleshooting" href="/docs/getting-started/troubleshooting">
+    Diagnose config, auth, connection, and local forwarding issues.
+  </Card>
+  <Card title="HTTP Inspector" href="/docs/client/inspector">
+    Capture, replay, and export HTTP tunnel traffic from the client.
   </Card>
   <Card title="Server deployment" href="/docs/server/deployment">
     Run your own funnel server with PostgreSQL or embedded Turso.

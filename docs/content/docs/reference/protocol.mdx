@@ -11,6 +11,11 @@ seo:
     - QUIC framing protocol
     - tunnel error codes
     - binary tunnel protocol
+search:
+  tags:
+    - reference
+    - protocol
+    - tunnels
 ---
 
 Funnel uses a custom binary protocol over QUIC for tunnel communication. All structured data is serialized with [MessagePack](https://msgpack.org/) using named fields (`rmp_serde::to_vec_named`). The current protocol version is **1**.

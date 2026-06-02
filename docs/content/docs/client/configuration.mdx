@@ -1,0 +1,124 @@
+---
+title: Client Configuration
+description: Configure user defaults and project-level funnel.toml settings
+seo:
+  title: "Client configuration: user defaults and project funnel.toml"
+  description: "Understand funnel's user config file, project funnel.toml files, precedence, contexts, and HTTP inspector defaults."
+search:
+  tags:
+    - client
+    - configuration
+    - auth
+  shortcut: true
+  shortcutOrder: 30
+  shortcutDescription: Contexts, project config, and tokens
+  shortcutIcon: TerminalIcon
+---
+
+The client reads configuration from two places:
+
+| File                                  | Purpose                                                          |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| `$XDG_CONFIG_HOME/funnel/config.toml` | User defaults, server contexts, and authentication tokens        |
+| `funnel.toml`                         | Project defaults for the current repository or working directory |
+
+When a command runs, funnel searches from the current directory upward and uses the nearest `funnel.toml` it finds.
+
+## Preference
+
+Settings are resolved in this order:
+
+```txt
+CLI flags > environment variables > nearest funnel.toml > user config > built-in defaults
+```
+
+Project config overrides user defaults for regular commands, but commands that mutate configuration, such as `funnel context create`, `funnel context use`, `funnel login`, and `funnel logout`, write to the user config.
+
+`funnel config show` prints the effective merged configuration and includes comments showing which user and project files were considered. `funnel config path` prints only the user config path.
+
+## User Config
+
+The user config stores long-lived defaults and credentials:
+
+```toml
+current_context = "production"
+
+[inspector]
+enabled = false
+addr = "127.0.0.1:4040"
+
+[contexts.production]
+server = "https://tunnel.example.com"
+token = "sk_abc123..."
+
+[contexts.staging]
+server = "https://staging.tunnel.example.com"
+token = "sk_def456..."
+```
+
+The file is created with `0600` permissions on Unix systems to protect tokens.
+
+## Project Config
+
+Use `funnel.toml` for repository-specific defaults:
+
+```toml
+current_context = "staging"
+
+[inspector]
+enabled = true
+addr = "127.0.0.1:4040"
+
+[contexts.staging]
+server = "https://staging.tunnel.example.com"
+```
+
+Avoid storing tokens in `funnel.toml` if the file is committed. Put tokens in the user config or pass them with `FUNNEL_TOKEN`.
+
+## Inspector Defaults
+
+The HTTP inspector is opt-in by default and is only available for `funnel http` tunnels. Enable it for a single run:
+
+```bash
+funnel http 3000 --inspect
+```
+
+Or enable it by default in either config file:
+
+```toml
+[inspector]
+enabled = true
+addr = "127.0.0.1:4040"
+```
+
+Use `--no-inspect` to override a config default, and `--inspect-addr` to bind the inspector to a different local address.
+
+See [HTTP Inspector](/docs/client/inspector) for captured data, replay behavior, HAR export, and security notes.
+
+## Environment Overrides
+
+Environment variables take precedence over both config files:
+
+| Variable         | Overrides                           |
+| ---------------- | ----------------------------------- |
+| `FUNNEL_CONTEXT` | Active context name                 |
+| `FUNNEL_SERVER`  | Server URL for the resolved context |
+| `FUNNEL_TOKEN`   | Token for the resolved context      |
+
+```bash
+FUNNEL_SERVER=https://ci.tunnel.example.com FUNNEL_TOKEN=sk_ci_key funnel http 3000
+```
+
+## Inspecting Config
+
+Show the effective merged config:
+
+```bash
+funnel config show
+```
+
+Print the user config path:
+
+```bash
+funnel config path
+```
