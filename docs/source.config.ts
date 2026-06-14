@@ -13,11 +13,28 @@ const seoSchema = z.object({
   priority: z.number().optional(),
 })
 
+const searchSchema = z.object({
+  tags: z.array(z.string()).default([]),
+  shortcut: z.boolean().default(false),
+  shortcutOrder: z.number().default(0),
+  shortcutTitle: z.string().default(''),
+  shortcutDescription: z.string().default(''),
+  shortcutIcon: z.string().default('BookOpenIcon'),
+})
+
 export const docs = defineDocs({
   dir: 'content/docs',
   docs: {
     schema: pageSchema.extend({
       seo: seoSchema.optional(),
+      search: searchSchema.default({
+        tags: [],
+        shortcut: false,
+        shortcutOrder: 0,
+        shortcutTitle: '',
+        shortcutDescription: '',
+        shortcutIcon: 'BookOpenIcon',
+      }),
     }),
   },
 })

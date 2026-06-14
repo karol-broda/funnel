@@ -285,7 +285,6 @@ pub struct TcpTestEnv {
     client_log: PathBuf,
     turso_db_path: PathBuf,
     pub remote_port: u16,
-    pub seed_key: String,
 }
 
 impl TcpTestEnv {
@@ -322,7 +321,6 @@ impl TcpTestEnv {
             client_log,
             turso_db_path,
             remote_port,
-            seed_key,
         })
     }
 
@@ -371,9 +369,8 @@ fn start_tcp_echo_server() -> Result<(JoinHandle<()>, u16), std::io::Error> {
 
     let handle = tokio::spawn(async move {
         loop {
-            let (mut stream, _) = match tokio_listener.accept().await {
-                Ok(pair) => pair,
-                Err(_) => continue,
+            let Ok((mut stream, _)) = tokio_listener.accept().await else {
+                continue;
             };
             tokio::spawn(async move {
                 let (mut read, mut write) = tokio::io::split(&mut stream);

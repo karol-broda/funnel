@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
+build = "build.rs"
 
 [lints]
 workspace = true
@@ -14,17 +15,20 @@ funnel-core.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 axum.workspace = true
+base64 = "0.22"
 clap = { workspace = true, features = ["derive"] }
 clap_complete.workspace = true
 config_rs = { package = "config", version = "0.15", default-features = false, features = ["toml"] }
 dirs = "6"
-console = "0.15"
+console = "0.16"
 bytes = "1"
 http.workspace = true
 http-body-util = "0.1"
+futures-util = "0.3"
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
-indicatif = "0.17"
+indicatif = "0.18"
+leptos = { version = "0.8", features = ["ssr"] }
 quinn.workspace = true
 reqwest = { workspace = true, features = ["rustls", "stream", "json"] }
 rustls = { workspace = true, default-features = false, features = ["ring", "std"] }
@@ -33,7 +37,7 @@ serde_json.workspace = true
 uuid.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
-toml = "0.8"
+toml = "1.1"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 url = "2"
@@ -42,4 +46,4 @@ webpki-roots = "1"
 [dev-dependencies]
 axum = { workspace = true, features = ["ws"] }
 futures-util = "0.3"
-tokio-tungstenite = "0.26"
+tokio-tungstenite = "0.29"

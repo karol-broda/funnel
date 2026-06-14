@@ -1,6 +1,9 @@
+#![recursion_limit = "256"]
+
 mod api_client;
 mod cmd;
 mod config;
+mod inspector;
 mod tunnel;
 
 use clap::{CommandFactory, Parser, Subcommand};
@@ -181,32 +184,32 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Logout => cmd::auth::logout(ctx),
         Command::Whoami => {
-            let cfg = config::load()?;
+            let cfg = config::load_effective()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
             cmd::whoami::run(&resolved.server, &token, &resolved.name, cli.json).await
         }
         Command::Status => {
-            let cfg = config::load()?;
+            let cfg = config::load_effective()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
             cmd::status::run(&resolved.server, &token, cli.json).await
         }
         Command::Keys { command } => {
-            let cfg = config::load()?;
+            let cfg = config::load_effective()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
             cmd::keys::run(&resolved.server, &token, command, cli.json).await
         }
         Command::Sessions { all, limit } => {
-            let cfg = config::load()?;
+            let cfg = config::load_effective()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
             cmd::sessions::list(&resolved.server, &token, all, limit, cli.json).await
         }
         Command::Users { command } => {
-            let cfg = config::load()?;
+            let cfg = config::load_effective()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
             cmd::users::run(&resolved.server, &token, command, cli.json).await
         }
         Command::Teams { command } => {
-            let cfg = config::load()?;
+            let cfg = config::load_effective()?;
             let (resolved, token) = config::resolve_authenticated(&cfg, ctx)?;
             cmd::teams::run(&resolved.server, &token, command, cli.json).await
         }

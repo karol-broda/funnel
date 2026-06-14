@@ -7,7 +7,12 @@ use funnel_core::tunnel::id::TunnelId;
 
 use crate::api_client;
 use crate::config;
-use crate::tunnel::{client::TunnelClient, display::TunnelDisplay, runner};
+use crate::inspector::Inspector;
+use crate::tunnel::{
+    client::{TunnelClient, TunnelConfig},
+    display::TunnelDisplay,
+    runner,
+};
 
 #[derive(clap::Args)]
 #[command(after_long_help = super::examples![
@@ -43,12 +48,24 @@ pub struct Args {
     /// associate tunnel with a team
     #[arg(long)]
     pub team: Option<String>,
+
+    /// enable the local web inspector for this tunnel
+    #[arg(long)]
+    pub inspect: bool,
+
+    /// disable the local web inspector, overriding config
+    #[arg(long)]
+    pub no_inspect: bool,
+
+    /// local address for the web inspector
+    #[arg(long)]
+    pub inspect_addr: Option<String>,
 }
 
 pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
     let local_addr = normalize_address(&args.address);
 
-    let cfg = config::load().unwrap_or_default();
+    let cfg = config::load_effective().unwrap_or_default();
     let resolved = config::resolve(&cfg, ctx_override).ok();
 
     let server_url = args
@@ -95,21 +112,44 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
     if let Some(ref team_name) = args.team {
         println!("  team        {team_name}");
     }
+
+    if args.inspect && args.no_inspect {
+        anyhow::bail!("--inspect and --no-inspect cannot be used together");
+    }
+
+    let inspector_enabled = args.inspect || (cfg.inspector.enabled && !args.no_inspect);
+    let inspector = if inspector_enabled {
+        let inspector_addr = args
+            .inspect_addr
+            .as_deref()
+            .unwrap_or(&cfg.inspector.addr)
+            .parse()?;
+        let inspector = Inspector::new(
+            local_addr.clone(),
+            public_url,
+            tunnel_id.as_ref().to_string(),
+        );
+        println!("  inspector   http://{inspector_addr}");
+        Some((inspector, inspector_addr))
+    } else {
+        None
+    };
     println!();
 
     let display = Arc::new(TunnelDisplay::new());
 
-    let client = TunnelClient::new(
+    let client = TunnelClient::new(TunnelConfig {
         tunnel_id,
-        &server_url,
+        server_url,
         local_addr,
-        TunnelType::Http,
+        tunnel_type: TunnelType::Http,
         token,
         quic_port,
-        args.insecure,
-        args.team,
-        None,
-    )?;
+        insecure: args.insecure,
+        team: args.team,
+        remote_port: None,
+        inspector: inspector.as_ref().map(|(inspector, _)| inspector.handle()),
+    })?;
 
     let shutdown = CancellationToken::new();
     let shutdown_signal = shutdown.clone();
@@ -118,6 +158,16 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
         tokio::signal::ctrl_c().await.ok();
         shutdown_signal.cancel();
     });
+
+    if let Some((inspector, inspector_addr)) = inspector {
+        let inspector_shutdown = shutdown.child_token();
+        let display = Arc::clone(&display);
+        tokio::spawn(async move {
+            if let Err(e) = inspector.serve(inspector_addr, inspector_shutdown).await {
+                display.println(&format!("inspector error: {e}"));
+            }
+        });
+    }
 
     runner::run(&client, shutdown, &display).await;
 

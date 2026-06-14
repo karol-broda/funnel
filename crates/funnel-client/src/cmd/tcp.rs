@@ -7,7 +7,11 @@ use funnel_core::tunnel::id::TunnelId;
 
 use crate::api_client;
 use crate::config;
-use crate::tunnel::{client::TunnelClient, display::TunnelDisplay, runner};
+use crate::tunnel::{
+    client::{TunnelClient, TunnelConfig},
+    display::TunnelDisplay,
+    runner,
+};
 
 #[derive(clap::Args)]
 #[command(after_long_help = super::examples![
@@ -52,7 +56,7 @@ pub struct Args {
 pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
     let local_addr = format!("localhost:{}", args.port);
 
-    let cfg = config::load().unwrap_or_default();
+    let cfg = config::load_effective().unwrap_or_default();
     let resolved = config::resolve(&cfg, ctx_override).ok();
 
     let server_url = args
@@ -108,17 +112,18 @@ pub async fn run(ctx_override: Option<&str>, args: Args) -> anyhow::Result<()> {
 
     let display = Arc::new(TunnelDisplay::new());
 
-    let client = TunnelClient::new(
+    let client = TunnelClient::new(TunnelConfig {
         tunnel_id,
-        &server_url,
+        server_url,
         local_addr,
-        TunnelType::Stream,
+        tunnel_type: TunnelType::Stream,
         token,
         quic_port,
-        args.insecure,
-        args.team,
+        insecure: args.insecure,
+        team: args.team,
         remote_port,
-    )?;
+        inspector: None,
+    })?;
 
     let shutdown = CancellationToken::new();
     let shutdown_signal = shutdown.clone();

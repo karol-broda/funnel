@@ -47,21 +47,20 @@ async fn tcp_multiple_connections() -> TestResult {
     for i in 0u8..5 {
         let port = env.remote_port;
         set.spawn(async move {
-            let mut stream = TcpStream::connect(format!("127.0.0.1:{port}"))
-                .await
-                .unwrap();
+            let mut stream = TcpStream::connect(format!("127.0.0.1:{port}")).await?;
             let msg = vec![i; 100];
-            stream.write_all(&msg).await.unwrap();
-            stream.shutdown().await.unwrap();
+            stream.write_all(&msg).await?;
+            stream.shutdown().await?;
 
             let mut buf = Vec::new();
-            stream.read_to_end(&mut buf).await.unwrap();
+            stream.read_to_end(&mut buf).await?;
             assert_eq!(buf, msg);
+            Ok::<_, std::io::Error>(())
         });
     }
 
     while let Some(result) = set.join_next().await {
-        result?;
+        result??;
     }
     Ok(())
 }

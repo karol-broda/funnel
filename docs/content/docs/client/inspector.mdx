@@ -1,0 +1,89 @@
+---
+title: HTTP Inspector
+description: Capture, replay, and export HTTP tunnel traffic from the local client
+seo:
+  title: "HTTP inspector: capture and replay funnel tunnel traffic"
+  description: "Use funnel's local HTTP inspector to debug tunnel traffic, inspect headers and body previews, replay requests, export HAR files, and configure safe defaults."
+  keywords:
+    - tunnel request inspector
+    - inspect localhost tunnel traffic
+    - HTTP tunnel replay
+    - HAR export tunnel
+    - debug tunnel requests
+search:
+  tags:
+    - client
+    - inspector
+    - tunnels
+    - troubleshooting
+  shortcut: true
+  shortcutOrder: 40
+  shortcutDescription: Inspect and replay HTTP tunnel traffic
+  shortcutIcon: PathIcon
+---
+
+The HTTP inspector is a local web UI for debugging `funnel http` tunnels. It records traffic passing through the tunnel and lets you inspect requests without changing your application.
+
+## Start
+
+Enable the inspector for one tunnel:
+
+```bash
+funnel http 3000 --inspect
+```
+
+The tunnel output includes the local inspector address:
+
+```txt
+inspector   http://127.0.0.1:4040
+```
+
+Open that URL in your browser while the tunnel is running.
+
+## Configure Defaults
+
+Enable the inspector by default in your user config or project `funnel.toml`:
+
+```toml
+[inspector]
+enabled = true
+addr = "127.0.0.1:4040"
+```
+
+Override config for a single run:
+
+```bash
+funnel http 3000 --no-inspect
+funnel http 3000 --inspect-addr 127.0.0.1:5050
+```
+
+See [Client Configuration](/docs/client/configuration) for config file locations and precedence.
+
+## Captured Data
+
+The inspector captures:
+
+- request method, path, status, duration, and remote address
+- request and response headers
+- request and response body previews
+- replayed requests sent from the inspector
+
+Body previews are capped at 64 KiB. Binary bodies are labeled and exported as base64 previews in HAR output. The in-memory request list keeps the latest 250 exchanges.
+
+The inspector only captures HTTP tunnel traffic. TCP and TLS passthrough tunnels are byte streams, so they do not support request-level inspection.
+
+## Replay Requests
+
+Use **Resend** to replay a captured request against your local service. Replays are sent directly from the inspector to the local forwarding address, then added back to the request list with a `replay` source.
+
+Hop-by-hop headers and compression headers such as `Host`, `Content-Length`, `Connection`, `Transfer-Encoding`, and `Accept-Encoding` are skipped when replaying so the local HTTP client can set them correctly.
+
+## Export HAR
+
+Use **All HAR** to download every retained exchange, or **HAR** on a single request to export one exchange. HAR files include headers, timings, query strings, body sizes, and available body previews.
+
+## Security
+
+Keep the inspector bound to `127.0.0.1` unless you intentionally want another machine on your network to access captured traffic. The inspector can show sensitive headers and bodies, and replay can send requests to your local service.
+
+Do not commit secrets in `funnel.toml`. Store tokens in the user config or pass them through `FUNNEL_TOKEN`.

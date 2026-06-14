@@ -241,6 +241,7 @@ mod tests {
         let user = store.create(make_new_user("a@test.com")).await.unwrap();
 
         let found = store.find_by_id(user.id).await.unwrap();
+        drop(store);
         assert_eq!(found.unwrap().email, "a@test.com");
     }
 
@@ -248,6 +249,7 @@ mod tests {
     async fn find_by_id_missing_returns_none() {
         let store = store().await;
         let found = store.find_by_id(Uuid::now_v7()).await.unwrap();
+        drop(store);
         assert!(found.is_none());
     }
 
@@ -260,6 +262,7 @@ mod tests {
         assert!(found.is_some());
 
         let missing = store.find_by_email("nope@test.com").await.unwrap();
+        drop(store);
         assert!(missing.is_none());
     }
 
@@ -272,6 +275,7 @@ mod tests {
             .update_profile(user.id, Some("New Name"), Some("https://img.test/1.png"))
             .await
             .unwrap();
+        drop(store);
         assert_eq!(updated.name, Some("New Name".into()));
         assert_eq!(updated.avatar_url, Some("https://img.test/1.png".into()));
     }
@@ -280,6 +284,7 @@ mod tests {
     async fn new_user_gets_default_role() {
         let store = store().await;
         let user = store.create(make_new_user("d@test.com")).await.unwrap();
+        drop(store);
         assert_eq!(user.role, Role::Member);
     }
 }

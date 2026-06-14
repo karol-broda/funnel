@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@phosphor-icons/react": "2.1.10",
     "@tailwindcss/postcss": "4.2.4",
     "@takumi-rs/core": "1.1.2",
     "@takumi-rs/core-linux-x64-gnu": "1.1.2",

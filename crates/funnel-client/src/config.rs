@@ -1,17 +1,29 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 const CONFIG_DIR: &str = "funnel";
 const CONFIG_FILE: &str = "config.toml";
+const PROJECT_CONFIG_FILE: &str = "funnel.toml";
 
+/// Effective client configuration.
+///
+/// Values can come from the user config at
+/// `$XDG_CONFIG_HOME/funnel/config.toml` and from the nearest project
+/// `funnel.toml`. Project values override user defaults for commands that read
+/// the effective config.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunnelConfig {
+    /// Name of the context used when `--context` is not provided.
     #[serde(default = "default_context_name")]
     pub current_context: String,
+    /// Named server contexts. User config is the intended place for tokens.
     #[serde(default)]
     pub contexts: HashMap<String, Context>,
+    /// Local HTTP inspector defaults.
+    #[serde(default)]
+    pub inspector: InspectorConfig,
 }
 
 impl Default for FunnelConfig {
@@ -19,20 +31,48 @@ impl Default for FunnelConfig {
         Self {
             current_context: default_context_name(),
             contexts: HashMap::new(),
+            inspector: InspectorConfig::default(),
         }
     }
 }
 
+/// Defaults for the local HTTP inspector started by `funnel http`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InspectorConfig {
+    /// Start the inspector automatically for HTTP tunnels.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Address the local inspector binds to.
+    #[serde(default = "default_inspector_addr")]
+    pub addr: String,
+}
+
+impl Default for InspectorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            addr: default_inspector_addr(),
+        }
+    }
+}
+
+/// A named tunnel server context.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Context {
+    /// Base URL for the funnel server.
     #[serde(default)]
     pub server: String,
+    /// Authentication token for the server.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
 }
 
 fn default_context_name() -> String {
     "default".into()
+}
+
+fn default_inspector_addr() -> String {
+    "127.0.0.1:4040".into()
 }
 
 pub struct ResolvedContext {
@@ -48,13 +88,44 @@ pub fn config_path() -> PathBuf {
     PathBuf::from(CONFIG_FILE)
 }
 
-pub fn load() -> anyhow::Result<FunnelConfig> {
-    let path = config_path();
+pub fn project_config_path() -> Option<PathBuf> {
+    let cwd = std::env::current_dir().ok()?;
+    find_project_config(&cwd)
+}
 
+fn find_project_config(start: &Path) -> Option<PathBuf> {
+    for dir in start.ancestors() {
+        let candidate = dir.join(PROJECT_CONFIG_FILE);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+pub fn load() -> anyhow::Result<FunnelConfig> {
+    load_user()
+}
+
+pub fn load_user() -> anyhow::Result<FunnelConfig> {
+    load_from_sources(&[config_path()])
+}
+
+pub fn load_effective() -> anyhow::Result<FunnelConfig> {
+    let mut sources = vec![config_path()];
+    if let Some(project_path) = project_config_path() {
+        sources.push(project_path);
+    }
+    load_from_sources(&sources)
+}
+
+fn load_from_sources(paths: &[PathBuf]) -> anyhow::Result<FunnelConfig> {
     let mut builder = config_rs::Config::builder().set_default("current_context", "default")?;
 
-    if path.exists() {
-        builder = builder.add_source(config_rs::File::from(path));
+    for path in paths {
+        if path.exists() {
+            builder = builder.add_source(config_rs::File::from(path.clone()));
+        }
     }
 
     if let Ok(ctx) = std::env::var("FUNNEL_CONTEXT") {
@@ -193,11 +264,17 @@ pub fn delete_context(name: &str) -> anyhow::Result<()> {
 mod tests {
     use super::*;
 
+    fn temp_config_dir(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("funnel-test-{name}-{}", uuid::Uuid::now_v7()))
+    }
+
     #[test]
     fn default_config_has_no_contexts() {
         let config = FunnelConfig::default();
         assert!(config.contexts.is_empty());
         assert_eq!(config.current_context, "default");
+        assert!(!config.inspector.enabled);
+        assert_eq!(config.inspector.addr, "127.0.0.1:4040");
     }
 
     #[test]
@@ -217,12 +294,88 @@ mod tests {
         let ctx = parsed.contexts.get("default").expect("default context");
         assert_eq!(ctx.server, "https://tunnel.example.com");
         assert_eq!(ctx.token.as_deref(), Some("fnl_test123"));
+        assert!(!parsed.inspector.enabled);
+    }
+
+    #[test]
+    fn inspector_config_roundtrip() {
+        let config = FunnelConfig {
+            inspector: InspectorConfig {
+                enabled: true,
+                addr: "127.0.0.1:5050".to_string(),
+            },
+            ..Default::default()
+        };
+
+        let serialized = toml::to_string_pretty(&config).expect("serialize");
+        let parsed: FunnelConfig = toml::from_str(&serialized).expect("deserialize");
+
+        assert!(parsed.inspector.enabled);
+        assert_eq!(parsed.inspector.addr, "127.0.0.1:5050");
     }
 
     #[test]
     fn config_path_is_not_empty() {
         let path = config_path();
         assert!(!path.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn finds_project_config_in_parent_directory() {
+        let root = temp_config_dir("project-discovery");
+        let nested = root.join("apps").join("web");
+        std::fs::create_dir_all(&nested).expect("create nested dir");
+        std::fs::write(root.join(PROJECT_CONFIG_FILE), "").expect("write project config");
+
+        let found = find_project_config(&nested).expect("project config");
+        assert_eq!(found, root.join(PROJECT_CONFIG_FILE));
+
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn project_config_overrides_user_defaults() {
+        let root = temp_config_dir("merge");
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        let user_path = root.join("user.toml");
+        let project_path = root.join(PROJECT_CONFIG_FILE);
+
+        std::fs::write(
+            &user_path,
+            r#"
+current_context = "default"
+
+[inspector]
+enabled = false
+addr = "127.0.0.1:4040"
+
+[contexts.default]
+server = "https://user.example.com"
+token = "user-token"
+"#,
+        )
+        .expect("write user config");
+
+        std::fs::write(
+            &project_path,
+            r#"
+[inspector]
+enabled = true
+
+[contexts.default]
+server = "https://project.example.com"
+"#,
+        )
+        .expect("write project config");
+
+        let config = load_from_sources(&[user_path, project_path]).expect("load config");
+        assert!(config.inspector.enabled);
+        assert_eq!(config.inspector.addr, "127.0.0.1:4040");
+        let ctx = config.contexts.get("default").expect("default context");
+        assert_eq!(ctx.server, "https://project.example.com");
+        assert_eq!(ctx.token.as_deref(), Some("user-token"));
+
+        std::fs::remove_dir_all(root).expect("cleanup");
     }
 
     #[test]

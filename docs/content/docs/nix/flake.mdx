@@ -11,6 +11,15 @@ seo:
     - nix run tunnel
     - OCI container tunnel
     - reproducible tunnel build
+search:
+  tags:
+    - nix
+    - installation
+    - deployment
+  shortcut: true
+  shortcutOrder: 60
+  shortcutDescription: Packages, overlays, and OCI images
+  shortcutIcon: PlugsConnectedIcon
 ---
 
 Funnel provides a Nix flake with packages, NixOS modules, and Home Manager modules.
@@ -57,6 +66,14 @@ Then reference as `pkgs.funnel` and `pkgs.funnel-server`.
 ```bash
 nix run github:karol-broda/funnel -- http 3000
 nix run github:karol-broda/funnel#server -- --seed-api-key
+```
+
+## Development shell
+
+The default development shell includes the Rust toolchain, the `wasm32-unknown-unknown` target, and the Node/Tailwind tooling used by the docs and client inspector UI:
+
+```bash
+nix develop
 ```
 
 ## OCI containers

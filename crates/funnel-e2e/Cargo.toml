@@ -10,7 +10,7 @@ workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
-tokio-tungstenite = "0.26"
+tokio-tungstenite = "0.29"
 reqwest = { workspace = true, features = ["rustls", "json"] }
 serde_json.workspace = true
 axum = { workspace = true, features = ["ws"] }

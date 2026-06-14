@@ -175,6 +175,7 @@ mod tests {
             })
             .await
             .unwrap_or_else(|e| panic!("create user: {e}"));
+        drop(user_store);
         (TursoSessionRecorder::new(db), user.id)
     }
 
@@ -283,13 +284,16 @@ mod tests {
             })
             .await
             .unwrap();
-        let store = TursoSessionRecorder::new(db);
+        drop(user_store);
+        let store = TursoSessionRecorder::new(Arc::clone(&db));
+        drop(db);
 
         store.record_connect(u1.id, "a", None).await.unwrap();
         store.record_connect(u2.id, "b", None).await.unwrap();
         store.record_connect(u1.id, "c", None).await.unwrap();
 
         let list = store.list_for_user(u1.id, 100).await.unwrap();
+        drop(store);
         assert_eq!(list.len(), 2);
         assert!(list.iter().all(|s| s.user_id == u1.id));
     }

@@ -28,11 +28,12 @@ allow = [
     "BSD-3-Clause",
     "ISC",
     "Unicode-3.0",
-    "OpenSSL",
     "Zlib",
     "MPL-2.0",
     "CDLA-Permissive-2.0",
     "BSL-1.0",
+    # Public-domain-equivalent license used by base16 via the Leptos macro stack.
+    "CC0-1.0",
 ]
 
 [licenses.private]

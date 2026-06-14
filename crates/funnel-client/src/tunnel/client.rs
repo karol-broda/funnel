@@ -19,6 +19,8 @@ use funnel_core::protocol::{PROTOCOL_VERSION, QUIC_ALPN};
 use funnel_core::relay;
 use funnel_core::tunnel::id::TunnelId;
 
+use crate::inspector::{self, BodyPreview, InspectorHandle};
+
 use super::display::{RequestResult, TunnelDisplay};
 use super::forwarder::{ForwardResult, ForwardUpgradeResult, Forwarder};
 
@@ -82,28 +84,32 @@ pub struct TunnelClient {
     endpoint: quinn::Endpoint,
     team: Option<String>,
     remote_port: Option<u16>,
+    inspector: Option<InspectorHandle>,
+}
+
+pub struct TunnelConfig {
+    pub tunnel_id: TunnelId,
+    pub server_url: String,
+    pub local_addr: String,
+    pub tunnel_type: TunnelType,
+    pub token: Option<String>,
+    pub quic_port: u16,
+    pub insecure: bool,
+    pub team: Option<String>,
+    pub remote_port: Option<u16>,
+    pub inspector: Option<InspectorHandle>,
 }
 
 impl TunnelClient {
-    pub fn new(
-        tunnel_id: TunnelId,
-        server_url: &str,
-        local_addr: String,
-        tunnel_type: TunnelType,
-        token: Option<String>,
-        quic_port: u16,
-        insecure: bool,
-        team: Option<String>,
-        remote_port: Option<u16>,
-    ) -> anyhow::Result<Self> {
-        let url = Url::parse(server_url)?;
+    pub fn new(config: TunnelConfig) -> anyhow::Result<Self> {
+        let url = Url::parse(&config.server_url)?;
         let host = url
             .host_str()
             .ok_or_else(|| anyhow::anyhow!("no host in server url"))?
             .to_string();
 
-        let quic_addr = resolve_quic_addr(&host, quic_port)?;
-        let skip_verify = insecure || is_loopback(&host, &quic_addr);
+        let quic_addr = resolve_quic_addr(&host, config.quic_port)?;
+        let skip_verify = config.insecure || is_loopback(&host, &quic_addr);
         let client_config = build_client_config(skip_verify)?;
 
         // bind address must match the remote address family
@@ -117,15 +123,16 @@ impl TunnelClient {
         endpoint.set_default_client_config(client_config);
 
         Ok(Self {
-            tunnel_id,
-            local_addr,
-            tunnel_type,
-            token,
+            tunnel_id: config.tunnel_id,
+            local_addr: config.local_addr,
+            tunnel_type: config.tunnel_type,
+            token: config.token,
             quic_addr,
             host,
             endpoint,
-            team,
-            remote_port,
+            team: config.team,
+            remote_port: config.remote_port,
+            inspector: config.inspector,
         })
     }
 
@@ -161,6 +168,7 @@ impl TunnelClient {
                     let sem = Arc::clone(&semaphore);
                     let cancel = cancel.clone();
                     let display = Arc::clone(display);
+                    let inspector = self.inspector.clone();
 
                     tokio::spawn(async move {
                         let _permit = tokio::select! {
@@ -171,8 +179,11 @@ impl TunnelClient {
                             () = cancel.cancelled() => return,
                         };
 
-                        match handle_stream(send, recv, &fwd).await {
+                        match handle_stream(send, recv, &fwd, inspector).await {
                             Ok(result) => display.log_request(&result),
+                            Err(e) if is_benign_stream_error(&e) => {
+                                tracing::debug!(error = %e, "stream closed by peer");
+                            }
                             Err(e) => display.println(&format!("stream error: {e}")),
                         }
                     });
@@ -270,16 +281,26 @@ impl TunnelClient {
     }
 }
 
+fn is_benign_stream_error(error: &anyhow::Error) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    message.contains("sending stopped by peer")
+        || message.contains("stopped by peer")
+        || message.contains("closed by peer")
+}
+
 async fn handle_stream(
     send: quinn::SendStream,
     mut recv: quinn::RecvStream,
     forwarder: &Forwarder,
+    inspector: Option<InspectorHandle>,
 ) -> anyhow::Result<RequestResult> {
     let start = Instant::now();
     let header: DataHeader = frame::read_meta(&mut recv).await?;
 
     match header {
-        DataHeader::Http(meta) => handle_http_stream(send, recv, forwarder, meta, start).await,
+        DataHeader::Http(meta) => {
+            handle_http_stream(send, recv, forwarder, meta, start, inspector).await
+        }
         DataHeader::Stream(header) => handle_tcp_stream(send, recv, forwarder, header, start).await,
     }
 }
@@ -290,30 +311,31 @@ async fn handle_http_stream(
     forwarder: &Forwarder,
     meta: HttpRequest,
     start: Instant,
+    inspector: Option<InspectorHandle>,
 ) -> anyhow::Result<RequestResult> {
-    let method = meta.method.clone();
-    let path = meta.path.clone();
-
     if meta.upgrade {
-        return handle_upgrade_stream(send, recv, forwarder, &meta, &method, &path, start).await;
+        return handle_upgrade_stream(send, recv, forwarder, &meta, start, inspector).await;
     }
 
     let body = recv.read_to_end(64 * 1024 * 1024).await?;
     let body = Bytes::from(body);
 
-    match forwarder.forward(meta, body).await {
+    match forwarder.forward(&meta, body.clone()).await {
         ForwardResult::Success {
             meta: resp_meta,
             body: incoming,
             conn,
         } => {
             frame::write_meta(&mut send, &resp_meta).await?;
-            stream_body_to_quic(incoming, &mut send).await?;
+            let response_body = stream_body_to_quic(incoming, &mut send).await?;
             send.finish()?;
             forwarder.release(conn);
+            if let Some(inspector) = inspector {
+                inspector.record_tunnel(&meta, &body, &resp_meta, response_body, start.elapsed());
+            }
             Ok(RequestResult {
-                method,
-                path,
+                method: meta.method,
+                path: meta.path,
                 status: resp_meta.status,
                 duration: start.elapsed(),
             })
@@ -325,9 +347,18 @@ async fn handle_http_stream(
             frame::write_meta(&mut send, &resp_meta).await?;
             send.write_all(&resp_body).await?;
             send.finish()?;
+            if let Some(inspector) = inspector {
+                inspector.record_tunnel(
+                    &meta,
+                    &body,
+                    &resp_meta,
+                    inspector::body_preview(&Bytes::from(resp_body)),
+                    start.elapsed(),
+                );
+            }
             Ok(RequestResult {
-                method,
-                path,
+                method: meta.method,
+                path: meta.path,
                 status: resp_meta.status,
                 duration: start.elapsed(),
             })
@@ -370,14 +401,16 @@ async fn handle_tcp_stream(
 async fn stream_body_to_quic(
     mut body: Incoming,
     send: &mut quinn::SendStream,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<BodyPreview> {
+    let mut preview = BodyPreview::empty();
     while let Some(frame) = body.frame().await {
         let frame = frame?;
         if let Some(data) = frame.data_ref() {
             send.write_all(data).await?;
+            inspector::append_preview(&mut preview, data);
         }
     }
-    Ok(())
+    Ok(preview)
 }
 
 async fn handle_upgrade_stream(
@@ -385,9 +418,8 @@ async fn handle_upgrade_stream(
     mut recv: quinn::RecvStream,
     forwarder: &Forwarder,
     meta: &HttpRequest,
-    method: &str,
-    path: &str,
     start: Instant,
+    inspector: Option<InspectorHandle>,
 ) -> anyhow::Result<RequestResult> {
     let result = forwarder.forward_upgrade(meta).await?;
 
@@ -396,6 +428,9 @@ async fn handle_upgrade_stream(
             frame::write_meta(&mut send, &upgrade.meta).await?;
 
             let status = upgrade.meta.status;
+            if let Some(inspector) = inspector {
+                inspector.record_upgrade(meta, &upgrade.meta, start.elapsed());
+            }
 
             let upgraded_io = TokioIo::new(upgrade.upgraded);
             let (mut local_read, mut local_write) = io::split(upgraded_io);
@@ -417,8 +452,8 @@ async fn handle_upgrade_stream(
             }
 
             Ok(RequestResult {
-                method: method.to_string(),
-                path: path.to_string(),
+                method: meta.method.clone(),
+                path: meta.path.clone(),
                 status,
                 duration: start.elapsed(),
             })
@@ -427,10 +462,19 @@ async fn handle_upgrade_stream(
             frame::write_meta(&mut send, &resp_meta).await?;
             send.write_all(&resp_body).await?;
             send.finish()?;
+            if let Some(inspector) = inspector {
+                inspector.record_tunnel(
+                    meta,
+                    &Bytes::new(),
+                    &resp_meta,
+                    inspector::body_preview(&Bytes::from(resp_body)),
+                    start.elapsed(),
+                );
+            }
 
             Ok(RequestResult {
-                method: method.to_string(),
-                path: path.to_string(),
+                method: meta.method.clone(),
+                path: meta.path.clone(),
                 status: resp_meta.status,
                 duration: start.elapsed(),
             })

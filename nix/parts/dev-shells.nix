@@ -3,7 +3,7 @@
     devModules = import ../. {inherit pkgs;};
   in {
     devShells = {
-      inherit (devModules.shells) default nightly wasm ci;
+      inherit (devModules.shells) default ci;
     };
   };
 }
