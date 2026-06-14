@@ -314,9 +314,9 @@ fn build_oauth_state(cli: &Cli) -> anyhow::Result<Option<Arc<OAuthState>>> {
     Ok(Some(Arc::new(OAuthState::new(providers, base_url))))
 }
 
-async fn build_state(
+struct BuildStateConfig {
     pool: Option<sqlx::PgPool>,
-    turso_db_path: &str,
+    turso_db_path: String,
     is_tls: bool,
     oauth_state: Option<Arc<OAuthState>>,
     initial_admin_email: Option<String>,
@@ -325,14 +325,16 @@ async fn build_state(
     tcp_tunnels_enabled: bool,
     stream_port_min: u16,
     stream_port_max: u16,
-) -> anyhow::Result<Arc<app::AppState>> {
+}
+
+async fn build_state(config: BuildStateConfig) -> anyhow::Result<Arc<app::AppState>> {
     let tunnels = Arc::new(TunnelManager::new());
     let stream_listeners = Arc::new(proxy::stream_listener::StreamListenerManager::new(
-        stream_port_min,
-        stream_port_max,
+        config.stream_port_min,
+        config.stream_port_max,
     ));
 
-    if let Some(pool) = pool {
+    if let Some(pool) = config.pool {
         Ok(Arc::new(app::AppState {
             tunnels,
             api_keys: Arc::new(store::pg::api_key_store::PgApiKeyStore::new(pool.clone())),
@@ -344,16 +346,16 @@ async fn build_state(
             teams: Arc::new(store::pg::team_store::PgTeamStore::new(pool)),
             health: Arc::new(UptimeHealthReporter::new()),
             stream_listeners,
-            tcp_tunnels_enabled,
-            is_tls,
-            oauth_state,
-            initial_admin_email,
-            quic_port,
-            host,
+            tcp_tunnels_enabled: config.tcp_tunnels_enabled,
+            is_tls: config.is_tls,
+            oauth_state: config.oauth_state,
+            initial_admin_email: config.initial_admin_email,
+            quic_port: config.quic_port,
+            host: config.host,
             server_id: generate_server_id()?,
         }))
     } else {
-        let db = store::turso::open(turso_db_path)
+        let db = store::turso::open(&config.turso_db_path)
             .await
             .map_err(|e| anyhow::anyhow!("failed to open turso database: {e}"))?;
 
@@ -376,12 +378,12 @@ async fn build_state(
             teams: Arc::new(store::turso::team_store::TursoTeamStore::new(db)),
             health: Arc::new(UptimeHealthReporter::new()),
             stream_listeners,
-            tcp_tunnels_enabled,
-            is_tls,
-            oauth_state,
-            initial_admin_email,
-            quic_port,
-            host,
+            tcp_tunnels_enabled: config.tcp_tunnels_enabled,
+            is_tls: config.is_tls,
+            oauth_state: config.oauth_state,
+            initial_admin_email: config.initial_admin_email,
+            quic_port: config.quic_port,
+            host: config.host,
             server_id: generate_server_id()?,
         }))
     }
@@ -398,18 +400,18 @@ async fn run_plain(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()> {
     let metrics_handle = metrics::setup()?;
     let oauth_state = build_oauth_state(&cli)?;
     let initial_admin_email = cli.initial_admin_email.clone();
-    let state = build_state(
+    let state = build_state(BuildStateConfig {
         pool,
-        &cli.turso_db_path,
-        false,
+        turso_db_path: cli.turso_db_path.clone(),
+        is_tls: false,
         oauth_state,
         initial_admin_email,
-        cli.quic_port,
-        cli.host.clone(),
-        cli.enable_tcp_tunnels,
-        cli.stream_port_min,
-        cli.stream_port_max,
-    )
+        quic_port: cli.quic_port,
+        host: cli.host.clone(),
+        tcp_tunnels_enabled: cli.enable_tcp_tunnels,
+        stream_port_min: cli.stream_port_min,
+        stream_port_max: cli.stream_port_max,
+    })
     .await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);
 
@@ -500,18 +502,18 @@ async fn run_with_tls(cli: Cli, pool: Option<sqlx::PgPool>) -> anyhow::Result<()
     let metrics_handle = metrics::setup()?;
     let oauth_state = build_oauth_state(&cli)?;
     let initial_admin_email = cli.initial_admin_email.clone();
-    let state = build_state(
+    let state = build_state(BuildStateConfig {
         pool,
-        &cli.turso_db_path,
-        true,
+        turso_db_path: cli.turso_db_path.clone(),
+        is_tls: true,
         oauth_state,
         initial_admin_email,
-        cli.quic_port,
-        cli.host.clone(),
-        cli.enable_tcp_tunnels,
-        cli.stream_port_min,
-        cli.stream_port_max,
-    )
+        quic_port: cli.quic_port,
+        host: cli.host.clone(),
+        tcp_tunnels_enabled: cli.enable_tcp_tunnels,
+        stream_port_min: cli.stream_port_min,
+        stream_port_max: cli.stream_port_max,
+    })
     .await?;
     let router = app::build_router(Arc::clone(&state), metrics_handle);
 

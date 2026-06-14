@@ -228,6 +228,9 @@ pub enum StreamListenerError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error;
+
+    type TestResult = Result<(), Box<dyn Error>>;
 
     #[test]
     fn default_port_range() {
@@ -244,25 +247,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bind_specific_port() {
+    async fn bind_specific_port() -> TestResult {
         let mgr = StreamListenerManager::new(30000, 30010);
-        let (listener, port) = mgr.bind(Some(30005), "127.0.0.1").await.unwrap();
+        let (listener, port) = mgr.bind(Some(30005), "127.0.0.1").await?;
         assert_eq!(port, 30005);
-        assert_eq!(listener.local_addr().unwrap().port(), 30005);
+        assert_eq!(listener.local_addr()?.port(), 30005);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn bind_auto_allocates() {
+    async fn bind_auto_allocates() -> TestResult {
         let mgr = StreamListenerManager::new(30020, 30030);
-        let (_, port) = mgr.bind(None, "127.0.0.1").await.unwrap();
+        let (_, port) = mgr.bind(None, "127.0.0.1").await?;
         assert!((30020..=30030).contains(&port));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn bind_zero_means_auto() {
+    async fn bind_zero_means_auto() -> TestResult {
         let mgr = StreamListenerManager::new(30040, 30050);
-        let (_, port) = mgr.bind(Some(0), "127.0.0.1").await.unwrap();
+        let (_, port) = mgr.bind(Some(0), "127.0.0.1").await?;
         assert!((30040..=30050).contains(&port));
+        Ok(())
     }
 
     #[tokio::test]
@@ -276,28 +282,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bind_rejects_duplicate_port() {
+    async fn bind_rejects_duplicate_port() -> TestResult {
         let mgr = StreamListenerManager::new(30080, 30090);
-        let (_listener, port) = mgr.bind(Some(30085), "127.0.0.1").await.unwrap();
+        let (_listener, port) = mgr.bind(Some(30085), "127.0.0.1").await?;
         // try to bind the same port again while the first listener is alive
         let result = mgr.bind(Some(port), "127.0.0.1").await;
         assert!(matches!(result, Err(StreamListenerError::PortInUse(_))));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn bind_exhaustion_returns_error() {
+    async fn bind_exhaustion_returns_error() -> TestResult {
         // range of 1 port, bind it, then auto-allocate should fail
         let mgr = StreamListenerManager::new(30095, 30095);
-        let _first = mgr.bind(Some(30095), "127.0.0.1").await.unwrap();
+        let _first = mgr.bind(Some(30095), "127.0.0.1").await?;
         let result = mgr.bind(None, "127.0.0.1").await;
         assert!(matches!(result, Err(StreamListenerError::NoPortsAvailable)));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn stop_frees_tunnel_entry() {
+    async fn stop_frees_tunnel_entry() -> TestResult {
         let mgr = StreamListenerManager::new(30100, 30110);
-        let id = TunnelId::new("test-stop").unwrap();
-        let (listener, port) = mgr.bind(None, "127.0.0.1").await.unwrap();
+        let id = TunnelId::new("test-stop")?;
+        let (listener, port) = mgr.bind(None, "127.0.0.1").await?;
 
         // we can't call run() without a real ActiveTunnel, but we can test stop
         let cancel = CancellationToken::new();
@@ -310,12 +318,14 @@ mod tests {
         // stop on non-existent tunnel is a no-op
         mgr.stop(&id);
         drop((listener, port));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn stop_nonexistent_is_noop() {
+    async fn stop_nonexistent_is_noop() -> TestResult {
         let mgr = StreamListenerManager::new(30120, 30130);
-        let id = TunnelId::new("nonexistent").unwrap();
+        let id = TunnelId::new("nonexistent")?;
         mgr.stop(&id); // should not panic
+        Ok(())
     }
 }

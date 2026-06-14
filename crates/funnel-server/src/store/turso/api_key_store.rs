@@ -170,6 +170,7 @@ mod tests {
             })
             .await
             .unwrap_or_else(|e| panic!("create user: {e}"));
+        drop(user_store);
         (TursoApiKeyStore::new(db), user.id)
     }
 
@@ -229,7 +230,9 @@ mod tests {
             })
             .await
             .unwrap();
-        let store = TursoApiKeyStore::new(db);
+        drop(user_store);
+        let store = TursoApiKeyStore::new(Arc::clone(&db));
+        drop(db);
 
         store
             .create(u1.id, "a", &default_scopes(), None)
@@ -245,6 +248,7 @@ mod tests {
             .unwrap();
 
         let list = store.list_for_user(u1.id).await.unwrap();
+        drop(store);
         assert_eq!(list.len(), 2);
         assert!(list.iter().all(|k| k.name == "a" || k.name == "b"));
     }

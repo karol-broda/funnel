@@ -449,7 +449,7 @@ fn BodyViewer(
                 </details>
                 <details>
                     <summary>"Preview"</summary>
-                    <iframe class="markup-preview" sandbox="" srcdoc=text.clone() title="Body preview"></iframe>
+                    <iframe class="markup-preview" sandbox="" srcdoc=text title="Body preview"></iframe>
                 </details>
             </div>
         }
@@ -600,7 +600,7 @@ fn header_rows(headers: &std::collections::HashMap<String, Vec<String>>) -> Vec<
                 .map(move |value| (name.clone(), value.clone()))
         })
         .collect::<Vec<_>>();
-    rows.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    rows.sort_by_key(|row| row.0.to_lowercase());
     rows
 }
 

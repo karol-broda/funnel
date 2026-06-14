@@ -113,143 +113,114 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error;
     use tokio::io::duplex;
 
+    type TestResult = Result<(), Box<dyn Error>>;
+
     #[tokio::test]
-    async fn bidirectional_copy_both_directions() {
+    async fn bidirectional_copy_both_directions() -> TestResult {
         let (mut left_client, mut left_server) = duplex(1024);
         let (mut right_client, mut right_server) = duplex(1024);
 
         // write data into both sides before starting relay
         let left_task = tokio::spawn(async move {
-            tokio::io::AsyncWriteExt::write_all(&mut left_client, b"hello from left")
-                .await
-                .unwrap();
-            tokio::io::AsyncWriteExt::shutdown(&mut left_client)
-                .await
-                .unwrap();
+            tokio::io::AsyncWriteExt::write_all(&mut left_client, b"hello from left").await?;
+            tokio::io::AsyncWriteExt::shutdown(&mut left_client).await?;
 
             let mut buf = Vec::new();
-            tokio::io::AsyncReadExt::read_to_end(&mut left_client, &mut buf)
-                .await
-                .unwrap();
-            buf
+            tokio::io::AsyncReadExt::read_to_end(&mut left_client, &mut buf).await?;
+            Ok::<_, io::Error>(buf)
         });
 
         let right_task = tokio::spawn(async move {
-            tokio::io::AsyncWriteExt::write_all(&mut right_client, b"hello from right")
-                .await
-                .unwrap();
-            tokio::io::AsyncWriteExt::shutdown(&mut right_client)
-                .await
-                .unwrap();
+            tokio::io::AsyncWriteExt::write_all(&mut right_client, b"hello from right").await?;
+            tokio::io::AsyncWriteExt::shutdown(&mut right_client).await?;
 
             let mut buf = Vec::new();
-            tokio::io::AsyncReadExt::read_to_end(&mut right_client, &mut buf)
-                .await
-                .unwrap();
-            buf
+            tokio::io::AsyncReadExt::read_to_end(&mut right_client, &mut buf).await?;
+            Ok::<_, io::Error>(buf)
         });
 
-        let stats = copy_bidirectional(&mut left_server, &mut right_server)
-            .await
-            .unwrap();
+        let stats = copy_bidirectional(&mut left_server, &mut right_server).await?;
 
-        let left_received = left_task.await.unwrap();
-        let right_received = right_task.await.unwrap();
+        let left_received = left_task.await??;
+        let right_received = right_task.await??;
 
         assert_eq!(right_received, b"hello from left");
         assert_eq!(left_received, b"hello from right");
         assert_eq!(stats.a_to_b, 15);
         assert_eq!(stats.b_to_a, 16);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn half_close_one_direction_first() {
+    async fn half_close_one_direction_first() -> TestResult {
         let (mut left_client, mut left_server) = duplex(1024);
         let (mut right_client, mut right_server) = duplex(1024);
 
         // left sends data then closes, right reads it, sends response, then closes
         let left_task = tokio::spawn(async move {
-            tokio::io::AsyncWriteExt::write_all(&mut left_client, b"request")
-                .await
-                .unwrap();
-            tokio::io::AsyncWriteExt::shutdown(&mut left_client)
-                .await
-                .unwrap();
+            tokio::io::AsyncWriteExt::write_all(&mut left_client, b"request").await?;
+            tokio::io::AsyncWriteExt::shutdown(&mut left_client).await?;
 
             // should still be able to read the response after closing write side
             let mut buf = Vec::new();
-            tokio::io::AsyncReadExt::read_to_end(&mut left_client, &mut buf)
-                .await
-                .unwrap();
-            buf
+            tokio::io::AsyncReadExt::read_to_end(&mut left_client, &mut buf).await?;
+            Ok::<_, io::Error>(buf)
         });
 
         let right_task = tokio::spawn(async move {
             let mut buf = vec![0u8; 1024];
-            let n = tokio::io::AsyncReadExt::read(&mut right_client, &mut buf)
-                .await
-                .unwrap();
+            let n = tokio::io::AsyncReadExt::read(&mut right_client, &mut buf).await?;
             assert_eq!(&buf[..n], b"request");
 
             // read EOF from left
-            let n2 = tokio::io::AsyncReadExt::read(&mut right_client, &mut buf)
-                .await
-                .unwrap();
+            let n2 = tokio::io::AsyncReadExt::read(&mut right_client, &mut buf).await?;
             assert_eq!(n2, 0);
 
             // now send response and close
-            tokio::io::AsyncWriteExt::write_all(&mut right_client, b"response")
-                .await
-                .unwrap();
-            tokio::io::AsyncWriteExt::shutdown(&mut right_client)
-                .await
-                .unwrap();
+            tokio::io::AsyncWriteExt::write_all(&mut right_client, b"response").await?;
+            tokio::io::AsyncWriteExt::shutdown(&mut right_client).await?;
+            Ok::<_, io::Error>(())
         });
 
-        let stats = copy_bidirectional(&mut left_server, &mut right_server)
-            .await
-            .unwrap();
+        let stats = copy_bidirectional(&mut left_server, &mut right_server).await?;
 
-        let left_received = left_task.await.unwrap();
-        right_task.await.unwrap();
+        let left_received = left_task.await??;
+        right_task.await??;
 
         assert_eq!(left_received, b"response");
         assert_eq!(stats.a_to_b, 7); // "request"
         assert_eq!(stats.b_to_a, 8); // "response"
+        Ok(())
     }
 
     #[tokio::test]
-    async fn empty_transfer() {
+    async fn empty_transfer() -> TestResult {
         let (mut left_client, mut left_server) = duplex(1024);
         let (mut right_client, mut right_server) = duplex(1024);
 
-        tokio::spawn(async move {
-            tokio::io::AsyncWriteExt::shutdown(&mut left_client)
-                .await
-                .unwrap();
+        let left_task = tokio::spawn(async move {
+            tokio::io::AsyncWriteExt::shutdown(&mut left_client).await?;
             let mut buf = Vec::new();
-            tokio::io::AsyncReadExt::read_to_end(&mut left_client, &mut buf)
-                .await
-                .unwrap();
+            tokio::io::AsyncReadExt::read_to_end(&mut left_client, &mut buf).await?;
+            Ok::<_, io::Error>(())
         });
 
-        tokio::spawn(async move {
-            tokio::io::AsyncWriteExt::shutdown(&mut right_client)
-                .await
-                .unwrap();
+        let right_task = tokio::spawn(async move {
+            tokio::io::AsyncWriteExt::shutdown(&mut right_client).await?;
             let mut buf = Vec::new();
-            tokio::io::AsyncReadExt::read_to_end(&mut right_client, &mut buf)
-                .await
-                .unwrap();
+            tokio::io::AsyncReadExt::read_to_end(&mut right_client, &mut buf).await?;
+            Ok::<_, io::Error>(())
         });
 
-        let stats = copy_bidirectional(&mut left_server, &mut right_server)
-            .await
-            .unwrap();
+        let stats = copy_bidirectional(&mut left_server, &mut right_server).await?;
+        left_task.await??;
+        right_task.await??;
 
         assert_eq!(stats.a_to_b, 0);
         assert_eq!(stats.b_to_a, 0);
+        Ok(())
     }
 }

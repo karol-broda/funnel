@@ -40,7 +40,7 @@ pub struct BodyPreview {
 }
 
 impl BodyPreview {
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
             text: String::new(),
             bytes: 0,
